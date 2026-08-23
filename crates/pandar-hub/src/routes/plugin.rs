@@ -21,7 +21,7 @@ pub(super) mod firmware;
 mod h2c;
 mod personal_presets;
 mod responses;
-mod studio_devices;
+pub(super) mod studio_devices;
 mod studio_jobs;
 pub(super) use camera::stream_camera;
 pub(super) use h2c::get_auto_nozzle_mapping;

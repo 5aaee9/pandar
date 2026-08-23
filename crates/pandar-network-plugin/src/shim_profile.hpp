@@ -58,14 +58,30 @@ std::string body_from_result(PluginHttpResult result) {
     pandar_plugin_free_with_capacity(result.body_ptr, result.body_len, result.body_cap);
     return body;
 }
+extern "C" void copy_tenant_id(
+    void* context, const uint8_t* tenant_id, std::size_t tenant_id_len
+) {
+    static_cast<std::string*>(context)->assign(
+        reinterpret_cast<const char*>(tenant_id), tenant_id_len
+    );
+}
+
 
 void apply_account_copy_under_refresh(Agent* agent, AccountCopy copy) {
     agent->token = std::move(copy.token);
     agent->user_id = std::move(copy.user_id);
     agent->user_name = std::move(copy.user_name);
     agent->avatar = std::move(copy.avatar);
-    agent->profile_json = std::move(copy.profile_json);
+    agent->profile_json = copy.profile_json;
     agent->account_session_kind = copy.session_kind;
+    std::string tenant;
+    pandar_plugin_account_profile_tenant_id(
+        reinterpret_cast<const uint8_t*>(copy.profile_json.data()),
+        copy.profile_json.size(),
+        &tenant,
+        copy_tenant_id
+    );
+    agent->tenant_id = std::move(tenant);
     sync_printer_refresh_session(agent);
 }
 

@@ -148,6 +148,11 @@ PANDAR_ABI void* bambu_network_create_agent(std::string log_dir) {
     );
     agent->firmware_hub_url = agent->hub_url;
     agent->firmware_token = agent->token;
+    if (agent->printer_refresh_session) {
+        pandar_plugin_connection_set_dispatch_waker(
+            agent->printer_refresh_session, agent, shim_wake_status_dispatcher
+        );
+    }
     if (agent->firmware_session) start_firmware_dispatcher(agent);
     start_status_heartbeat(agent);
     start_model_task_worker(agent);
@@ -267,8 +272,11 @@ PANDAR_CALLBACK_SETTER(bambu_network_set_server_callback, OnServerErrFn, on_serv
 PANDAR_ABI int bambu_network_set_on_server_connected_fn(void* agent, BBL::OnServerConnectedFn callback) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
-    std::lock_guard<std::mutex> lock(a->status_mutex);
-    a->on_server_connected = std::move(callback);
+    {
+        std::lock_guard<std::mutex> lock(a->status_mutex);
+        a->on_server_connected = std::move(callback);
+    }
+    shim_wake_status_dispatcher(a);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
@@ -328,19 +336,11 @@ PANDAR_ABI int bambu_network_connect_server(void* agent) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     refresh_local_webserver_config(a);
-    std::unique_lock<std::mutex> request(a->printer_refresh_request_mutex);
-    PluginConnectionResult observation{};
-    PluginConnectionResult transition{};
     {
         std::lock_guard<std::recursive_mutex> refresh(a->printer_refresh_mutex);
-        observation = pandar_plugin_connection_refresh(a->printer_refresh_session);
-        transition = take_connection_transition(a);
+        pandar_plugin_connection_refresh(a->printer_refresh_session);
     }
-    request.unlock();
-    dispatch_connection_transition(a, transition);
-    return observation.connected
-        ? BBL::BAMBU_NETWORK_SUCCESS
-        : BBL::BAMBU_NETWORK_ERR_CONNECT_FAILED;
+    return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
 PANDAR_ABI bool bambu_network_is_server_connected(void* agent) {
@@ -375,7 +375,6 @@ PANDAR_ABI int bambu_network_add_subscribe(void* agent, std::vector<std::string>
                 reinterpret_cast<const uint8_t*>(dev_id.data()), dev_id.size()
             ) != 0) return BBL::BAMBU_NETWORK_ERR_CONNECT_FAILED;
     }
-    emit_cloud_printer_connected_statuses(a, dev_ids);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 

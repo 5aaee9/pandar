@@ -59,14 +59,6 @@ int main(int argc, char** argv) {
         set_local_connect(agent, [](int, std::string, std::string) {}) != kSuccess) {
         fail(agent, destroy, "firmware callback setup failed");
     }
-    const auto background_failure =
-        std::filesystem::path(argv[2]) / "background-printer-failure-served";
-    if (!wait_until(
-            [&] { return std::filesystem::exists(background_failure); },
-            Clock::now() + std::chrono::seconds(5)
-        )) {
-        fail(agent, destroy, "background printer failure was not served");
-    }
     if (selected != "studio-serial-1" ||
         send_cloud(agent, "studio-serial-1", R"({"pushing":{"command":"pushall","sequence_id":"auxiliary-fence"}})", 0, 0) != kSuccess ||
         !capture.auxiliary_fence_new || capture.auxiliary_fence_old) {

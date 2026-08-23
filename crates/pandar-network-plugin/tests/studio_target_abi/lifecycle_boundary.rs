@@ -128,16 +128,7 @@ fn cpp_printer_refresh_entries_are_single_flat_lifecycle_adapters() {
         .split_once("PANDAR_ABI int bambu_network_get_printer_firmware")
         .expect("Studio print-info entry end")
         .0;
-    let state = include_str!("../../src/shim_state.hpp");
-    let background = state
-        .split_once("bool refresh_printer_status_cache")
-        .expect("background printer refresh entry")
-        .1
-        .split_once("} // namespace pandar::network_plugin")
-        .expect("background printer refresh entry end")
-        .0;
-
-    for (name, entry) in [("Studio print-info", studio), ("background", background)] {
+    for (name, entry) in [("Studio print-info", studio)] {
         assert_eq!(
             entry
                 .matches("pandar_plugin_printer_refresh_with_session(")

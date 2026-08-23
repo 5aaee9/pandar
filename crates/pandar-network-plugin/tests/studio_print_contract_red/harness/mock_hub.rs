@@ -53,6 +53,10 @@ impl MockHub {
                 if cancelled_upload {
                     continue;
                 }
+                if is_printer_events_upgrade(&request) {
+                    thread::spawn(move || serve_printer_events(stream, &request));
+                    continue;
+                }
                 let first = request.lines().next().unwrap_or_default();
                 hold_task_response(first, &case, &race_directory);
                 let (status, body) = response_for(first, &job_polls, &case);
@@ -149,227 +153,70 @@ fn read_cancelled_upload(stream: &mut TcpStream) -> String {
     String::from_utf8_lossy(&request).into_owned()
 }
 
-fn response_for(first: &str, job_polls: &AtomicUsize, case: &str) -> (&'static str, String) {
-    if first.starts_with("GET /api/v1/plugin/printers ") {
-        return ("HTTP/1.1 200 OK", printer_response().to_owned());
-    }
-    if first.starts_with("POST /api/v1/plugin/prints ") {
-        return (
-            "HTTP/1.1 201 Created",
-            r#"{"task_id":38191,"studio_submission_id":38191,"status":"queued"}"#.to_owned(),
-        );
-    }
-    if first.starts_with("POST /api/v1/plugin/jobs/38191/cancel ") {
-        return cancel_response(case);
-    }
-    if first.starts_with("GET /api/v1/plugin/jobs/38191/model-task ") {
-        return model_task_response(case);
-    }
-    if first.contains("/plate") {
-        if case == "task_unknown" {
-            return (
-                "HTTP/1.1 404 Not Found",
-                r#"{"error":"job_not_found"}"#.to_owned(),
-            );
-        }
-        if case == "task_invalid_plate_2xx" {
-            return (
-                "HTTP/1.1 200 OK",
-                r#"{"studio_submission_id":38191,"plate_index":0}"#.to_owned(),
-            );
-        }
-        return (
-            "HTTP/1.1 200 OK",
-            r#"{"studio_submission_id":38191,"plate_index":7}"#.to_owned(),
-        );
-    }
-    if first.contains("/subtask") {
-        if case == "task_unknown" {
-            return (
-                "HTTP/1.1 404 Not Found",
-                r#"{"error":"job_not_found"}"#.to_owned(),
-            );
-        }
-        if case == "task_metadata_unavailable" {
-            return (
-                "HTTP/1.1 409 Conflict",
-                r#"{"error":"studio_task_metadata_unavailable"}"#.to_owned(),
-            );
-        }
-        if case == "task_invalid_subtask_2xx" {
-            return (
-                "HTTP/1.1 200 OK",
-                r##"{"content":"{\"info\":{\"plate_idx\":7}}","context":{"plates":[{"index":7,"thumbnail":{"url":""},"prediction":3600,"weight":12.5,"filaments":[{"color":"","type":"PLA","used_g":"12.5","used_m":"4.2"}]}]}}"##.to_owned(),
-            );
-        }
-        if case == "task_oversized_subtask_weight_2xx" {
-            return (
-                "HTTP/1.1 200 OK",
-                r##"{"content":"{\"info\":{\"plate_idx\":7}}","context":{"plates":[{"index":7,"thumbnail":{"url":""},"prediction":3600,"weight":1.7976931348623157e308,"filaments":[{"color":"#112233","type":"PLA","used_g":"12.5","used_m":"4.2"}]}]}}"##.to_owned(),
-            );
-        }
-        if case == "task_oversized_subtask_prediction_2xx" {
-            return (
-                "HTTP/1.1 200 OK",
-                r##"{"content":"{\"info\":{\"plate_idx\":7}}","context":{"plates":[{"index":7,"thumbnail":{"url":""},"prediction":2147483648,"weight":12.5,"filaments":[{"color":"#112233","type":"PLA","used_g":"12.5","used_m":"4.2"}]}]}}"##.to_owned(),
-            );
-        }
-        if case == "task_nonpositive_subtask_plate_2xx" {
-            return (
-                "HTTP/1.1 200 OK",
-                r##"{"content":"{\"info\":{\"plate_idx\":0}}","context":{"plates":[{"index":0,"thumbnail":{"url":""},"prediction":3600,"weight":12.5,"filaments":[{"color":"#112233","type":"PLA","used_g":"12.5","used_m":"4.2"}]}]}}"##.to_owned(),
-            );
-        }
-        if case == "task_mixed_invalid_subtask_2xx" {
-            return (
-                "HTTP/1.1 200 OK",
-                r##"{"content":"{\"info\":{\"plate_idx\":7}}","context":{"plates":[{"index":7,"thumbnail":{"url":""},"prediction":3600,"weight":12.5,"filaments":[{"color":"#112233","type":"PLA","used_g":"12.5","used_m":"4.2"}]},{"index":-1,"thumbnail":{"url":"https://untrusted.invalid/private.png"},"prediction":2147483648,"weight":12.5,"filaments":[]}]}}"##.to_owned(),
-            );
-        }
-        return ("HTTP/1.1 200 OK", subtask_response().to_owned());
-    }
-    if first.starts_with("GET /api/v1/plugin/jobs?")
-        || first.starts_with("GET /api/v1/plugin/jobs ")
-    {
-        if case == "task_hub_outage" {
-            return (
-                "HTTP/1.1 503 Service Unavailable",
-                r#"{"error":"hub_unavailable"}"#.to_owned(),
-            );
-        }
-        if case == "task_sensitive_page_2xx" {
-            return (
-                "HTTP/1.1 200 OK",
-                format!(r#"{{"total":"{DIAGNOSTIC_SECRET}","hits":[]}}"#),
-            );
-        }
-        if case == "task_sensitive_error_4xx" {
-            return (
-                "HTTP/1.1 400 Bad Request",
-                format!(r#"{{"error":{{"detail":"{DIAGNOSTIC_SECRET}"}}}}"#),
-            );
-        }
-        if case == "task_oversized_total_2xx" {
-            return (
-                "HTTP/1.1 200 OK",
-                r#"{"total":2147483648,"hits":[]}"#.to_owned(),
-            );
-        }
-        if case == "task_ambiguous_title_2xx" {
-            return (
-                "HTTP/1.1 200 OK",
-                task_page_response().replace(
-                    r#""title":"contract-base.3mf""#,
-                    r#""title":"contract-base.3mf","designTitle":"ambiguous""#,
-                ),
-            );
-        }
-        if case == "task_nonempty_cover_2xx" {
-            return (
-                "HTTP/1.1 200 OK",
-                task_page_response().replace(
-                    r#""cover":"""#,
-                    r#""cover":"https://untrusted.invalid/private.png""#,
-                ),
-            );
-        }
-        return ("HTTP/1.1 200 OK", task_page_response().to_owned());
-    }
-    if first.starts_with("GET /api/v1/plugin/jobs/38191 ") {
-        if case == "lifecycle_hub_outage" {
-            return (
-                "HTTP/1.1 503 Service Unavailable",
-                r#"{"error":"hub_unavailable"}"#.to_owned(),
-            );
-        }
-        if case == "lifecycle_sensitive_page_2xx" {
-            return (
-                "HTTP/1.1 200 OK",
-                format!(
-                    r#"{{"studio_submission_id":"{DIAGNOSTIC_SECRET}","job_status":"queued","print_status":"pending"}}"#
-                ),
-            );
-        }
-        if case == "lifecycle_sensitive_error_4xx" {
-            return (
-                "HTTP/1.1 400 Bad Request",
-                format!(r#"{{"error":{{"detail":"{DIAGNOSTIC_SECRET}"}}}}"#),
-            );
-        }
-        let poll = job_polls.fetch_add(1, Ordering::SeqCst);
-        let (state, print_status) = if case == "downstream_failure" {
-            ("failed", "pending")
-        } else if poll == 0 {
-            ("acknowledged", "pending")
-        } else if case == "physical_abort_after_publish" {
-            ("succeeded", "cancelled")
-        } else {
-            ("succeeded", "pending")
-        };
-        return (
-            "HTTP/1.1 200 OK",
-            format!(
-                r#"{{"studio_submission_id":38191,"job_status":"{state}","print_status":"{print_status}"}}"#
-            ),
-        );
-    }
-    (
-        "HTTP/1.1 404 Not Found",
-        r#"{"error":"contract_route_not_found"}"#.to_owned(),
-    )
+#[path = "mock_hub/responses.rs"]
+mod responses;
+use responses::response_for;
+fn is_printer_events_upgrade(request: &str) -> bool {
+    let request_line = request.lines().next().unwrap_or_default();
+    let upgrade_header = request.lines().any(|line| {
+        line.split_once(':')
+            .is_some_and(|(name, _value)| name.eq_ignore_ascii_case("upgrade"))
+    });
+    request_line
+        == "GET /api/v1/tenants/contract-tenant/printer-events?projection=studio&version=1 HTTP/1.1"
+        && upgrade_header
 }
 
-fn model_task_response(case: &str) -> (&'static str, String) {
-    if case == "model_task_destroy_no_auth_recovery" {
-        return (
-            "HTTP/1.1 401 Unauthorized",
-            r#"{"error":"invalid_auth_token"}"#.to_owned(),
-        );
+/// Completes the printer-events WebSocket upgrade and serves a full snapshot
+/// of the contract printer, then keeps the stream open until the peer goes
+/// away or the probe process exits.
+fn serve_printer_events(stream: TcpStream, request: &str) {
+    let key = request.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("sec-websocket-key")
+            .then(|| value.trim().to_owned())
+    });
+    let Some(key) = key else {
+        eprintln!("contract mock hub stream upgrade lacked a WebSocket key");
+        return;
+    };
+    let mut stream = stream;
+    let accept = tungstenite::handshake::derive_accept_key(key.as_bytes());
+    let handshake = format!(
+        "HTTP/1.1 101 Switching Protocols\r\n\
+         Connection: Upgrade\r\n\
+         Upgrade: websocket\r\n\
+         Sec-WebSocket-Accept: {accept}\r\n\
+         \r\n"
+    );
+    if stream.write_all(handshake.as_bytes()).is_err() {
+        return;
     }
-    if case == "model_task_metadata_unavailable" {
-        return (
-            "HTTP/1.1 409 Conflict",
-            r#"{"error":"studio_model_task_metadata_unavailable"}"#.to_owned(),
-        );
+    let mut ws =
+        tungstenite::WebSocket::from_raw_socket(stream, tungstenite::protocol::Role::Server, None);
+    let _ = ws.get_ref().set_nonblocking(true);
+    let mut snapshot_pending = true;
+    loop {
+        if snapshot_pending {
+            for frame in crate::harness::snapshot_frames(printer_response()) {
+                if ws.write(tungstenite::Message::text(frame)).is_err() {
+                    return;
+                }
+            }
+            let _ = ws.flush();
+            snapshot_pending = false;
+        }
+        match ws.read() {
+            Ok(_message) => {
+                // Inbound ping/bookkeeping frames; tungstenite queues pongs.
+                let _ = ws.flush();
+            }
+            Err(tungstenite::Error::Io(error))
+                if error.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(_) => return,
+        }
+        thread::sleep(Duration::from_millis(5));
     }
-    if case == "model_task_invalid_2xx" {
-        return (
-            "HTTP/1.1 200 OK",
-            r#"{"job_id":38191,"design_id":44,"profile_id":55,"instance_id":38191,"task_id":"38192","model_id":"foreign-model","model_name":"foreign-project","profile_name":"foreign-preset"}"#.to_owned(),
-        );
-    }
-    (
-        "HTTP/1.1 200 OK",
-        r#"{"job_id":38191,"design_id":0,"profile_id":0,"instance_id":0,"task_id":"38191","model_id":"","model_name":"contract-base-project","profile_name":"contract-base-preset"}"#
-            .to_owned(),
-    )
-}
-
-fn cancel_response(case: &str) -> (&'static str, String) {
-    if case == "cancel_too_late" || case == "cancel_after_wait" {
-        return (
-            "HTTP/1.1 409 Conflict",
-            r#"{"error":"cancel_too_late"}"#.to_owned(),
-        );
-    }
-    if case == "cancel_wrong_id" {
-        return (
-            "HTTP/1.1 200 OK",
-            r#"{"studio_submission_id":38192,"job_status":"cancelled","print_status":"cancelled"}"#
-                .to_owned(),
-        );
-    }
-    if case == "stale_after_201" || case == "stale_cancel_failed" || case == "cancel_race_stale" {
-        return (
-            "HTTP/1.1 503 Service Unavailable",
-            r#"{"error":"hub_unavailable"}"#.to_owned(),
-        );
-    }
-    (
-        "HTTP/1.1 200 OK",
-        r#"{"studio_submission_id":38191,"job_status":"cancelled","print_status":"cancelled"}"#
-            .to_owned(),
-    )
 }
 
 fn write_response(stream: &mut impl Write, status: &str, body: &str) -> std::io::Result<()> {

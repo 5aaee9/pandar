@@ -48,16 +48,14 @@ fn take_body(result: PluginHttpResult) -> String {
 fn cache_admission_failure_preserves_pending_connection_deliveries() {
     let lifecycle = include_str!("../src/connection/no_auth_refresh.rs");
     let finalize = lifecycle
-        .split_once("unsafe extern \"C\" fn finalize_refresh")
+        .split_once("unsafe extern \"C\" fn finalize_serve")
         .expect("Rust printer-refresh finalization")
         .1
         .split_once("fn with_refresh_lock")
         .expect("Rust printer-refresh finalization end")
         .0;
     assert!(
-        finalize.contains("if failed || finalization.snapshot_current")
-            && finalize.contains("take_transition()")
-            && finalize.contains("take_offline()"),
+        finalize.contains("take_transition()") && finalize.contains("take_offline()"),
         "Rust finalization must preserve deliveries for a successful stale cache response"
     );
     let source = include_str!("../src/shim_abi_content.hpp");
@@ -69,13 +67,13 @@ fn cache_admission_failure_preserves_pending_connection_deliveries() {
         .split_once("PANDAR_ABI int bambu_network_get_printer_firmware")
         .expect("Studio print-info entry end")
         .0;
-    let state_entry = state
-        .split_once("bool refresh_printer_status_cache")
-        .expect("background refresh entry")
-        .1
-        .split_once("} // namespace pandar::network_plugin")
-        .expect("background refresh entry end")
-        .0;
+    // The retired background poll adapter is gone entirely; the whole state
+    // header must now be free of cache-freshness and delivery ownership.
+    assert!(
+        !state.contains("bool refresh_printer_status_cache"),
+        "retired background printer-list refresh still exists in the shim"
+    );
+    let state_entry = state;
     for adapter in [content_entry, state_entry] {
         assert!(
             !adapter.contains("remember_printer_cache")
@@ -363,44 +361,5 @@ fn cpp_account_and_request_adapters_delegate_policy_to_rust() {
     );
 }
 
-#[test]
-fn model_subtask_abi_uses_a_typed_worker_and_studio_owned_target() {
-    let content = include_str!("../src/shim_abi_content.hpp");
-    let model_task = include_str!("../src/shim_model_task.hpp");
-    let model_types = include_str!("../src/shim_model_task_types.hpp");
-    let print_types = include_str!("../src/shim_print_types.hpp");
-    let user = include_str!("../src/shim_abi_user.hpp");
-    let ffi = include_str!("../src/studio_print/model_task.rs");
-    let body = content
-        .split_once("PANDAR_ABI int bambu_network_get_subtask(")
-        .expect("model subtask ABI")
-        .1
-        .split_once("PANDAR_ABI int bambu_network_get_model_mall_home_url")
-        .expect("model subtask ABI end")
-        .0;
-    assert!(body.contains("enqueue_model_task(current, task, std::move(callback))"));
-    assert!(body.contains("BAMBU_NETWORK_SUCCESS"));
-    assert!(body.contains("BAMBU_NETWORK_ERR_INVALID_RESULT"));
-    assert!(!body.contains("callback("));
-    assert!(
-        ffi.contains("pub struct PluginStudioModelTask")
-            && ffi.contains("#[serde(deny_unknown_fields)]")
-            && ffi.contains("pandar_plugin_studio_get_model_task")
-            && print_types.contains("struct PluginStudioModelTask")
-            && print_types.contains("pandar_plugin_studio_get_model_task_with_session")
-    );
-    assert!(
-        model_types.contains("class BBLModelTask")
-            && model_types.contains("std::string profile_name")
-            && model_task.contains("start_model_task_worker")
-            && model_task.contains("stop_model_task_worker")
-            && model_task.contains("callback(target)")
-            && user.contains("start_model_task_worker(agent)")
-            && user.contains("stop_model_task_worker(a)")
-    );
-    assert!(
-        model_task.contains("callback_gate(agent->callback_mutex)")
-            && model_task.contains("account_gate(agent->account_mutex)")
-            && model_task.contains("if (model_task_worker_stopping(agent)) return")
-    );
-}
+#[path = "studio_target_abi/model_task.rs"]
+mod model_task;

@@ -112,7 +112,10 @@ fn compile_fixture() -> CompiledFixture {
     }
 }
 
-fn read_request(stream: &mut TcpStream) -> String {
+/// Reads one HTTP request head. Returns `None` when the peer closed the
+/// connection without sending any bytes; the plugin's stream worker can
+/// abandon a dial when its account episode changes mid-connect.
+fn read_request(stream: &mut TcpStream) -> Option<String> {
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap();
@@ -120,10 +123,67 @@ fn read_request(stream: &mut TcpStream) -> String {
     let mut buffer = [0_u8; 1024];
     while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
         let read = stream.read(&mut buffer).expect("read mock Hub request");
-        assert!(read > 0, "mock Hub request ended before headers");
+        if read == 0 {
+            if request.is_empty() {
+                return None;
+            }
+            panic!("mock Hub request ended before headers");
+        }
         request.extend_from_slice(&buffer[..read]);
     }
-    String::from_utf8(request).expect("mock Hub request is UTF-8")
+    Some(String::from_utf8(request).expect("mock Hub request is UTF-8"))
+}
+
+fn is_printer_events_upgrade(request: &str) -> bool {
+    let request_line = request.lines().next().unwrap_or_default();
+    let upgrade_header = request.lines().any(|line| {
+        line.split_once(':')
+            .is_some_and(|(name, _)| name.eq_ignore_ascii_case("upgrade"))
+    });
+    request_line.starts_with("GET /api/v1/tenants/")
+        && request_line.contains("/printer-events?")
+        && upgrade_header
+}
+
+/// Answers a printer-events upgrade with a 101 handshake and an empty
+/// snapshot, then keeps the socket alive until the peer goes away.
+fn serve_stream_upgrade(mut stream: TcpStream, request: &str) {
+    let key = request.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("sec-websocket-key")
+            .then(|| value.trim().to_owned())
+    });
+    let Some(key) = key else { return };
+    let accept = tungstenite::handshake::derive_accept_key(key.as_bytes());
+    let handshake = format!(
+        "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+    );
+    if stream.write_all(handshake.as_bytes()).is_err() {
+        return;
+    }
+    let mut ws =
+        tungstenite::WebSocket::from_raw_socket(stream, tungstenite::protocol::Role::Server, None);
+    let _ = ws.get_ref().set_nonblocking(true);
+    for frame in [
+        r#"{"type":"snapshot_begin","version":1}"#,
+        r#"{"type":"snapshot_end","version":1}"#,
+    ] {
+        if ws.write(tungstenite::Message::text(frame)).is_err() {
+            return;
+        }
+        let _ = ws.flush();
+    }
+    loop {
+        match ws.read() {
+            Ok(_) => {
+                let _ = ws.flush();
+            }
+            Err(tungstenite::Error::Io(error))
+                if error.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(_) => return,
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
 }
 
 fn next_request(listener: &TcpListener, deadline: Instant) -> (TcpStream, String) {
@@ -131,8 +191,14 @@ fn next_request(listener: &TcpListener, deadline: Instant) -> (TcpStream, String
         match listener.accept() {
             Ok((mut stream, _)) => {
                 stream.set_nonblocking(false).unwrap();
-                let request = read_request(&mut stream);
-                return (stream, request);
+                let Some(text) = read_request(&mut stream) else {
+                    continue;
+                };
+                if is_printer_events_upgrade(&text) {
+                    thread::spawn(move || serve_stream_upgrade(stream, &text));
+                    continue;
+                }
+                return (stream, text);
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 assert!(
@@ -149,7 +215,17 @@ fn next_request(listener: &TcpListener, deadline: Instant) -> (TcpStream, String
 fn assert_no_request(listener: &TcpListener, deadline: Instant) {
     loop {
         match listener.accept() {
-            Ok(_) => panic!("task read retried token rotation more than once"),
+            Ok((mut stream, _)) => {
+                stream.set_nonblocking(false).unwrap();
+                let Some(text) = read_request(&mut stream) else {
+                    continue;
+                };
+                if is_printer_events_upgrade(&text) {
+                    thread::spawn(move || serve_stream_upgrade(stream, &text));
+                    continue;
+                }
+                panic!("task read retried token rotation more than once: {text}");
+            }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 if Instant::now() >= deadline {
                     return;
@@ -228,134 +304,5 @@ fn rotate_session(listener: &TcpListener, deadline: Instant, fresh_token: &str) 
     );
 }
 
-#[test]
-fn task_list_rotates_a_rejected_no_auth_token_once_and_retries_with_a_fresh_snapshot() {
-    let output = run_probe("tasks", |listener, deadline| {
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert_request(
-            &request,
-            "GET",
-            "/api/v1/plugin/jobs?dev_id=&status=0&offset=0&limit=20",
-            Some("stale-token"),
-        );
-        write_response(
-            &mut stream,
-            "401 Unauthorized",
-            r#"{"error":"invalid_auth_token"}"#,
-        );
-        rotate_session(&listener, deadline, "fresh-token");
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert_request(
-            &request,
-            "GET",
-            "/api/v1/plugin/jobs?dev_id=&status=0&offset=0&limit=20",
-            Some("fresh-token"),
-        );
-        write_response(&mut stream, "200 OK", r#"{"total":0,"hits":[]}"#);
-    });
-    assert_eq!(output.trim(), r#"{"ok":true,"mode":"tasks"}"#);
-}
-
-#[test]
-fn task_plate_rotates_a_gone_no_auth_token_once_and_retries_with_a_fresh_snapshot() {
-    let output = run_probe("plate", |listener, deadline| {
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert_request(
-            &request,
-            "GET",
-            "/api/v1/plugin/jobs/42/plate",
-            Some("stale-token"),
-        );
-        write_response(&mut stream, "410 Gone", r#"{"error":"expired_auth_token"}"#);
-        rotate_session(&listener, deadline, "plate-token");
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert_request(
-            &request,
-            "GET",
-            "/api/v1/plugin/jobs/42/plate",
-            Some("plate-token"),
-        );
-        write_response(
-            &mut stream,
-            "200 OK",
-            r#"{"studio_submission_id":42,"plate_index":3}"#,
-        );
-    });
-    assert_eq!(output.trim(), r#"{"ok":true,"mode":"plate"}"#);
-}
-
-#[test]
-fn subtask_rotates_a_rejected_no_auth_token_once_and_retries_with_a_fresh_snapshot() {
-    let output = run_probe("subtask", |listener, deadline| {
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert_request(
-            &request,
-            "GET",
-            "/api/v1/plugin/jobs/42/subtask",
-            Some("stale-token"),
-        );
-        write_response(
-            &mut stream,
-            "401 Unauthorized",
-            r#"{"error":"invalid_auth_token"}"#,
-        );
-        rotate_session(&listener, deadline, "subtask-token");
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert_request(
-            &request,
-            "GET",
-            "/api/v1/plugin/jobs/42/subtask",
-            Some("subtask-token"),
-        );
-        write_response(
-            &mut stream,
-            "200 OK",
-            r##"{"content":"{\"info\":{\"plate_idx\":3}}","context":{"plates":[{"index":3,"thumbnail":{"url":""},"prediction":120,"weight":12.5,"filaments":[{"color":"#FFFFFFFF","type":"PLA","used_g":"12.5","used_m":"4.2"}]}]}}"##,
-        );
-    });
-    assert_eq!(output.trim(), r#"{"ok":true,"mode":"subtask"}"#);
-}
-
-#[test]
-fn task_read_does_not_rotate_or_retry_again_after_the_single_retry_is_rejected() {
-    let output = run_probe("retry-rejected", |listener, deadline| {
-        let path = "/api/v1/plugin/jobs?dev_id=&status=0&offset=0&limit=20";
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert_request(&request, "GET", path, Some("stale-token"));
-        write_response(
-            &mut stream,
-            "401 Unauthorized",
-            r#"{"error":"invalid_auth_token"}"#,
-        );
-        rotate_session(&listener, deadline, "single-retry-token");
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert_request(&request, "GET", path, Some("single-retry-token"));
-        write_response(&mut stream, "410 Gone", r#"{"error":"expired_auth_token"}"#);
-        assert_no_request(&listener, Instant::now() + Duration::from_millis(300));
-    });
-    assert_eq!(output.trim(), r#"{"ok":true,"mode":"retry-rejected"}"#);
-}
-
-#[test]
-fn task_read_reports_the_no_auth_rotation_failure_instead_of_the_stale_401() {
-    let output = run_probe("rotation-failure", |listener, deadline| {
-        let path = "/api/v1/plugin/jobs?dev_id=&status=0&offset=0&limit=20";
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert_request(&request, "GET", path, Some("stale-token"));
-        write_response(
-            &mut stream,
-            "401 Unauthorized",
-            r#"{"error":"invalid_auth_token"}"#,
-        );
-
-        let (mut rotation, request) = next_request(&listener, deadline);
-        assert_request(&request, "POST", "/api/v1/plugin/no-auth-session", None);
-        write_response(
-            &mut rotation,
-            "409 Conflict",
-            r#"{"error":"ambiguous_no_auth_tenant"}"#,
-        );
-        assert_no_request(&listener, Instant::now() + Duration::from_millis(300));
-    });
-    assert_eq!(output.trim(), r#"{"ok":true,"mode":"rotation-failure"}"#);
-}
+#[path = "task_token_refresh/cases.rs"]
+mod cases;

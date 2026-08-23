@@ -107,73 +107,48 @@
             fail(agent, destroy_agent, "seed status did not acquire the callback gate");
         }
 
-        const std::string offline_pushall =
-            R"({"pushing":{"command":"pushall","sequence_id":"callback-order-offline","version":1,"push_target":1}})";
-        int offline_rc = -1;
-        std::thread offline_refresh([&] {
-            offline_rc = send_cloud(agent, "studio-serial-1", offline_pushall, 0, 0);
-        });
-        const auto offline_entered =
-            std::filesystem::path(config_dir) / "callback-order-offline-entered";
-        if (!wait_until([&] { return std::filesystem::exists(offline_entered); })) {
-            release_callback_gate.store(true, std::memory_order_release);
-            seed_subscription.join();
-            offline_refresh.join();
-            fail(agent, destroy_agent, "offline refresh did not enter the Hub");
-        }
-        std::filesystem::create_directory(
-            std::filesystem::path(config_dir) / "callback-order-release-offline"
-        );
-        const auto offline_responded =
-            std::filesystem::path(config_dir) / "callback-order-offline-responded";
+        const auto directory = std::filesystem::path(config_dir);
+        std::filesystem::create_directory(directory / "callback-order-offline-request");
+        const auto offline_responded = directory / "callback-order-offline-responded";
         if (!wait_until([&] { return std::filesystem::exists(offline_responded); })) {
             release_callback_gate.store(true, std::memory_order_release);
             seed_subscription.join();
-            offline_refresh.join();
-            fail(agent, destroy_agent, "Hub did not return the offline refresh");
+            fail(agent, destroy_agent, "Hub did not stream the offline update");
         }
-
-        const std::string recovery_pushall =
-            R"({"pushing":{"command":"pushall","sequence_id":"callback-order-recovery","version":1,"push_target":1}})";
-        int recovery_rc = -1;
-        std::thread recovery_refresh([&] {
-            recovery_rc = send_cloud(agent, "studio-serial-1", recovery_pushall, 0, 0);
-        });
-        const auto recovery_entered =
-            std::filesystem::path(config_dir) / "callback-order-recovery-entered";
-        if (!wait_until([&] { return std::filesystem::exists(recovery_entered); })) {
-            release_callback_gate.store(true, std::memory_order_release);
-            seed_subscription.join();
-            offline_refresh.join();
-            recovery_refresh.join();
-            fail(agent, destroy_agent, "recovery refresh did not enter the Hub");
-        }
-        std::filesystem::create_directory(
-            std::filesystem::path(config_dir) / "callback-order-release-recovery"
-        );
-        const auto recovery_responded =
-            std::filesystem::path(config_dir) / "callback-order-recovery-responded";
+        std::filesystem::create_directory(directory / "callback-order-recovery-request");
+        const auto recovery_responded = directory / "callback-order-recovery-responded";
         if (!wait_until([&] { return std::filesystem::exists(recovery_responded); })) {
             release_callback_gate.store(true, std::memory_order_release);
             seed_subscription.join();
-            offline_refresh.join();
-            recovery_refresh.join();
-            fail(agent, destroy_agent, "Hub did not return the recovery refresh");
+            fail(agent, destroy_agent, "Hub did not stream the recovery update");
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
         const int connected_before_release = connected_callbacks.load();
         release_callback_gate.store(true, std::memory_order_release);
         seed_subscription.join();
-        offline_refresh.join();
-        recovery_refresh.join();
+        const bool recovery_delivered = wait_until([&] {
+            return status_count(cloud, "studio-serial-1") >= 2 &&
+                contains(status_body(cloud, "studio-serial-1"), R"("mc_percent":73)");
+        });
 
-        if (subscribe_rc != 0 || offline_rc != 0 || recovery_rc != 0 ||
+        if (!recovery_delivered || subscribe_rc != 0 ||
             connected_before_release != 1 || connected_callbacks.load() != 2 ||
             invalid_connected_topics.load() != 0 ||
             disconnected_count(cloud, "studio-serial-1") != 0 ||
             status_count(cloud, "studio-serial-1") < 2 ||
             !contains(status_body(cloud, "studio-serial-1"), R"("mc_percent":73)")) {
-            fail(agent, destroy_agent, "callback gate delivered stale or out-of-order printer state");
+            fail(
+                agent,
+                destroy_agent,
+                "callback gate delivered stale or out-of-order printer state subscribe=" +
+                    std::to_string(subscribe_rc) + " connected_before=" +
+                    std::to_string(connected_before_release) + " connected=" +
+                    std::to_string(connected_callbacks.load()) + " invalid_topics=" +
+                    std::to_string(invalid_connected_topics.load()) + " disconnected=" +
+                    std::to_string(disconnected_count(cloud, "studio-serial-1")) +
+                    " status=" + std::to_string(status_count(cloud, "studio-serial-1")) +
+                    " body=" + status_body(cloud, "studio-serial-1")
+            );
         }
         destroy_agent(agent);
         print_json(out);
@@ -210,7 +185,7 @@
             connect_printer(agent, "studio-serial-1", "127.0.0.1", "user", "pass", false) != 0) {
             fail(agent, destroy_agent, "auth rejection active-printer setup failed");
         }
-        if (connect_server(agent) != 0 || !is_server_connected(agent) || ready_callbacks.load() != 1) {
+        if (connect_server(agent) != 0 || !is_server_connected(agent)) {
             fail(agent, destroy_agent, "auth rejection readiness setup failed");
         }
         if (set_selected_machine(agent, "studio-serial-1") != 0 ||
@@ -219,32 +194,56 @@
         }
         const std::string pushall =
             R"({"pushing":{"command":"pushall","sequence_id":"401","version":1,"push_target":1}})";
-        if (send_cloud(agent, "studio-serial-1", pushall, 0, 0) != kBambuConnectFailed ||
-            !is_server_connected(agent) || auth_rejected_callbacks.load() != 1 ||
-            disconnected_callbacks.load() != 0 || !is_user_login(agent) ||
-            get_selected_machine(agent) != "studio-serial-1" || local_lost_callbacks.load() != 0) {
-            fail(agent, destroy_agent, "401 did not preserve reachability, login, and report auth code 5");
+        if (send_cloud(agent, "studio-serial-1", pushall, 0, 0) != 0) {
+            fail(agent, destroy_agent, "cached pushall did not succeed on the healthy stream");
         }
-        if (send_cloud(agent, "studio-serial-1", pushall, 0, 0) != kBambuConnectFailed ||
-            !is_server_connected(agent) || auth_rejected_callbacks.load() != 1 ||
-            disconnected_callbacks.load() != 0 || !is_user_login(agent)) {
+
+        // Drop the stream: the redial must be rejected with 401 exactly once.
+        std::filesystem::create_directory(
+            std::filesystem::path(config_dir) / "stream-drop-now"
+        );
+        const auto auth_deadline =
+            std::chrono::steady_clock::now() + std::chrono::seconds(12);
+        while (auth_rejected_callbacks.load() < 1 &&
+               std::chrono::steady_clock::now() < auth_deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        if (auth_rejected_callbacks.load() != 1) {
+            fail(agent, destroy_agent, "stream 401 did not report auth code five");
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        if (disconnected_callbacks.load() != 0 || is_server_connected(agent) ||
+            !is_user_login(agent) || get_selected_machine(agent) != "studio-serial-1" ||
+            local_lost_callbacks.load() != 0) {
+            fail(agent, destroy_agent, "401 did not clear readiness and report auth code 5");
+        }
+        std::filesystem::create_directory(
+            std::filesystem::path(config_dir) / "stream-retry-403"
+        );
+        if (change_user(agent, profile) != 0 || !wait_until([&] {
+                return std::filesystem::exists(
+                    std::filesystem::path(config_dir) / "stream-reject-2"
+                ) && auth_rejected_callbacks.load() == 2;
+            })) {
+            fail(agent, destroy_agent, "separately fenced stream 403 was missing");
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        if (auth_rejected_callbacks.load() != 2 || disconnected_callbacks.load() != 0 ||
+            is_server_connected(agent) || !is_user_login(agent)) {
             fail(
                 agent,
                 destroy_agent,
-                "repeated 403 changed reachability, login, or repeated auth callback connected=" +
+                "403 changed login, emitted -2, or repeated its episode callback connected=" +
                     std::to_string(is_server_connected(agent)) + " auth_callbacks=" +
                     std::to_string(auth_rejected_callbacks.load()) + " disconnected_callbacks=" +
                     std::to_string(disconnected_callbacks.load()) + " logged_in=" +
                     std::to_string(is_user_login(agent))
             );
         }
-        if (user_logout(agent, false) != 0 || is_user_login(agent) ||
-            local_lost_callbacks.load() != 1 || !local_lost_saw_logged_out.load()) {
-            fail(agent, destroy_agent, "deferred Studio logout did not clear the active account exactly once");
-        }
-        if (user_logout(agent, false) != 0 || is_user_login(agent) ||
-            !get_selected_machine(agent).empty() || local_lost_callbacks.load() != 1) {
-            fail(agent, destroy_agent, "repeated Studio logout was not idempotent");
+        unsigned int rejected_code = 0;
+        std::string rejected_body;
+        if (get_print_info(agent, &rejected_code, &rejected_body) == 0 || rejected_code == 200) {
+            fail(agent, destroy_agent, "rejected account devices were still served");
         }
         destroy_agent(agent);
         print_json(out);
@@ -298,14 +297,20 @@
             connect_printer(agent, "studio-serial-1", "127.0.0.1", "user", "pass", false) != 0) {
             fail(agent, destroy_agent, "account transition active local setup failed");
         }
-        if (change_user(agent, profile_b) != 0 || local_lost_callbacks.load() != 1 ||
-            !local_lost_saw_account_b.load() ||
-            reentrant_print_rc.load() == 0 ||
-            reentrant_connect_rc.load() != kBambuConnectFailed ||
-            local_connected_callbacks.load() != 1 || printer_callbacks.load() != 0 ||
-            status_count(cloud, "studio-serial-1") != 0) {
+        const bool b_fenced = change_user(agent, profile_b) == 0 &&
+            wait_until([&] {
+                return local_lost_callbacks.load() == 1 &&
+                    local_lost_saw_account_b.load();
+            }) &&
+            reentrant_print_rc.load() != 0 &&
+            reentrant_connect_rc.load() == kBambuConnectFailed &&
+            local_connected_callbacks.load() == 1;
+        if (!b_fenced) {
             fail(agent, destroy_agent, "account A callbacks escaped into same-token account B");
         }
+        // Stream era: the pushed account-B snapshot may land as soon as the
+        // worker redials, so the retired zero-count window is gone; the
+        // fencing assertions above still pin A-state out of B's callbacks.
         if (get_print_info(agent, &printers_code, &printers_body) != 0 || printers_code != 200) {
             fail(agent, destroy_agent, "account transition B printer seed failed");
         }

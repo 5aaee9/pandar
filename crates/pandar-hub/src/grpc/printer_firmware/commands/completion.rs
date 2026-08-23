@@ -52,6 +52,12 @@ pub(super) async fn complete_refresh(
         .await;
         return Ok(());
     }
+    state
+        .publish_printer_projection_change_for_serial(
+            claimed.identity.tenant_id,
+            &claimed.identity.serial,
+        )
+        .await;
     if let Err(error) = state
         .commands()
         .mark_firmware_terminal(

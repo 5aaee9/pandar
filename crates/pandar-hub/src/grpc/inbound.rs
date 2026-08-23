@@ -61,6 +61,9 @@ pub(super) fn spawn_inbound_handler(
                 "agent connection closed before printer operation completed",
             )
             .await;
+            state
+                .publish_agent_printers_projection_changes(tenant_id, agent_id)
+                .await;
         }
     });
 }

@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
-const HEARTBEAT_INTERVAL_MS: u32 = 2_000;
+const DISPATCHER_IDLE_WAIT_MS: u32 = u32::MAX;
 const CONNECTED_DEBOUNCE_MS: u64 = 1_000;
 
 pub(super) const CLOUD_TUNNEL: i32 = 0;
@@ -72,11 +72,14 @@ pub(super) struct StudioState {
     connected_notifications: BTreeMap<String, u64>,
     local: LocalState,
     listeners: ListenerMask,
-    account_transition_pending: bool,
+    pub(super) account_transition_pending: bool,
     cache_generation: u64,
     next_ticket: u64,
     issued: BTreeMap<u64, StudioDelivery>,
     pending_offline: BTreeMap<String, OfflineWork>,
+    pending_connected: BTreeSet<String>,
+    pending_cloud_status: BTreeMap<String, String>,
+    pending_local_status: BTreeMap<String, String>,
 }
 
 #[derive(Default)]
@@ -126,6 +129,7 @@ pub(super) struct StudioWork {
 struct OfflineWork {
     local_generation: Option<u64>,
     cloud_allowed: bool,
+    forced: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -141,7 +145,9 @@ enum DeliveryKind {
     LocalConnect {
         generation: u64,
     },
-    CloudOffline,
+    CloudOffline {
+        forced: bool,
+    },
     LocalOffline {
         generation: u64,
     },
@@ -190,13 +196,17 @@ impl StudioState {
         self.account_transition_pending = transition_pending;
         self.cache_generation = self.cache_generation.wrapping_add(1).max(1);
         self.issued.clear();
-        self.pending_offline.clear();
+        self.pending_connected.clear();
+        self.pending_cloud_status.clear();
+        self.pending_local_status.clear();
+        // Preserve the local-loss transition; final delivery rechecks its fences.
         if let Some((dev_id, generation)) = local {
             self.pending_offline.insert(
                 dev_id,
                 OfflineWork {
                     local_generation: Some(generation),
                     cloud_allowed: false,
+                    forced: false,
                 },
             );
         }
@@ -211,6 +221,16 @@ impl StudioState {
         self.issued.clear();
     }
 
+    pub(super) fn clear_stream_work(&mut self) {
+        self.invalidate_cache();
+        self.pending_offline.clear();
+        self.pending_connected.clear();
+        self.pending_cloud_status.clear();
+        self.pending_local_status.clear();
+        self.cloud_initialized.clear();
+        self.connected_notifications.clear();
+    }
+
     pub(super) fn connection_changed(&mut self) {
         self.cloud_initialized.clear();
         self.connected_notifications.clear();
@@ -223,6 +243,14 @@ impl StudioState {
     }
 
     pub(super) fn queue_offline(&mut self, dev_id: String) {
+        self.queue_offline_with_policy(dev_id, false);
+    }
+
+    pub(super) fn queue_forced_offline(&mut self, dev_id: String) {
+        self.queue_offline_with_policy(dev_id, true);
+    }
+
+    fn queue_offline_with_policy(&mut self, dev_id: String, forced: bool) {
         self.cloud_initialized.remove(&dev_id);
         self.connected_notifications.remove(&dev_id);
         self.issued.retain(|_, delivery| delivery.dev_id != dev_id);
@@ -232,37 +260,93 @@ impl StudioState {
             self.local.generation = self.local.generation.wrapping_add(1).max(1);
             self.local.generation
         });
-        self.pending_offline.insert(
-            dev_id,
-            OfflineWork {
+        self.pending_connected.remove(&dev_id);
+        self.pending_cloud_status.remove(&dev_id);
+        self.pending_local_status.remove(&dev_id);
+        self.pending_offline
+            .entry(dev_id)
+            .and_modify(|offline| {
+                offline.forced |= forced;
+                offline.cloud_allowed = true;
+                offline.local_generation = offline.local_generation.or(local_generation);
+            })
+            .or_insert(OfflineWork {
                 local_generation,
                 cloud_allowed: true,
-            },
-        );
+                forced,
+            });
+    }
+
+    pub(super) fn queue_status(&mut self, dev_id: String, body: String) {
+        self.queue_cloud_status(dev_id.clone(), body.clone());
+        self.queue_local_status(dev_id, body);
+    }
+
+    pub(super) fn queue_cloud_status(&mut self, dev_id: String, body: String) {
+        if self.listeners.cloud_message && self.cloud_target(&dev_id) {
+            if self.listeners.printer_connected {
+                self.pending_connected.insert(dev_id.clone());
+            }
+            self.pending_cloud_status.insert(dev_id, body);
+        }
+    }
+
+    pub(super) fn queue_local_status(&mut self, dev_id: String, body: String) {
+        if self.listeners.local_message
+            && self.local.connected
+            && self.local.target.as_deref() == Some(&dev_id)
+        {
+            self.pending_local_status.insert(dev_id, body);
+        }
     }
 
     pub(super) fn recover_online(&mut self, dev_id: &str) {
-        self.pending_offline.remove(dev_id);
+        if self
+            .pending_offline
+            .get(dev_id)
+            .is_none_or(|offline| !offline.forced)
+        {
+            self.pending_offline.remove(dev_id);
+        }
+        self.pending_cloud_status.remove(dev_id);
+        self.pending_local_status.remove(dev_id);
     }
 
     fn set_listener(&mut self, kind: i32, present: bool) -> bool {
         match kind {
-            CLOUD_MESSAGE_LISTENER => self.listeners.cloud_message = present,
-            LOCAL_MESSAGE_LISTENER => self.listeners.local_message = present,
-            PRINTER_CONNECTED_LISTENER => self.listeners.printer_connected = present,
+            CLOUD_MESSAGE_LISTENER => {
+                self.listeners.cloud_message = present;
+                if !present {
+                    self.pending_cloud_status.clear();
+                }
+            }
+            LOCAL_MESSAGE_LISTENER => {
+                self.listeners.local_message = present;
+                if !present {
+                    self.pending_local_status.clear();
+                }
+            }
+            PRINTER_CONNECTED_LISTENER => {
+                self.listeners.printer_connected = present;
+                if !present {
+                    self.pending_connected.clear();
+                }
+            }
             LOCAL_CONNECTED_LISTENER => self.listeners.local_connected = present,
             _ => return false,
         }
         true
     }
 
-    fn cloud_target(&self, dev_id: &str) -> bool {
+    pub(super) fn cloud_target(&self, dev_id: &str) -> bool {
         self.selected_machine == dev_id || self.cloud_subscriptions.contains(dev_id)
     }
 
-    fn retire_cloud_target(&mut self, dev_id: &str) {
+    pub(super) fn retire_cloud_target(&mut self, dev_id: &str) {
         self.cloud_initialized.remove(dev_id);
         self.connected_notifications.remove(dev_id);
+        self.pending_connected.remove(dev_id);
+        self.pending_cloud_status.remove(dev_id);
         self.issued.retain(|_, delivery| {
             delivery.dev_id != dev_id
                 || !matches!(
@@ -272,44 +356,32 @@ impl StudioState {
                             tunnel: CLOUD_TUNNEL,
                             ..
                         }
-                        | DeliveryKind::CloudOffline
+                        | DeliveryKind::CloudOffline { .. }
                 )
         });
     }
 
     fn heartbeat_plan(&self) -> (PluginStudioHeartbeatPlan, Vec<HeartbeatTarget>) {
-        let mut targets = Vec::new();
-        if self.listeners.cloud_message {
-            let mut cloud_targets = self.cloud_subscriptions.clone();
-            if !self.selected_machine.is_empty() {
-                cloud_targets.insert(self.selected_machine.clone());
-            }
-            targets.extend(cloud_targets.into_iter().map(|dev_id| HeartbeatTarget {
-                tunnel: CLOUD_TUNNEL,
-                dev_id,
-                generation: 0,
-            }));
-        }
-        if self.listeners.local_message
-            && let Some(dev_id) = self.local.target.clone().filter(|_| self.local.connected)
-        {
-            targets.push(HeartbeatTarget {
-                tunnel: LOCAL_TUNNEL,
-                dev_id,
-                generation: self.local.generation,
-            });
-        }
+        let busy = !self.pending_connected.is_empty()
+            || !self.pending_cloud_status.is_empty()
+            || !self.pending_local_status.is_empty()
+            || !self.pending_offline.is_empty()
+            || self.issued.values().any(|delivery| !delivery.claimed);
         (
             PluginStudioHeartbeatPlan {
-                wait_ms: HEARTBEAT_INTERVAL_MS,
-                refresh: i32::from(!targets.is_empty()),
+                wait_ms: if busy {
+                    crate::connection::stream::HEARTBEAT_BUSY_WAIT_MS
+                } else {
+                    DISPATCHER_IDLE_WAIT_MS
+                },
+                refresh: 0,
             },
-            targets,
+            Vec::new(),
         )
     }
 }
 
-pub(super) fn normalize_studio_dev_id(mut dev_id: String) -> String {
+pub(crate) fn normalize_studio_dev_id(mut dev_id: String) -> String {
     if let Some(separator) = dev_id.find('|') {
         dev_id.truncate(separator);
     }

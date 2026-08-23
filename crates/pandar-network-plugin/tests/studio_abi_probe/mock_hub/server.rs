@@ -9,23 +9,24 @@ use std::{
 use crate::support::{assert_multipart_file_part, assert_multipart_print_request, request_body};
 
 use super::{
-    MockHub, MockMode,
+    Incoming, MockHub, MockMode,
     account_race::serve_account_exchange_race,
     admission::serve_request_admission,
     connection::{
         serve_account_transition, serve_auth_rejected, serve_background_timeout,
-        serve_connection_readiness, serve_no_auth_recovery, serve_token_rotation,
+        serve_connection_readiness, serve_no_auth_recovery, serve_stream_unavailable,
+        serve_token_rotation,
     },
     freshness::{serve_firmware_claim_race, serve_freshness_claim},
-    native, next_request_allow_ready,
+    native, next_stream,
     operations::{TestOperation, assert_operation_body_eq},
     presence::{serve_axis_features, serve_callback_order, serve_printer_presence},
     responses::{
         PRINTERS_RESPONSE, camera_printers_response, filament_switch_printers_response,
-        printers_response_with_progress,
+        snapshot_frames,
     },
     synchronization::start_gate,
-    transport::{assert_request, assert_request_with_token, write_response},
+    transport::{assert_request_with_token, write_response},
 };
 
 pub(super) fn spawn(mode: MockMode, artifact: Vec<u8>, race_directory: &Path) -> MockHub {
@@ -56,26 +57,31 @@ pub(super) fn spawn(mode: MockMode, artifact: Vec<u8>, race_directory: &Path) ->
         match mode {
             MockMode::Success => serve_success(&listener, &thread_stop, deadline, &artifact),
             MockMode::ConnectionReadiness => {
-                serve_connection_readiness(&listener, &thread_stop, deadline);
+                serve_connection_readiness(&listener, &thread_stop, deadline, &race_directory);
             }
             MockMode::BackgroundTimeout => {
-                serve_background_timeout(&listener, &thread_stop, deadline);
+                serve_background_timeout(&listener, &thread_stop, deadline, &race_directory);
             }
-            MockMode::AuthRejected => serve_auth_rejected(&listener, &thread_stop, deadline),
+            MockMode::StreamUnavailable => {
+                serve_stream_unavailable(&listener, &thread_stop, deadline, &race_directory);
+            }
+            MockMode::AuthRejected => {
+                serve_auth_rejected(&listener, &thread_stop, deadline, &race_directory);
+            }
             MockMode::PrinterPresence => {
-                serve_printer_presence(&listener, &thread_stop, deadline);
+                serve_printer_presence(&listener, &thread_stop, deadline, &race_directory);
             }
             MockMode::AccountTransition => {
-                serve_account_transition(&listener, &thread_stop, deadline);
+                serve_account_transition(&listener, &thread_stop, deadline, &race_directory);
             }
             MockMode::AccountExchangeRace => {
                 serve_account_exchange_race(&listener, &thread_stop, deadline, &race_directory);
             }
             MockMode::TokenRotation => {
-                serve_token_rotation(&listener, &thread_stop, deadline, false);
+                serve_token_rotation(&listener, &thread_stop, deadline, &race_directory, false);
             }
             MockMode::TokenRotationOffline => {
-                serve_token_rotation(&listener, &thread_stop, deadline, true);
+                serve_token_rotation(&listener, &thread_stop, deadline, &race_directory, true);
             }
             MockMode::FreshnessClaim => {
                 serve_freshness_claim(&listener, &thread_stop, deadline, &race_directory);
@@ -90,40 +96,20 @@ pub(super) fn spawn(mode: MockMode, artifact: Vec<u8>, race_directory: &Path) ->
                 serve_request_admission(&listener, &thread_stop, deadline);
             }
             MockMode::CameraAvailable => {
-                let (mut stream, request) = next_request_allow_ready(
-                    &listener,
-                    &thread_stop,
-                    deadline,
-                    "GET",
-                    "/api/v1/plugin/printers",
-                );
-                assert_request_with_token(
-                    &request,
-                    "GET",
-                    "/api/v1/plugin/printers",
-                    Some("probe-token"),
-                );
-                write_response(&mut stream, "HTTP/1.1 200 OK", &camera_printers_response());
+                let upgrade = next_stream(&listener, &thread_stop, deadline);
+                assert_printer_events_upgrade(&upgrade.request);
+                let frames = upgrade.serve();
+                for frame in snapshot_frames(&camera_printers_response()) {
+                    frames.send(frame).expect("serve camera snapshot");
+                }
             }
             MockMode::CameraUnavailable => {
-                let (mut stream, request) = next_request_allow_ready(
-                    &listener,
-                    &thread_stop,
-                    deadline,
-                    "GET",
-                    "/api/v1/plugin/printers",
-                );
-                assert_request_with_token(
-                    &request,
-                    "GET",
-                    "/api/v1/plugin/printers",
-                    Some("probe-token"),
-                );
-                write_response(
-                    &mut stream,
-                    "HTTP/1.1 200 OK",
-                    &filament_switch_printers_response(),
-                );
+                let upgrade = next_stream(&listener, &thread_stop, deadline);
+                assert_printer_events_upgrade(&upgrade.request);
+                let frames = upgrade.serve();
+                for frame in snapshot_frames(&filament_switch_printers_response()) {
+                    frames.send(frame).expect("serve camera snapshot");
+                }
             }
             MockMode::NoAuthRecovery => unreachable!(),
             MockMode::OfficialNoAuthRecovery => unreachable!(),
@@ -189,97 +175,126 @@ fn serve_success(
     deadline: std::time::Instant,
     artifact: &[u8],
 ) {
-    let expected = [
-        ("POST", "/api/v1/plugin/no-auth-session", false),
-        ("POST", "/api/v1/plugin/login-tickets/exchange", false),
-        ("POST", "/api/v1/plugin/login-tickets/exchange", false),
-        ("GET", "/api/v1/plugin/printers", true),
-        ("GET", "/api/v1/plugin/printers", true),
+    let steps: &[(&str, &str, Option<&str>)] = &[
+        ("POST", "/api/v1/plugin/no-auth-session", None),
+        ("POST", "/api/v1/plugin/login-tickets/exchange", None),
+        ("POST", "/api/v1/plugin/login-tickets/exchange", None),
         (
             "GET",
             "/api/v1/plugin/jobs?dev_id=studio-serial-1&status=0&offset=0&limit=20",
-            true,
+            Some("probe-token"),
         ),
-        ("POST", "/api/v1/plugin/prints", true),
-        ("GET", "/api/v1/plugin/jobs/38191", true),
-        ("GET", "/api/v1/plugin/jobs/38191", true),
-        ("GET", "/api/v1/plugin/printers", true),
-        ("POST", "/api/v1/plugin/printers/printer-1/operations", true),
-        ("POST", "/api/v1/plugin/printers/printer-1/operations", true),
-        ("GET", "/api/v1/plugin/printers", true),
-        ("POST", "/api/v1/plugin/printers/printer-1/operations", true),
-        ("GET", "/api/v1/plugin/printers", true),
+        ("POST", "/api/v1/plugin/prints", Some("probe-token")),
+        ("GET", "/api/v1/plugin/jobs/38191", Some("probe-token")),
+        ("GET", "/api/v1/plugin/jobs/38191", Some("probe-token")),
+        (
+            "POST",
+            "/api/v1/plugin/printers/printer-1/operations",
+            Some("probe-token"),
+        ),
+        (
+            "POST",
+            "/api/v1/plugin/printers/printer-1/operations",
+            Some("probe-token"),
+        ),
+        (
+            "POST",
+            "/api/v1/plugin/printers/printer-1/operations",
+            Some("probe-token"),
+        ),
     ];
-    for (index, (method, path, bearer)) in expected.into_iter().enumerate() {
-        let (mut stream, request) =
-            next_request_allow_ready(listener, stop, deadline, method, path);
-        assert_request(&request, method, path, bearer);
-        match index {
-            0 => write_response(
-                &mut stream,
-                "HTTP/1.1 403 Forbidden",
-                r#"{"error":"no_auth_required"}"#,
-            ),
-            1 | 2 => write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
-            ),
-            3 => write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                &printers_response_with_progress(36),
-            ),
-            4 | 9 | 12 | 14 => write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                &filament_switch_printers_response(),
-            ),
-            5 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"total":0,"hits":[]}"#),
-            6 => respond_to_print(&mut stream, &request, artifact),
-            7 => write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                r#"{"studio_submission_id":38191,"job_status":"acknowledged","print_status":"pending"}"#,
-            ),
-            8 => write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                r#"{"studio_submission_id":38191,"job_status":"succeeded","print_status":"pending"}"#,
-            ),
-            10 => respond_to_operation(
-                &mut stream,
-                &request,
-                TestOperation::SetChamberLight { light_on: false },
-                "cmd-light",
-            ),
-            11 => respond_to_operation(
-                &mut stream,
-                &request,
-                TestOperation::SetHotendTemperature {
-                    temperature_celsius: 245,
-                    wait: false,
-                    extruder_id: 1,
-                },
-                "cmd-hotend",
-            ),
-            13 => {
-                assert_operation_body_eq(
-                    &request,
-                    TestOperation::Home {
-                        axes: vec!["x".to_owned()],
-                    },
-                );
-                assert!(!request_body(&request).contains("G28"));
-                write_response(
-                    &mut stream,
-                    "HTTP/1.1 202 Accepted",
-                    r#"{"command_id":"cmd-1","status":"queued"}"#,
-                );
+    let mut step = 0;
+    while step < steps.len() {
+        match super::next_incoming(listener, stop, deadline) {
+            Incoming::Stream(upgrade) => {
+                assert_printer_events_upgrade(&upgrade.request);
+                let snapshot = snapshot_frames(&filament_switch_printers_response());
+                let frames = upgrade.serve();
+                for frame in snapshot {
+                    frames.send(frame).expect("serve stream snapshot");
+                }
             }
-            _ => unreachable!(),
+            Incoming::Http(mut stream, request) => {
+                let (method, path, bearer) = steps[step];
+                assert_request_with_token(&request, method, path, bearer);
+                match step {
+                    0 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 403 Forbidden",
+                        r#"{"error":"no_auth_required"}"#,
+                    ),
+                    1 | 2 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
+                    ),
+                    3 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"total":0,"hits":[]}"#),
+                    4 => respond_to_print(&mut stream, &request, artifact),
+                    5 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        r#"{"studio_submission_id":38191,"job_status":"acknowledged","print_status":"pending"}"#,
+                    ),
+                    6 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        r#"{"studio_submission_id":38191,"job_status":"succeeded","print_status":"pending"}"#,
+                    ),
+                    7 => respond_to_operation(
+                        &mut stream,
+                        &request,
+                        TestOperation::SetChamberLight { light_on: false },
+                        "cmd-light",
+                    ),
+                    8 => respond_to_operation(
+                        &mut stream,
+                        &request,
+                        TestOperation::SetHotendTemperature {
+                            temperature_celsius: 245,
+                            wait: false,
+                            extruder_id: 1,
+                        },
+                        "cmd-hotend",
+                    ),
+                    9 => {
+                        assert_operation_body_eq(
+                            &request,
+                            TestOperation::Home {
+                                axes: vec!["x".to_owned()],
+                            },
+                        );
+                        assert!(!request_body(&request).contains("G28"));
+                        write_response(
+                            &mut stream,
+                            "HTTP/1.1 202 Accepted",
+                            r#"{"command_id":"cmd-1","status":"queued"}"#,
+                        );
+                    }
+                    _ => unreachable!(),
+                }
+                step += 1;
+            }
         }
     }
+}
+
+/// Validates the Studio-projection printer-events upgrade contract.
+pub(super) fn assert_printer_events_upgrade_for_tenant(request: &str, tenant: &str) {
+    let expected = format!(
+        "GET /api/v1/tenants/{tenant}/printer-events?projection=studio&version=1 HTTP/1.1\r\n"
+    );
+    assert!(
+        request.starts_with(&expected),
+        "unexpected printer-events upgrade request line: {request}"
+    );
+    assert!(
+        request.contains("authorization: Bearer probe-token\r\n"),
+        "missing bearer auth on printer-events upgrade: {request}"
+    );
+}
+
+pub(super) fn assert_printer_events_upgrade(request: &str) {
+    assert_printer_events_upgrade_for_tenant(request, "tenant-1");
 }
 
 fn respond_to_print(stream: &mut std::net::TcpStream, request: &str, artifact: &[u8]) {
@@ -321,34 +336,53 @@ fn respond_to_operation(
 }
 
 fn serve_failure(listener: &TcpListener, stop: &AtomicBool, deadline: std::time::Instant) {
-    let expected = [
-        ("POST", "/api/v1/plugin/no-auth-session", false),
-        ("POST", "/api/v1/plugin/login-tickets/exchange", false),
-        ("GET", "/api/v1/plugin/printers", true),
-        ("GET", "/api/v1/plugin/printers", true),
-        ("POST", "/api/v1/plugin/prints", true),
+    let steps: &[(&str, &str, Option<&str>)] = &[
+        ("POST", "/api/v1/plugin/no-auth-session", None),
+        ("POST", "/api/v1/plugin/login-tickets/exchange", None),
+        ("POST", "/api/v1/plugin/prints", Some("probe-token")),
     ];
-    for (index, (method, path, bearer)) in expected.into_iter().enumerate() {
-        let (mut stream, request) =
-            next_request_allow_ready(listener, stop, deadline, method, path);
-        assert_request(&request, method, path, bearer);
-        let (status, body) = match index {
-            0 => ("HTTP/1.1 403 Forbidden", r#"{"error":"no_auth_required"}"#),
-            1 => (
-                "HTTP/1.1 401 Unauthorized",
-                r#"{"error":"raw-ticket-message","ticket":"secret"}"#,
-            ),
-            2 => (
-                "HTTP/1.1 401 Unauthorized",
-                r#"{"error":"raw-auth-message","token":"secret"}"#,
-            ),
-            3 => ("HTTP/1.1 200 OK", PRINTERS_RESPONSE),
-            4 => (
-                "HTTP/1.1 403 Forbidden",
-                r#"{"error":"raw-forbidden-message","path":"/tmp/secret.3mf"}"#,
-            ),
-            _ => unreachable!(),
-        };
-        write_response(&mut stream, status, body);
+    let mut step = 0;
+    let mut stream_rejections = 0;
+    while step < steps.len() {
+        match super::next_incoming(listener, stop, deadline) {
+            Incoming::Stream(upgrade) => {
+                assert_printer_events_upgrade_for_tenant(&upgrade.request, "tenant");
+                if stream_rejections < 1 {
+                    stream_rejections += 1;
+                    upgrade.reject(
+                        "HTTP/1.1 401 Unauthorized",
+                        r#"{"error":"raw-auth-message","token":"secret"}"#,
+                    );
+                } else {
+                    let frames = upgrade.serve();
+                    for frame in snapshot_frames(PRINTERS_RESPONSE) {
+                        frames.send(frame).expect("serve failure-mode snapshot");
+                    }
+                }
+            }
+            Incoming::Http(mut stream, request) => {
+                let (method, path, bearer) = steps[step];
+                assert_request_with_token(&request, method, path, bearer);
+                match step {
+                    0 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 403 Forbidden",
+                        r#"{"error":"no_auth_required"}"#,
+                    ),
+                    1 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 401 Unauthorized",
+                        r#"{"error":"raw-ticket-message","ticket":"secret"}"#,
+                    ),
+                    2 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 403 Forbidden",
+                        r#"{"error":"raw-forbidden-message","path":"/tmp/secret.3mf"}"#,
+                    ),
+                    _ => unreachable!(),
+                }
+                step += 1;
+            }
+        }
     }
 }

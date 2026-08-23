@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     responses::PRINTERS_RESPONSE,
-    transport::{assert_request_with_token, read_request_until, write_response},
+    transport::{assert_request_with_token, write_response},
 };
 
 pub(super) fn serve_request_admission(
@@ -20,30 +20,36 @@ pub(super) fn serve_request_admission(
     let mut printers: PrinterList = serde_json::from_str(PRINTERS_RESPONSE).unwrap();
     printers.devices[0].pandar_printer_id = "00000000-0000-0000-0000-000000000123".to_owned();
     let printers = serde_json::to_string(&printers).unwrap();
-    let mut printer_refreshes = 0;
+    let mut stream_upgrades = 0;
     let mut operations = 0;
     let mut catalogs = 0;
     let mut prepares = 0;
     let mut executes = 0;
     let mut refreshes = 0;
     while !stop.load(Ordering::Acquire) {
-        let Some((mut stream, request)) =
-            read_request_until(listener, stop, deadline, "request admission probe")
-        else {
-            break;
+        let (mut stream, request) = match super::next_incoming(listener, stop, deadline) {
+            super::Incoming::Stream(upgrade) => {
+                assert!(
+                    upgrade
+                        .request
+                        .contains("/printer-events?projection=studio&version=1")
+                        && upgrade
+                            .request
+                            .contains("authorization: Bearer probe-token")
+                );
+                stream_upgrades += 1;
+                let frames = upgrade.serve();
+                for frame in super::responses::snapshot_frames(&printers) {
+                    frames
+                        .send(frame)
+                        .expect("serve request-admission snapshot");
+                }
+                continue;
+            }
+            super::Incoming::Http(stream, request) => (stream, request),
         };
         let line = request.lines().next().unwrap_or_default();
         match line {
-            "GET /api/v1/plugin/printers HTTP/1.1" if printer_refreshes == 0 => {
-                assert_request_with_token(
-                    &request,
-                    "GET",
-                    "/api/v1/plugin/printers",
-                    Some("probe-token"),
-                );
-                printer_refreshes += 1;
-                write_response(&mut stream, "HTTP/1.1 200 OK", &printers);
-            }
             "POST /api/v1/plugin/printers/00000000-0000-0000-0000-000000000123/operations HTTP/1.1"
                 if operations == 0 =>
             {
@@ -127,10 +133,7 @@ pub(super) fn serve_request_admission(
             _ => panic!("request admission performed unexpected Hub I/O: {request}"),
         }
     }
-    assert_eq!(
-        printer_refreshes, 1,
-        "missing request admission printer seed"
-    );
+    assert!(stream_upgrades >= 1, "missing request admission stream");
     assert_eq!(operations, 1, "authorized operation count changed");
     assert_eq!(catalogs, 1, "authorized firmware catalog count changed");
     assert_eq!(prepares, 1, "authorized firmware prepare count changed");

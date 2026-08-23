@@ -1,5 +1,19 @@
 use super::*;
-use crate::connection::{AuthDisposition, ConnectionSession};
+use crate::connection::{AuthDisposition, ConnectionSession, ConnectionState};
+
+fn cached_status(state: &ConnectionState, dev_id: &str) -> Option<String> {
+    state
+        .printers
+        .get(dev_id)
+        .filter(|printer| printer.online)
+        .map(|printer| printer.status_report.clone())
+}
+
+fn queue_cached_cloud_status(state: &mut ConnectionState, dev_id: &str) {
+    if let Some(status) = cached_status(state, dev_id) {
+        state.studio.queue_cloud_status(dev_id.to_owned(), status);
+    }
+}
 
 impl ConnectionSession {
     pub(crate) fn studio_camera_snapshot(&self, dev_id: String) -> Option<StudioRequestSnapshot> {
@@ -124,30 +138,50 @@ impl ConnectionSession {
     }
 
     pub(super) fn begin_account_transition(&self) {
-        let mut state = self.state.lock().expect("connection state");
-        state.account_epoch = state.account_epoch.wrapping_add(1);
-        state.generation = state.generation.wrapping_add(1);
-        state.auth = AuthDisposition::Unknown;
-        state.printer_epoch = state.printer_epoch.wrapping_add(1);
-        state.printers_fresh = false;
-        state.printers.clear();
-        state.clear_deliveries();
-        state.studio.reset_account(true);
+        {
+            let mut state = self.state.lock().expect("connection state");
+            state.account_epoch = state.account_epoch.wrapping_add(1);
+            state.generation = state.generation.wrapping_add(1);
+            state.auth = AuthDisposition::Unknown;
+            state.printer_epoch = state.printer_epoch.wrapping_add(1);
+            state.printers_fresh = false;
+            state.printers.clear();
+            state.stream_degraded = false;
+            state.stream_error_pending = false;
+            state.clear_deliveries();
+            state.studio.reset_account(true);
+        }
+        self.wake_worker();
+        self.notify_dispatcher();
     }
 
     pub(super) fn finish_account_transition(&self, account_epoch: u64) {
-        let mut state = self.state.lock().expect("connection state");
-        if state.account_epoch == account_epoch {
-            state.studio.finish_account_transition();
+        let current = {
+            let mut state = self.state.lock().expect("connection state");
+            if state.account_epoch != account_epoch {
+                false
+            } else {
+                state.studio.finish_account_transition();
+                true
+            }
+        };
+        if current {
+            self.wake_worker();
+            self.notify_dispatcher();
         }
     }
 
-    pub(super) fn studio_set_listener(&self, kind: i32, present: bool) -> bool {
-        self.state
+    pub(in crate::connection) fn studio_set_listener(&self, kind: i32, present: bool) -> bool {
+        let accepted = self
+            .state
             .lock()
             .expect("connection state")
             .studio
-            .set_listener(kind, present)
+            .set_listener(kind, present);
+        if accepted {
+            self.notify_dispatcher();
+        }
+        accepted
     }
 
     pub(super) fn studio_selected(&self) -> String {
@@ -159,25 +193,36 @@ impl ConnectionSession {
             .clone()
     }
 
-    pub(super) fn studio_set_selected(&self, selected: String) {
+    pub(in crate::connection) fn studio_set_selected(&self, selected: String) {
         let selected = normalize_studio_dev_id(selected);
-        let mut state = self.state.lock().expect("connection state");
-        let previous = std::mem::replace(&mut state.studio.selected_machine, selected.clone());
-        if previous != selected
-            && !previous.is_empty()
-            && !state.studio.cloud_subscriptions.contains(&previous)
         {
-            state.studio.retire_cloud_target(&previous);
+            let mut state = self.state.lock().expect("connection state");
+            let already_targeted = state.studio.cloud_target(&selected);
+            let previous = std::mem::replace(&mut state.studio.selected_machine, selected.clone());
+            if previous != selected
+                && !previous.is_empty()
+                && !state.studio.cloud_subscriptions.contains(&previous)
+            {
+                state.studio.retire_cloud_target(&previous);
+            }
+            if !already_targeted {
+                queue_cached_cloud_status(&mut state, &selected);
+            }
         }
+        self.notify_dispatcher();
     }
 
     pub(super) fn studio_add_subscription(&self, dev_id: String) {
-        self.state
-            .lock()
-            .expect("connection state")
-            .studio
-            .cloud_subscriptions
-            .insert(normalize_studio_dev_id(dev_id));
+        let dev_id = normalize_studio_dev_id(dev_id);
+        {
+            let mut state = self.state.lock().expect("connection state");
+            let already_targeted = state.studio.cloud_target(&dev_id);
+            state.studio.cloud_subscriptions.insert(dev_id.clone());
+            if !already_targeted {
+                queue_cached_cloud_status(&mut state, &dev_id);
+            }
+        }
+        self.notify_dispatcher();
     }
 
     pub(super) fn studio_del_subscription(&self, dev_id: String) {
@@ -210,7 +255,7 @@ impl ConnectionSession {
             .prepare_connected(normalize_studio_dev_id(dev_id), now_ms)
     }
 
-    pub(super) fn studio_prepare_message(
+    pub(in crate::connection) fn studio_prepare_message(
         &self,
         tunnel: i32,
         dev_id: String,
@@ -278,7 +323,7 @@ impl ConnectionSession {
             .complete_delivery(ticket, delivered)
     }
 
-    pub(super) fn studio_claim_delivery(&self, ticket: u64) -> bool {
+    pub(in crate::connection) fn studio_claim_delivery(&self, ticket: u64) -> bool {
         self.state
             .lock()
             .expect("connection state")

@@ -24,6 +24,7 @@ use crate::{
 pub(crate) mod send_pause;
 #[cfg(test)]
 mod send_tests;
+mod studio;
 
 #[derive(Debug, Clone)]
 pub(crate) enum LinearizedSendOutcome {
@@ -90,6 +91,8 @@ where
 #[derive(Debug, Deserialize)]
 pub(super) struct PrinterEventQuery {
     ticket: Option<String>,
+    projection: Option<String>,
+    version: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -105,12 +108,26 @@ pub(super) async fn printer_events(
     headers: HeaderMap,
     request: Request<axum::body::Body>,
 ) -> Result<Response, ApiError> {
+    if query.projection.as_deref() == Some("studio") {
+        return studio::printer_events_studio(state, tenant_id, query.version, headers, request)
+            .await;
+    }
+    printer_events_default(state, tenant_id, query.ticket, headers, request).await
+}
+
+async fn printer_events_default(
+    state: AppState,
+    tenant_id: String,
+    ticket: Option<String>,
+    headers: HeaderMap,
+    request: Request<axum::body::Body>,
+) -> Result<Response, ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
     if state.no_auth_enabled() {
         state.metrics().record_ticket(TicketMetric::Consumed);
     } else if headers.contains_key(AUTHORIZATION) {
         auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
-    } else if let Some(ticket) = query.ticket {
+    } else if let Some(ticket) = ticket {
         match state
             .printer_event_tickets()
             .consume(tenant_id, &hash_secret(&ticket))

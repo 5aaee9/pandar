@@ -58,6 +58,11 @@ void sync_printer_refresh_session(Agent* agent) {
         reinterpret_cast<const uint8_t*>(agent->token.data()),
         agent->token.size()
     );
+    pandar_plugin_printer_refresh_session_set_tenant(
+        agent->printer_refresh_session,
+        reinterpret_cast<const uint8_t*>(agent->tenant_id.data()),
+        agent->tenant_id.size()
+    );
     sync_firmware_session(agent);
 }
 

@@ -7,10 +7,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use support::{
-    PRINTERS_RESPONSE, assert_no_request, next_request, run_probe, wait_for_client_close,
-    write_response,
-};
+use support::{assert_no_request, next_request, run_probe, wait_for_client_close, write_response};
 
 #[test]
 fn requested_logout_revokes_the_current_plugin_session_and_clears_local_state() {
@@ -55,10 +52,6 @@ fn passive_logout_does_not_clear_a_login_committed_after_a_logged_out_observatio
 fn failed_revoke_still_clears_printer_and_account_before_reporting_http_error() {
     let output = run_probe("failure", |listener, deadline, _| {
         let (mut stream, request) = next_request(&listener, deadline);
-        assert!(request.starts_with("GET /api/v1/plugin/printers HTTP/1.1"));
-        write_response(&mut stream, "200 OK", PRINTERS_RESPONSE);
-
-        let (mut stream, request) = next_request(&listener, deadline);
         assert!(request.starts_with("DELETE /api/v1/plugin/session HTTP/1.1"));
         assert!(
             request
@@ -78,10 +71,6 @@ fn failed_revoke_still_clears_printer_and_account_before_reporting_http_error() 
 #[test]
 fn failed_revoke_is_durable_and_a_repeated_logout_retries_it() {
     let output = run_probe("failure-retry", |listener, deadline, _| {
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert!(request.starts_with("GET /api/v1/plugin/printers HTTP/1.1"));
-        write_response(&mut stream, "200 OK", PRINTERS_RESPONSE);
-
         let (mut first, first_request) = next_request(&listener, deadline);
         assert!(first_request.starts_with("DELETE /api/v1/plugin/session HTTP/1.1"));
         write_response(
@@ -105,10 +94,6 @@ fn failed_revoke_is_durable_and_a_repeated_logout_retries_it() {
 #[test]
 fn failed_revoke_is_retried_before_a_restarted_agent_bootstraps_no_auth() {
     let output = run_probe("failure-restart", |listener, deadline, _| {
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert!(request.starts_with("GET /api/v1/plugin/printers HTTP/1.1"));
-        write_response(&mut stream, "200 OK", PRINTERS_RESPONSE);
-
         let (mut first, first_request) = next_request(&listener, deadline);
         assert!(first_request.starts_with("DELETE /api/v1/plugin/session HTTP/1.1"));
         write_response(
@@ -135,10 +120,6 @@ fn failed_revoke_is_retried_before_a_restarted_agent_bootstraps_no_auth() {
 #[test]
 fn disconnected_revoke_still_clears_state_and_preserves_a_redacted_cause_chain() {
     let output = run_probe("disconnect", |listener, deadline, _| {
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert!(request.starts_with("GET /api/v1/plugin/printers HTTP/1.1"));
-        write_response(&mut stream, "200 OK", PRINTERS_RESPONSE);
-
         let (stream, request) = next_request(&listener, deadline);
         assert!(request.starts_with("DELETE /api/v1/plugin/session HTTP/1.1"));
         drop(stream);
@@ -150,10 +131,6 @@ fn disconnected_revoke_still_clears_state_and_preserves_a_redacted_cause_chain()
 #[test]
 fn unresponsive_revoke_clears_local_state_promptly_and_has_a_finite_bound() {
     let output = run_probe("timeout", |listener, deadline, _| {
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert!(request.starts_with("GET /api/v1/plugin/printers HTTP/1.1"));
-        write_response(&mut stream, "200 OK", PRINTERS_RESPONSE);
-
         let (stream, request) = next_request(&listener, deadline);
         assert!(request.starts_with("DELETE /api/v1/plugin/session HTTP/1.1"));
         assert!(
@@ -170,10 +147,6 @@ fn unresponsive_revoke_clears_local_state_promptly_and_has_a_finite_bound() {
 #[test]
 fn stale_unresponsive_revoke_does_not_report_into_a_replacement_account() {
     let output = run_probe("timeout-relogin", |listener, deadline, _| {
-        let (mut stream, request) = next_request(&listener, deadline);
-        assert!(request.starts_with("GET /api/v1/plugin/printers HTTP/1.1"));
-        write_response(&mut stream, "200 OK", PRINTERS_RESPONSE);
-
         let (stream, request) = next_request(&listener, deadline);
         assert!(request.starts_with("DELETE /api/v1/plugin/session HTTP/1.1"));
         wait_for_client_close(stream, deadline);

@@ -138,6 +138,13 @@ pub(super) async fn delete_printer(
         .printers()
         .delete_with_audit(tenant_id, printer_id, auth::audit_actor(&auth))
         .await?;
+    state
+        .publish_printer_projection_change(
+            tenant_id,
+            &printer.printer.id,
+            &printer.printer.serial_number,
+        )
+        .await;
 
     Ok(Json(printer_event_printer(printer, materials)))
 }

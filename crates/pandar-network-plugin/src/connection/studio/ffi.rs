@@ -184,7 +184,7 @@ pub extern "C" fn pandar_plugin_studio_heartbeat_plan(
 ) -> PluginStudioHeartbeatPlan {
     let Some(session) = session(session_ptr) else {
         return PluginStudioHeartbeatPlan {
-            wait_ms: HEARTBEAT_INTERVAL_MS,
+            wait_ms: DISPATCHER_IDLE_WAIT_MS,
             refresh: 0,
         };
     };

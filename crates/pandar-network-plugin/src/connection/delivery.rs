@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use super::{
     AuthDisposition, ConnectionSession, ConnectionState, PluginConnectionResult, Reachability,
@@ -66,6 +66,7 @@ impl ConnectionState {
         self.pending_transition = None;
         self.pending_auth_transition = false;
         self.pending_offline.clear();
+        self.degraded_offline.clear();
         self.unconfirmed_online.clear();
         self.delivery.clear();
     }
@@ -86,24 +87,6 @@ impl ConnectionState {
                 .filter(|printer| printer.online)
                 .map(|printer| printer.dev_id.clone()),
         );
-    }
-
-    pub(super) fn fail_unconfirmed_online(&mut self) {
-        let offline = std::mem::take(&mut self.unconfirmed_online);
-        self.queue_offline(offline);
-    }
-
-    pub(super) fn reconcile_online(&mut self, confirmed_online: &BTreeSet<String>) {
-        let offline = self
-            .unconfirmed_online
-            .difference(confirmed_online)
-            .cloned()
-            .collect::<Vec<_>>();
-        self.queue_offline(offline);
-        for dev_id in confirmed_online {
-            self.recover_online(dev_id);
-        }
-        self.unconfirmed_online.clear();
     }
 
     pub(super) fn set_reachability(&mut self, next: Reachability) -> bool {
@@ -140,9 +123,21 @@ impl ConnectionState {
         }
     }
 
+    pub(super) fn queue_forced_offline(&mut self, dev_ids: impl IntoIterator<Item = String>) {
+        for dev_id in dev_ids {
+            self.degraded_offline.insert(dev_id.clone());
+            if !self.pending_offline.contains(&dev_id) && !self.delivery.has_offline(&dev_id) {
+                self.pending_offline.push(dev_id.clone());
+            }
+            self.studio.queue_forced_offline(dev_id);
+        }
+    }
+
     pub(super) fn recover_online(&mut self, dev_id: &str) {
-        self.pending_offline.retain(|pending| pending != dev_id);
-        self.delivery.invalidate_offline(dev_id);
+        if !self.degraded_offline.contains(dev_id) {
+            self.pending_offline.retain(|pending| pending != dev_id);
+            self.delivery.invalidate_offline(dev_id);
+        }
         self.studio.recover_online(dev_id);
     }
 }
@@ -176,11 +171,14 @@ impl ConnectionSession {
         let mut state = self.state.lock().expect("connection state");
         std::mem::take(&mut state.pending_offline)
             .into_iter()
-            .map(|dev_id| IssuedOffline {
-                ticket: state
-                    .delivery
-                    .issue(IssuedDelivery::PrinterOffline(dev_id.clone())),
-                dev_id,
+            .map(|dev_id| {
+                state.degraded_offline.remove(&dev_id);
+                IssuedOffline {
+                    ticket: state
+                        .delivery
+                        .issue(IssuedDelivery::PrinterOffline(dev_id.clone())),
+                    dev_id,
+                }
             })
             .collect()
     }
@@ -191,5 +189,22 @@ impl ConnectionSession {
             .expect("connection state")
             .delivery
             .claim(ticket)
+    }
+
+    pub(in crate::connection) fn retry_connection_callback(&self, result: &PluginConnectionResult) {
+        let mut state = self.state.lock().expect("connection state");
+        if result.changed != 0 {
+            let expected = if result.connected != 0 {
+                Reachability::Connected
+            } else {
+                Reachability::Disconnected
+            };
+            if state.reachability == expected {
+                state.pending_transition = Some(expected);
+            }
+        }
+        if result.auth_changed != 0 && state.auth == AuthDisposition::Rejected {
+            state.pending_auth_transition = true;
+        }
     }
 }

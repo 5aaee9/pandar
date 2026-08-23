@@ -18,6 +18,8 @@ mod presence;
 mod responses;
 #[path = "mock_hub/server.rs"]
 mod server;
+#[path = "mock_hub/stream.rs"]
+mod stream;
 #[path = "mock_hub/synchronization.rs"]
 mod synchronization;
 #[path = "mock_hub/transport.rs"]
@@ -35,52 +37,67 @@ use std::{
     time::Instant,
 };
 use synchronization::ProbeStart;
-use transport::{read_request_until, write_response};
+
+pub(super) use stream::{Incoming, StreamUpgrade, snapshot_script};
 
 pub(super) fn next_request(
     listener: &TcpListener,
     stop: &AtomicBool,
     deadline: Instant,
-    method: &str,
-    path: &str,
+    _method: &str,
+    _path: &str,
 ) -> (TcpStream, String) {
-    let waiting_for = format!("{method} {path}");
     loop {
-        let (mut stream, request) = read_request_until(listener, stop, deadline, &waiting_for)
-            .unwrap_or_else(|| panic!("Studio ABI probe exited before {waiting_for}"));
-        if firmware_compat::try_respond(&mut stream, &request) {
-            continue;
+        match next_incoming(listener, stop, deadline) {
+            Incoming::Stream(upgrade) => {
+                let frames = upgrade.serve();
+                for frame in responses::snapshot_frames(responses::PRINTERS_RESPONSE) {
+                    frames
+                        .send(frame)
+                        .expect("serve incidental stream snapshot");
+                }
+            }
+            Incoming::Http(stream, request) => return (stream, request),
         }
-        return (stream, request);
     }
 }
 
-pub(super) fn next_request_allow_ready(
+pub(super) fn next_incoming(
     listener: &TcpListener,
     stop: &AtomicBool,
     deadline: Instant,
-    method: &str,
-    path: &str,
-) -> (TcpStream, String) {
+) -> Incoming {
     loop {
-        let (mut stream, request) = next_request(listener, stop, deadline, method, path);
-        if request.lines().next() == Some("GET /healthz HTTP/1.1") {
-            write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                r#"{"status":"ok","checks":{}}"#,
-            );
-            continue;
+        let incoming = stream::next_incoming(listener, stop, deadline);
+        if let Incoming::Http(mut stream, request) = incoming {
+            if firmware_compat::try_respond(&mut stream, &request) {
+                continue;
+            }
+            return Incoming::Http(stream, request);
         }
-        return (stream, request);
+        return incoming;
     }
 }
 
-#[derive(Clone, Copy)]
+/// Blocks until a printer-events upgrade arrives, serving HTTP in between.
+pub(super) fn next_stream(
+    listener: &TcpListener,
+    stop: &AtomicBool,
+    deadline: Instant,
+) -> StreamUpgrade {
+    loop {
+        match next_incoming(listener, stop, deadline) {
+            Incoming::Stream(upgrade) => return upgrade,
+            Incoming::Http(..) => {}
+        }
+    }
+}
+
 pub(super) enum MockMode {
     Success,
     ConnectionReadiness,
     BackgroundTimeout,
+    StreamUnavailable,
     AuthRejected,
     PrinterPresence,
     AccountTransition,

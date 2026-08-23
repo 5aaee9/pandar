@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::support::{read_http_request_with_timeout, request_body};
+use crate::support::request_body;
 
 use super::{
     firmware_compat, next_request,
@@ -20,15 +20,12 @@ pub(super) fn serve_freshness_claim(
     deadline: Instant,
     race_directory: &Path,
 ) {
-    let (mut seed_stream, seed_request) =
-        next_request(listener, stop, deadline, "GET", "/api/v1/plugin/printers");
-    assert_request_with_token(
-        &seed_request,
-        "GET",
-        "/api/v1/plugin/printers",
-        Some("probe-token"),
-    );
-    write_response(&mut seed_stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
+    let upgrade = super::next_stream(listener, stop, deadline);
+    super::server::assert_printer_events_upgrade(&upgrade.request);
+    let frames = upgrade.serve();
+    for frame in super::responses::snapshot_frames(PRINTERS_RESPONSE) {
+        frames.send(frame).expect("serve freshness snapshot");
+    }
 
     let (mut version_stream, version_request) =
         read_request_until(listener, stop, deadline, "freshness claim firmware refresh")
@@ -40,99 +37,49 @@ pub(super) fn serve_freshness_claim(
         Some("probe-token"),
     );
     std::fs::create_dir(race_directory.join("freshness-version-entered")).unwrap();
-
-    let (mut refresh_stream, refresh_request) =
-        next_request(listener, stop, deadline, "GET", "/api/v1/plugin/printers");
-    assert_request_with_token(
-        &refresh_request,
-        "GET",
-        "/api/v1/plugin/printers",
-        Some("probe-token"),
-    );
-    std::fs::create_dir(race_directory.join("freshness-printer-entered")).unwrap();
+    while !race_directory.join("freshness-stream-update").exists()
+        && !stop.load(Ordering::Acquire)
+        && Instant::now() < deadline
+    {
+        thread::sleep(Duration::from_millis(5));
+    }
+    frames
+        .send(super::stream::upsert_frame(&printer_device(
+            &super::responses::printers_response_with_progress(73),
+        )))
+        .expect("serve freshness generation update");
     write_response(
         &mut version_stream,
         "HTTP/1.1 200 OK",
         r#"{"command_id":"00000000-0000-0000-0000-000000000099","modules":[{"name":"ota","product_name":"N6","sw_ver":"01.02.03.04","sw_new_ver":"","hw_ver":"OTA","sn":"studio-serial-1","flag":0}],"module_revision":1}"#,
     );
 
-    let local_send_returned = race_directory.join("freshness-local-send-returned");
-    let version_returned = race_directory.join("freshness-version-returned");
-    let connect_checked = race_directory.join("freshness-connect-checked");
-    let mut connection_ready_seen = false;
-    while !(local_send_returned.exists() && version_returned.exists() && connect_checked.exists())
-        && Instant::now() < deadline
-        && !stop.load(Ordering::Acquire)
-    {
-        match listener.accept() {
-            Ok((mut stream, _)) => {
-                stream.set_nonblocking(false).unwrap();
-                let request =
-                    read_http_request_with_timeout(&mut stream, Some(Duration::from_millis(500)));
-                if request.starts_with("GET /healthz HTTP/1.1") {
-                    assert_request(&request, "GET", "/healthz", false);
-                    connection_ready_seen = true;
-                    write_response(
-                        &mut stream,
-                        "HTTP/1.1 200 OK",
-                        r#"{"status":"ok","checks":{}}"#,
-                    );
-                } else {
-                    assert_request_with_token(
-                        &request,
-                        "POST",
-                        "/api/v1/plugin/printers/printer-1/operations",
-                        Some("probe-token"),
-                    );
-                    std::fs::create_dir(race_directory.join("freshness-local-operation-received"))
-                        .unwrap();
-                    write_response(
-                        &mut stream,
-                        "HTTP/1.1 202 Accepted",
-                        r#"{"command_id":"freshness-local","status":"queued"}"#,
-                    );
-                }
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(5));
-            }
-            Err(error) => panic!("freshness claim accept failed: {error}"),
+    while !stop.load(Ordering::Acquire) {
+        let Some((mut stream, request)) =
+            read_request_until(listener, stop, deadline, "freshness trailing request")
+        else {
+            return;
+        };
+        if request.starts_with("POST /api/v1/plugin/printers/printer-1/operations HTTP/1.1") {
+            write_response(
+                &mut stream,
+                "HTTP/1.1 202 Accepted",
+                r#"{"command_id":"freshness-local","status":"queued"}"#,
+            );
+        } else if request.starts_with("GET /healthz HTTP/1.1") {
+            write_response(
+                &mut stream,
+                "HTTP/1.1 200 OK",
+                r#"{"status":"ok","checks":{}}"#,
+            );
+        } else {
+            panic!("unexpected freshness trailing request: {request}");
         }
     }
-    assert!(
-        local_send_returned.exists(),
-        "local send did not return while printer refresh was in flight"
-    );
-    assert!(
-        version_returned.exists(),
-        "version request did not return while printer refresh was in flight"
-    );
-    assert!(
-        connect_checked.exists(),
-        "connect_server admission ownership was not checked before printer refresh release"
-    );
-    write_response(&mut refresh_stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
+}
 
-    if !connection_ready_seen {
-        let (mut ready_stream, ready_request) =
-            next_request(listener, stop, deadline, "GET", "/healthz");
-        assert_request(&ready_request, "GET", "/healthz", false);
-        write_response(
-            &mut ready_stream,
-            "HTTP/1.1 200 OK",
-            r#"{"status":"ok","checks":{}}"#,
-        );
-    }
-
-    let (mut retry_stream, retry_request) =
-        next_request(listener, stop, deadline, "GET", "/api/v1/plugin/printers");
-    assert_request_with_token(
-        &retry_request,
-        "GET",
-        "/api/v1/plugin/printers",
-        Some("probe-token"),
-    );
-    write_response(&mut retry_stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
+fn printer_device(response: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(response).unwrap()["devices"][0].to_string()
 }
 
 pub(super) fn serve_firmware_claim_race(
@@ -141,15 +88,12 @@ pub(super) fn serve_firmware_claim_race(
     deadline: Instant,
     race_directory: &Path,
 ) {
-    let (mut seed_stream, seed_request) =
-        next_request(listener, stop, deadline, "GET", "/api/v1/plugin/printers");
-    assert_request_with_token(
-        &seed_request,
-        "GET",
-        "/api/v1/plugin/printers",
-        Some("probe-token"),
-    );
-    write_response(&mut seed_stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
+    let upgrade = super::next_stream(listener, stop, deadline);
+    super::server::assert_printer_events_upgrade(&upgrade.request);
+    let frames = upgrade.serve();
+    for frame in super::responses::snapshot_frames(PRINTERS_RESPONSE) {
+        frames.send(frame).expect("serve firmware-claim snapshot");
+    }
 
     let prepare_path = "/api/v1/plugin/printers/printer-1/firmware/prepare";
     let (mut prepare_stream, prepare_request) =
@@ -193,40 +137,41 @@ pub(super) fn serve_firmware_claim_race(
     );
 
     while !stop.load(Ordering::Acquire) {
-        let Some((mut stream, request)) = read_request_until(
-            listener,
-            stop,
-            deadline,
-            "firmware final claim trailing request",
-        ) else {
-            return;
-        };
-        let line = request.lines().next().unwrap_or_default();
-        let firmware_refresh_path = "/api/v1/plugin/printers/printer-1/firmware/refresh";
-        if line == "POST /api/v1/plugin/printers/printer-1/firmware/refresh HTTP/1.1" {
-            assert_request_with_token(
-                &request,
-                "POST",
-                firmware_refresh_path,
-                Some("rotated-token"),
-            );
-            assert!(firmware_compat::try_respond(&mut stream, &request));
-        } else if line == "GET /healthz HTTP/1.1" {
-            write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                r#"{"status":"ok","checks":{}}"#,
-            );
-        } else if line == "GET /api/v1/plugin/printers HTTP/1.1" {
-            assert_request_with_token(
-                &request,
-                "GET",
-                "/api/v1/plugin/printers",
-                Some("rotated-token"),
-            );
-            write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
-        } else {
-            panic!("unexpected firmware final claim trailing request: {request}");
+        match super::next_incoming(listener, stop, deadline) {
+            super::Incoming::Stream(upgrade) => {
+                assert!(
+                    upgrade
+                        .request
+                        .contains("authorization: Bearer rotated-token")
+                );
+                let frames = upgrade.serve();
+                for frame in super::responses::snapshot_frames(PRINTERS_RESPONSE) {
+                    frames
+                        .send(frame)
+                        .expect("serve rotated firmware-claim snapshot");
+                }
+            }
+            super::Incoming::Http(mut stream, request) => {
+                let line = request.lines().next().unwrap_or_default();
+                let refresh_path = "/api/v1/plugin/printers/printer-1/firmware/refresh";
+                if line == "POST /api/v1/plugin/printers/printer-1/firmware/refresh HTTP/1.1" {
+                    assert_request_with_token(
+                        &request,
+                        "POST",
+                        refresh_path,
+                        Some("rotated-token"),
+                    );
+                    assert!(firmware_compat::try_respond(&mut stream, &request));
+                } else if line == "GET /healthz HTTP/1.1" {
+                    write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        r#"{"status":"ok","checks":{}}"#,
+                    );
+                } else {
+                    panic!("unexpected firmware final claim trailing request: {request}");
+                }
+            }
         }
     }
 }

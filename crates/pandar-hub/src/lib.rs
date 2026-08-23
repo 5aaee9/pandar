@@ -16,6 +16,7 @@ pub(crate) mod material_mapping;
 pub mod metrics;
 mod metrics_export;
 pub mod printer_events;
+mod printer_projection;
 mod printer_secrets;
 pub mod protocol;
 pub mod readiness;

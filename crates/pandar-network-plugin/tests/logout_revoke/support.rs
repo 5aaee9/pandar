@@ -111,7 +111,10 @@ fn compile_fixture(source: &str) -> CompiledFixture {
     }
 }
 
-fn read_request(stream: &mut TcpStream) -> String {
+/// Reads one HTTP request. Returns `None` when the peer closed the
+/// connection without sending any bytes; the plugin's stream worker can
+/// abandon a dial when its account episode changes mid-connect.
+fn read_request(stream: &mut TcpStream) -> Option<String> {
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap();
@@ -119,10 +122,68 @@ fn read_request(stream: &mut TcpStream) -> String {
     let mut buffer = [0_u8; 1024];
     while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
         let read = stream.read(&mut buffer).expect("read logout request");
-        assert!(read > 0, "logout request ended before headers");
+        if read == 0 {
+            if request.is_empty() {
+                return None;
+            }
+            panic!("logout request ended before headers");
+        }
         request.extend_from_slice(&buffer[..read]);
     }
-    String::from_utf8(request).expect("logout request is UTF-8")
+    Some(String::from_utf8(request).expect("logout request is UTF-8"))
+}
+
+fn is_printer_events_upgrade(request: &str) -> bool {
+    let request_line = request.lines().next().unwrap_or_default();
+    let upgrade_header = request.lines().any(|line| {
+        line.split_once(':')
+            .is_some_and(|(name, _)| name.eq_ignore_ascii_case("upgrade"))
+    });
+    request_line.starts_with("GET /api/v1/tenants/")
+        && request_line.contains("/printer-events?")
+        && upgrade_header
+}
+
+/// Answers a printer-events upgrade with a 101 handshake, seeds the cache
+/// with the scripted snapshot, and keeps the socket alive in the background.
+fn serve_stream_upgrade(mut stream: TcpStream, request: &str) {
+    use std::sync::atomic::AtomicBool;
+
+    let key = request.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("sec-websocket-key")
+            .then(|| value.trim().to_owned())
+    });
+    let Some(key) = key else { return };
+    let accept = tungstenite::handshake::derive_accept_key(key.as_bytes());
+    let handshake = format!(
+        "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+    );
+    if stream.write_all(handshake.as_bytes()).is_err() {
+        return;
+    }
+    let mut ws =
+        tungstenite::WebSocket::from_raw_socket(stream, tungstenite::protocol::Role::Server, None);
+    let _ = ws.get_ref().set_nonblocking(true);
+    let response: serde_json::Value = serde_json::from_str(PRINTERS_RESPONSE).unwrap();
+    let mut frames = vec![r#"{"type":"snapshot_begin","version":1}"#.to_owned()];
+    for device in response["devices"].as_array().unwrap() {
+        frames.push(format!(r#"{{"type":"printer_upsert","printer":{device}}}"#));
+    }
+    frames.push(r#"{"type":"snapshot_end","version":1}"#.to_owned());
+    for frame in frames {
+        if ws.write(tungstenite::Message::text(frame)).is_err() {
+            return;
+        }
+        let _ = ws.flush();
+    }
+    loop {
+        if ws.read().is_ok() {
+            let _ = ws.flush();
+        }
+        std::thread::sleep(Duration::from_millis(50));
+        let _ = &AtomicBool::new(false);
+    }
 }
 
 pub(super) fn next_request(listener: &TcpListener, deadline: Instant) -> (TcpStream, String) {
@@ -130,7 +191,13 @@ pub(super) fn next_request(listener: &TcpListener, deadline: Instant) -> (TcpStr
         match listener.accept() {
             Ok((mut stream, _)) => {
                 stream.set_nonblocking(false).unwrap();
-                let request = read_request(&mut stream);
+                let Some(request) = read_request(&mut stream) else {
+                    continue;
+                };
+                if is_printer_events_upgrade(&request) {
+                    thread::spawn(move || serve_stream_upgrade(stream, &request));
+                    continue;
+                }
                 return (stream, request);
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -141,11 +208,20 @@ pub(super) fn next_request(listener: &TcpListener, deadline: Instant) -> (TcpStr
         }
     }
 }
-
 pub(super) fn assert_no_request(listener: &TcpListener, deadline: Instant) {
     loop {
         match listener.accept() {
-            Ok(_) => panic!("logout sent an unexpected request"),
+            Ok((mut stream, _)) => {
+                stream.set_nonblocking(false).unwrap();
+                let Some(request) = read_request(&mut stream) else {
+                    continue;
+                };
+                if is_printer_events_upgrade(&request) {
+                    thread::spawn(move || serve_stream_upgrade(stream, &request));
+                    continue;
+                }
+                panic!("logout sent an unexpected request: {request}");
+            }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 if Instant::now() >= deadline {
                     return;

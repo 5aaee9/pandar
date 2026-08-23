@@ -29,11 +29,12 @@ pub use connection::{
     pandar_plugin_connection_claim_delivery, pandar_plugin_connection_is_connected,
     pandar_plugin_connection_printer_eligible, pandar_plugin_connection_refresh,
     pandar_plugin_connection_set_account_epoch, pandar_plugin_connection_studio_snapshot_current,
-    pandar_plugin_connection_take_offline, pandar_plugin_connection_take_transition,
-    pandar_plugin_connection_visit_printers, pandar_plugin_printer_refresh,
-    pandar_plugin_printer_refresh_session_create, pandar_plugin_printer_refresh_session_destroy,
-    pandar_plugin_printer_refresh_session_update, pandar_plugin_printer_refresh_with_session,
-    pandar_plugin_shim_dispatch_connection_transition,
+    pandar_plugin_connection_take_offline, pandar_plugin_connection_take_stream_error,
+    pandar_plugin_connection_take_transition, pandar_plugin_connection_visit_printers,
+    pandar_plugin_printer_refresh, pandar_plugin_printer_refresh_session_create,
+    pandar_plugin_printer_refresh_session_destroy,
+    pandar_plugin_printer_refresh_session_set_tenant, pandar_plugin_printer_refresh_session_update,
+    pandar_plugin_printer_refresh_with_session, pandar_plugin_shim_dispatch_connection_transition,
     pandar_plugin_shim_dispatch_offline_deliveries, pandar_plugin_studio_account_request_admitted,
     pandar_plugin_studio_account_request_current, pandar_plugin_studio_add_subscription,
     pandar_plugin_studio_begin_account_transition, pandar_plugin_studio_claim_delivery,
@@ -94,7 +95,6 @@ const NO_AUTH_CONNECT_FAILURE_STATUS: i32 = 2;
 #[derive(Clone, Copy)]
 enum RequestKind {
     TicketExchange,
-    PrinterLookup,
     JobLookup,
     PrintSubmission,
     PrinterOperation,
@@ -109,23 +109,6 @@ pub struct PluginHttpResult {
     pub body_ptr: *mut u8,
     pub body_len: usize,
     pub body_cap: usize,
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_get_printers(
-    hub_url_ptr: *const u8,
-    hub_url_len: usize,
-    token_ptr: *const u8,
-    token_len: usize,
-) -> PluginHttpResult {
-    get_json(
-        hub_url_ptr,
-        hub_url_len,
-        token_ptr,
-        token_len,
-        "/api/v1/plugin/printers",
-        RequestKind::PrinterLookup,
-    )
 }
 
 #[unsafe(no_mangle)]

@@ -139,6 +139,7 @@ pub async fn handle_snapshot(
         .await
         .map_err(repository_status)?;
     let printer = fence_printer_nozzle_system(state.sessions(), tenant_id, printer).await;
+    let serial_number = printer.printer.serial_number.clone();
     state
         .publish_printer_event(
             tenant_id,
@@ -146,6 +147,9 @@ pub async fn handle_snapshot(
                 printer: Box::new(printer_event_printer(printer, materials)),
             },
         )
+        .await;
+    state
+        .publish_printer_projection_change(tenant_id, &printer_id, &serial_number)
         .await;
 
     Ok(())

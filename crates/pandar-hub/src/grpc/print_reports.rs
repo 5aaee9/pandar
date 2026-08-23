@@ -107,6 +107,8 @@ pub async fn handle_print_report(
     if (applied.live_status_changed || material_changed)
         && let Some(printer) = applied.printer
     {
+        let printer_id = printer.printer.id.clone();
+        let serial_number = printer.printer.serial_number.clone();
         let materials = state
             .materials()
             .latest_for_printer(tenant_id, &printer.printer.id)
@@ -120,6 +122,9 @@ pub async fn handle_print_report(
                     printer: Box::new(printer_event_printer(printer, materials)),
                 },
             )
+            .await;
+        state
+            .publish_printer_projection_change(tenant_id, &printer_id, &serial_number)
             .await;
     }
     Ok(())

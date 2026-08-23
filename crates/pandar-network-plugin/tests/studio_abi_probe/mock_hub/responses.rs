@@ -36,6 +36,21 @@ pub(super) fn axis_printers_response() -> String {
     response.to_string()
 }
 
+/// Converts a retired plugin printer-list response body into printer-events
+/// stream frames: a complete snapshot carrying the same device records.
+pub(super) fn snapshot_frames(printers_response: &str) -> Vec<String> {
+    let mut frames = vec![r#"{"type":"snapshot_begin","version":1}"#.to_owned()];
+    let response: serde_json::Value = serde_json::from_str(printers_response).unwrap();
+    for device in response["devices"].as_array().unwrap() {
+        frames.push(format!(
+            r#"{{"type":"printer_upsert","printer":{}}}"#,
+            device
+        ));
+    }
+    frames.push(r#"{"type":"snapshot_end","version":1}"#.to_owned());
+    frames
+}
+
 pub(super) fn camera_printers_response() -> String {
     let mut response: serde_json::Value = serde_json::from_str(PRINTERS_RESPONSE).unwrap();
     let template = response["devices"][0].clone();

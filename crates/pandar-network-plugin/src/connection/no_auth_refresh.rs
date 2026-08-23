@@ -1,22 +1,21 @@
-use std::ffi::c_void;
-
 use crate::{
     PluginHttpResult,
-    account::lifecycle::{
-        NoAuthRecovery, PluginWithCurrentAccount, current_expected, into_http, recover, take_http,
-    },
+    account::lifecycle::{PluginWithCurrentAccount, current_expected},
     firmware::session_ref as firmware_session,
     invalid_input, result, stable_error_body,
     studio_status::FirmwareProjection,
 };
+use std::ffi::c_void;
+use std::time::Duration;
 
-use super::{
-    ConnectionSession, PluginConnectionResult, PluginPrinterRefreshAdapter, PrinterRefreshResult,
-    ffi::session, no_auth_rotation::NoAuthRotationOutcome,
-};
+use super::{ConnectionSession, PluginConnectionResult, PluginPrinterRefreshAdapter, ffi::session};
 
 const STUDIO_PRINT_INFO: i32 = 1;
 const BACKGROUND_REFRESH: i32 = 2;
+
+/// Bounded wait for the first account-fenced snapshot before the print-info
+/// source gives up with `503 {"error":"cache_initializing"}`.
+const PRINT_INFO_CACHE_WAIT: Duration = Duration::from_secs(30);
 
 #[repr(C)]
 pub struct PluginPrinterRefreshLifecycleResult {
@@ -26,6 +25,8 @@ pub struct PluginPrinterRefreshLifecycleResult {
     pub snapshot_current: i32,
 }
 
+/// Serves the Studio print-info / background printer payload from the cached
+/// stream projection only. The Hub is never contacted on this path.
 #[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_printer_refresh_with_session(
     session_ptr: *mut c_void,
@@ -50,10 +51,10 @@ pub extern "C" fn pandar_plugin_printer_refresh_with_session(
             return failure(invalid_input("account_state_unavailable"));
         }
     };
-    let initial_epoch = expected.account_epoch;
+
     let mut admission = Admission {
         session,
-        account_epoch: initial_epoch,
+        account_epoch: expected.account_epoch,
         require_token: mode == STUDIO_PRINT_INFO,
         token_present: !expected.token.trim().is_empty(),
     };
@@ -67,144 +68,56 @@ pub extern "C" fn pandar_plugin_printer_refresh_with_session(
     }
     let mut guard = AdmissionGuard::new(session);
 
-    let (refresh, account_epoch) = refresh_with_recovery(
-        session_ptr,
-        session,
-        expected,
-        account_context,
-        with_current,
-        adapter,
-        mode == STUDIO_PRINT_INFO,
-    );
-    let (snapshot_current, connection) = {
-        let mut finalized = Finalization {
-            session,
-            adapter,
-            account_epoch,
-            upstream: &refresh.upstream,
-            firmware: refresh.firmware.as_ref(),
-            connection: empty_connection_result(),
-            snapshot_current: true,
-        };
-        if with_refresh_lock(
-            adapter,
-            (&mut finalized as *mut Finalization<'_>).cast(),
-            finalize_refresh,
-        ) != 0
-        {
-            return failure(result(
-                1,
-                0,
-                stable_error_body("printer_refresh_adapter_failed"),
-            ));
+    let served = match mode {
+        STUDIO_PRINT_INFO => {
+            session.wait_cached_print_info(expected.account_epoch, PRINT_INFO_CACHE_WAIT)
         }
-        guard.disarm();
-        (finalized.snapshot_current, finalized.connection)
+        _ => session.cached_print_info(),
     };
-    let cache_committed = refresh.upstream.status == 0 && snapshot_current;
+    let Some(body) = served else {
+        return failure(result(1, 503, stable_error_body("cache_initializing")));
+    };
+    let firmware = session.cached_firmware_projection();
+
+    let mut finalized = Finalization {
+        session,
+        adapter,
+        account_epoch: expected.account_epoch,
+        firmware: firmware.as_ref(),
+        connection: empty_connection_result(),
+        snapshot_current: true,
+    };
+    if with_refresh_lock(
+        adapter,
+        (&mut finalized as *mut Finalization<'_>).cast(),
+        finalize_serve,
+    ) != 0
+    {
+        return failure(result(
+            1,
+            0,
+            stable_error_body("printer_refresh_adapter_failed"),
+        ));
+    }
+    guard.disarm();
+
+    let snapshot_current = finalized.snapshot_current;
     let http = if mode == STUDIO_PRINT_INFO {
         crate::studio_policy::pandar_plugin_studio_print_info_result(
-            refresh.upstream.status,
-            refresh.upstream.http_code,
-            refresh.upstream.body.as_ptr(),
-            refresh.upstream.body.len(),
+            0,
+            200,
+            body.as_ptr(),
+            body.len(),
             snapshot_current,
         )
     } else {
-        into_http(refresh.upstream)
+        result(0, 200, body)
     };
     PluginPrinterRefreshLifecycleResult {
         http,
-        connection,
-        cache_committed: i32::from(cache_committed),
+        connection: finalized.connection,
+        cache_committed: i32::from(snapshot_current),
         snapshot_current: i32::from(snapshot_current),
-    }
-}
-
-fn refresh_with_recovery(
-    session_ptr: *mut c_void,
-    session: &ConnectionSession,
-    expected: crate::account::lifecycle::NoAuthExpected,
-    account_context: *mut c_void,
-    with_current: Option<PluginWithCurrentAccount>,
-    adapter: PluginPrinterRefreshAdapter,
-    invalidate_freshness: bool,
-) -> (ProjectedRefresh, u64) {
-    let initial_epoch = expected.account_epoch;
-    let initial = take_projected(refresh(session, adapter, None, invalidate_freshness));
-    if !auth_rejected(&initial) {
-        return (initial, initial_epoch);
-    }
-    match recover(session_ptr, expected, account_context, with_current) {
-        NoAuthRecovery::NotApplicable => (initial, initial_epoch),
-        NoAuthRecovery::Stale => (
-            ProjectedRefresh::without_firmware(NoAuthRotationOutcome {
-                status: 1,
-                http_code: 409,
-                body: stable_error_body("stale_no_auth_session"),
-            }),
-            initial_epoch,
-        ),
-        NoAuthRecovery::Failed(outcome) => {
-            (ProjectedRefresh::without_firmware(outcome), initial_epoch)
-        }
-        NoAuthRecovery::Recovered(identity) => (
-            take_projected(refresh(
-                session,
-                adapter,
-                Some(&identity),
-                invalidate_freshness,
-            )),
-            identity.account_epoch,
-        ),
-    }
-}
-
-fn refresh(
-    session: &ConnectionSession,
-    adapter: PluginPrinterRefreshAdapter,
-    expected: Option<&crate::account::lifecycle::NoAuthExpected>,
-    invalidate_freshness: bool,
-) -> PrinterRefreshResult {
-    session.refresh_printers(
-        expected.map(|expected| {
-            (
-                expected.hub_url.as_str(),
-                expected.token.as_str(),
-                expected.account_epoch,
-            )
-        }),
-        invalidate_freshness,
-        || {
-            if let Some(reserve_observation) = adapter.reserve_observation {
-                reserve_observation(adapter.context);
-            }
-        },
-    )
-}
-
-fn auth_rejected(result: &ProjectedRefresh) -> bool {
-    result.upstream.status != 0 && matches!(result.upstream.http_code, 401 | 410)
-}
-
-struct ProjectedRefresh {
-    upstream: NoAuthRotationOutcome,
-    firmware: Option<FirmwareProjection>,
-}
-
-impl ProjectedRefresh {
-    fn without_firmware(upstream: NoAuthRotationOutcome) -> Self {
-        Self {
-            upstream,
-            firmware: None,
-        }
-    }
-}
-
-fn take_projected(refresh: PrinterRefreshResult) -> ProjectedRefresh {
-    ProjectedRefresh {
-        upstream: take_http(refresh.http),
-        firmware: refresh.firmware,
     }
 }
 
@@ -230,23 +143,19 @@ struct Finalization<'a> {
     session: &'a ConnectionSession,
     adapter: PluginPrinterRefreshAdapter,
     account_epoch: u64,
-    upstream: &'a NoAuthRotationOutcome,
     firmware: Option<&'a FirmwareProjection>,
     connection: PluginConnectionResult,
     snapshot_current: bool,
 }
 
-unsafe extern "C" fn finalize_refresh(context: *mut c_void) -> i32 {
+unsafe extern "C" fn finalize_serve(context: *mut c_void) -> i32 {
     let Some(finalization) = (unsafe { context.cast::<Finalization<'_>>().as_mut() }) else {
         return 1;
     };
-    let failed = finalization.upstream.status != 0;
-    finalization.snapshot_current = failed
-        || finalization
-            .session
-            .printer_cache_snapshot_current(finalization.account_epoch);
-    if !failed
-        && finalization.snapshot_current
+    finalization.snapshot_current = finalization
+        .session
+        .printer_cache_snapshot_current(finalization.account_epoch);
+    if finalization.snapshot_current
         && let Some(projection) = finalization.firmware
         && let Some(with_firmware_observation) = finalization.adapter.with_firmware_observation
     {
@@ -281,20 +190,18 @@ unsafe extern "C" fn finalize_refresh(context: *mut c_void) -> i32 {
         }
         0
     }
-    if failed || finalization.snapshot_current {
-        finalization.connection = finalization.session.take_transition();
-        let collect_offline = finalization
-            .adapter
-            .collect_offline
-            .expect("printer refresh offline collector was validated");
-        for offline in finalization.session.take_offline() {
-            collect_offline(
-                finalization.adapter.context,
-                offline.dev_id.as_ptr(),
-                offline.dev_id.len(),
-                offline.ticket,
-            );
-        }
+    finalization.connection = finalization.session.take_transition();
+    let collect_offline = finalization
+        .adapter
+        .collect_offline
+        .expect("printer refresh offline collector was validated");
+    for offline in finalization.session.take_offline() {
+        collect_offline(
+            finalization.adapter.context,
+            offline.dev_id.as_ptr(),
+            offline.dev_id.len(),
+            offline.ticket,
+        );
     }
     finalization.session.finish_printer_cache_admission();
     0

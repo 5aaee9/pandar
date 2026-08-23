@@ -62,11 +62,12 @@
             cloud.version_messages.load() == cloud_version_after_get &&
             local.version_messages.load() == local_version_before &&
             local.status_messages.load() == local_status_before;
-        const int cloud_heartbeat_before = status_count(cloud, "studio-serial-1");
-        const bool cloud_heartbeat = wait_until([&] {
-            return status_count(cloud, "studio-serial-1") > cloud_heartbeat_before;
-        });
-        out.cloud_requests_exact = cloud_version_exact && cloud_push_exact && cloud_heartbeat;
+        const int cloud_replay_before = status_count(cloud, "studio-serial-1");
+        std::this_thread::sleep_for(std::chrono::milliseconds(2'300));
+        const bool cloud_no_periodic_replay =
+            status_count(cloud, "studio-serial-1") == cloud_replay_before;
+        out.cloud_requests_exact =
+            cloud_version_exact && cloud_push_exact && cloud_no_periodic_replay;
 
         del_subscribe(agent, {"studio-serial-2"});
         send_cloud(
@@ -131,19 +132,20 @@
             status_count(local, "studio-serial-2") == local_status_request_before + 1 &&
             version_count(local, "studio-serial-2") == local_version_after_get &&
             cloud.version_messages.load() + cloud.status_messages.load() == cloud_messages_before_local_requests;
-        const int local_heartbeat_before = status_count(local, "studio-serial-2");
-        const bool local_heartbeat = wait_until([&] {
-            return status_count(local, "studio-serial-2") > local_heartbeat_before;
-        });
+        const int local_replay_before = status_count(local, "studio-serial-2");
+        std::this_thread::sleep_for(std::chrono::milliseconds(2'300));
+        const bool local_no_periodic_replay =
+            status_count(local, "studio-serial-2") == local_replay_before;
         const bool local_stayed_out_of_cloud =
             status_count(cloud, "studio-serial-2") == local_cloud_before;
         const int operation_posts_after = hub_operation_count();
         out.local_requests_exact =
             local_version_exact &&
             local_push_exact &&
-            local_heartbeat &&
+            local_no_periodic_replay &&
             operation_posts_before == operation_posts_after;
-        out.local_only_refresh_exact = local_heartbeat && local_stayed_out_of_cloud;
+        out.local_only_refresh_exact =
+            local_no_periodic_replay && local_stayed_out_of_cloud;
         out.local_status_body = status_body(local, "studio-serial-2");
 
         out.status_requests_zero_posts = hub_operation_count() == 0;

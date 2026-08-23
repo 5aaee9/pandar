@@ -1,7 +1,7 @@
 use pandar_core::{AmsUnitKind, BambuNozzleSystem};
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 pub(super) struct PrinterStatus {
     #[serde(default)]
     pub(super) fun: Option<String>,
@@ -63,7 +63,7 @@ pub(super) struct PrinterHms {
     pub(super) code: u32,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 pub(super) struct NozzleTemperature {
     #[serde(default)]
     pub(super) label: Option<String>,
@@ -81,7 +81,7 @@ pub(super) struct NozzleTemperature {
     pub(super) hnow: Option<u32>,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 pub(super) struct Materials {
     #[serde(default)]
     pub(super) cfg: Option<String>,
@@ -99,7 +99,7 @@ pub(super) struct Materials {
     pub(super) filament_switch_installed: Option<bool>,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 pub(super) struct AmsUnit {
     #[serde(default)]
     pub(super) unit_id: Option<Scalar>,
@@ -119,7 +119,7 @@ pub(super) struct AmsUnit {
     pub(super) trays: Vec<MaterialTray>,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 pub(super) struct MaterialTray {
     #[serde(default)]
     pub(super) tray_id: Option<Scalar>,
@@ -143,7 +143,7 @@ pub(super) struct MaterialTray {
     pub(super) toolhead: Option<Scalar>,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 pub(super) struct ActiveTray {
     #[serde(default)]
     pub(super) kind: Option<Scalar>,
@@ -157,7 +157,7 @@ pub(super) struct ActiveTray {
     pub(super) external_id: Option<Scalar>,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub(super) enum Scalar {
     String(String),

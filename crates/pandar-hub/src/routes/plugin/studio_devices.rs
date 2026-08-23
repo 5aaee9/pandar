@@ -5,8 +5,11 @@ use pandar_core::{BambuNozzleSystem, PrinterFirmwareState, PrinterNozzleTemperat
 use serde::Serialize;
 
 use crate::{
-    AppState, printer_events::PrinterEventMaterials, protocol::agent::v1::AgentCapability,
-    repositories::PrinterHms, routes::ApiError,
+    AppState,
+    printer_events::PrinterEventMaterials,
+    protocol::agent::v1::AgentCapability,
+    repositories::{PrinterHms, PrinterWithLiveStatus},
+    routes::ApiError,
     routes::plugin::firmware::current_firmware_projection,
 };
 
@@ -17,7 +20,7 @@ pub(crate) struct PluginPrinterListResponse {
 }
 
 #[derive(Debug, Serialize)]
-pub(super) struct PluginPrinterResponse {
+pub(in crate::routes) struct PluginPrinterResponse {
     dev_id: String,
     fun: String,
     dev_name: String,
@@ -58,11 +61,34 @@ pub(super) struct PluginPrinterResponse {
     firmware: Option<PrinterFirmwareState>,
 }
 
-pub(super) async fn plugin_printer_devices(
+impl PluginPrinterResponse {
+    pub(in crate::routes) fn pandar_printer_id(&self) -> &str {
+        &self.pandar_printer_id
+    }
+}
+
+pub(in crate::routes) async fn plugin_printer_devices(
     state: &AppState,
     tenant_id: TenantId,
 ) -> Result<Vec<PluginPrinterResponse>, ApiError> {
-    let mut materials_by_printer_id = state
+    let materials_by_printer_id = materials_by_printer(state, tenant_id).await?;
+    let printers = state
+        .printers()
+        .list_with_live_status_for_tenant(tenant_id)
+        .await?;
+    let mut devices = Vec::with_capacity(printers.len());
+    for entry in printers {
+        let materials = materials_by_printer_id.get(&entry.printer.id).cloned();
+        devices.push(studio_printer_record(state, tenant_id, entry, materials).await?);
+    }
+    Ok(devices)
+}
+
+async fn materials_by_printer(
+    state: &AppState,
+    tenant_id: TenantId,
+) -> Result<HashMap<String, PrinterEventMaterials>, ApiError> {
+    Ok(state
         .materials()
         .list_for_tenant(tenant_id)
         .await?
@@ -73,122 +99,163 @@ pub(super) async fn plugin_printer_devices(
                 PrinterEventMaterials::from(snapshot),
             )
         })
-        .collect::<HashMap<_, _>>();
+        .collect())
+}
 
+/// Resolves one projection change into the authoritative Studio-facing record.
+/// A printer that no longer exists resolves to a removal carrying its identity.
+pub(in crate::routes) async fn studio_projection_record(
+    state: &AppState,
+    tenant_id: TenantId,
+    change: &crate::printer_events::PrinterProjectionChange,
+) -> Result<StudioProjectionRecord, ApiError> {
     let printers = state
         .printers()
         .list_with_live_status_for_tenant(tenant_id)
         .await?;
-    let mut devices = Vec::with_capacity(printers.len());
-    for printer_with_live_status in printers {
-        let firmware = printer_with_live_status.firmware;
-        let printer = printer_with_live_status.printer;
-        let live_status = printer_with_live_status.live_status;
-        let current_session_id = state
-            .sessions()
-            .current_token(tenant_id, printer.agent_id)
-            .await
-            .map(|token| token.persisted_id());
-        let online = current_session_id.as_deref() == printer.mqtt_presence_session_id.as_deref()
-            && studio_online_from_status(&printer.status);
-        let studio_model_name = printer.model.as_deref().map(studio_model_id);
-        let studio_local_camera = online
-            && studio_local_camera_supported(printer.model.as_deref())
-            && state
-                .sessions()
-                .current_token_for_capability(
-                    tenant_id,
-                    printer.agent_id,
-                    AgentCapability::StudioLocalCamera,
-                )
-                .await
-                .is_some();
-        let fun = match state
+    let Some(entry) = printers
+        .into_iter()
+        .find(|entry| entry.printer.id == change.printer_id)
+    else {
+        return Ok(StudioProjectionRecord::Removed {
+            dev_id: change.serial_number.clone(),
+            pandar_printer_id: change.printer_id.clone(),
+        });
+    };
+    let materials = state
+        .materials()
+        .list_for_tenant(tenant_id)
+        .await?
+        .into_iter()
+        .find(|snapshot| snapshot.printer_id == change.printer_id)
+        .map(PrinterEventMaterials::from);
+    Ok(StudioProjectionRecord::Upsert(Box::new(
+        studio_printer_record(state, tenant_id, entry, materials).await?,
+    )))
+}
+
+#[derive(Debug)]
+pub(in crate::routes) enum StudioProjectionRecord {
+    Upsert(Box<PluginPrinterResponse>),
+    Removed {
+        dev_id: String,
+        pandar_printer_id: String,
+    },
+}
+
+/// Builds one complete Studio-facing printer record. Shared by the plugin
+/// printer-list endpoint and the Studio printer-event projection stream so the
+/// two APIs cannot drift in online, firmware, camera, or capability semantics.
+pub(super) async fn studio_printer_record(
+    state: &AppState,
+    tenant_id: TenantId,
+    entry: PrinterWithLiveStatus,
+    materials: Option<PrinterEventMaterials>,
+) -> Result<PluginPrinterResponse, ApiError> {
+    let firmware = entry.firmware;
+    let printer = entry.printer;
+    let live_status = entry.live_status;
+    let current_session_id = state
+        .sessions()
+        .current_token(tenant_id, printer.agent_id)
+        .await
+        .map(|token| token.persisted_id());
+    let online = current_session_id.as_deref() == printer.mqtt_presence_session_id.as_deref()
+        && studio_online_from_status(&printer.status);
+    let studio_model_name = printer.model.as_deref().map(studio_model_id);
+    let studio_local_camera = online
+        && studio_local_camera_supported(printer.model.as_deref())
+        && state
             .sessions()
             .current_token_for_capability(
                 tenant_id,
                 printer.agent_id,
-                AgentCapability::RequiredDeviceFeatures,
+                AgentCapability::StudioLocalCamera,
             )
             .await
-        {
-            Some(token) => {
-                let session_id = token.persisted_id();
-                if printer.bambu_device_features_session_id.as_deref() == Some(session_id.as_str())
-                {
-                    printer
-                        .bambu_device_features
-                        .map_or_else(|| "0".to_owned(), |features| features.to_hex())
-                } else {
-                    "0".to_owned()
-                }
+            .is_some();
+    let fun = match state
+        .sessions()
+        .current_token_for_capability(
+            tenant_id,
+            printer.agent_id,
+            AgentCapability::RequiredDeviceFeatures,
+        )
+        .await
+    {
+        Some(token) => {
+            let session_id = token.persisted_id();
+            if printer.bambu_device_features_session_id.as_deref() == Some(session_id.as_str()) {
+                printer
+                    .bambu_device_features
+                    .map_or_else(|| "0".to_owned(), |features| features.to_hex())
+            } else {
+                "0".to_owned()
             }
-            None => "0".to_owned(),
-        };
-        let nozzle_system = if printer
-            .model
-            .as_deref()
-            .and_then(normalize_model)
-            .as_deref()
-            == Some("H2C")
-        {
-            state
-                .sessions()
-                .current_token_for_capability(
-                    tenant_id,
-                    printer.agent_id,
-                    AgentCapability::H2cAutoNozzleMapping,
-                )
-                .await
-                .filter(|token| {
-                    printer.bambu_nozzle_system_session_id.as_deref()
-                        == Some(token.persisted_id().as_str())
-                })
-                .and(printer.bambu_nozzle_system.clone())
-        } else {
-            None
-        };
-        let firmware =
-            current_firmware_projection(state, tenant_id, printer.agent_id, firmware).await?;
-        devices.push(PluginPrinterResponse {
-            dev_id: printer.serial_number.clone(),
-            fun,
-            dev_name: printer.name.clone(),
-            name: printer.name,
-            dev_model_name: studio_model_name,
-            model: printer.model,
-            dev_online: online,
-            online,
-            task_status: printer.status.clone(),
-            state: printer.status,
-            gcode_state: live_status.gcode_state,
-            mc_percent: live_status.progress_percent,
-            mc_remaining_time: live_status.remaining_time_minutes,
-            layer_num: live_status.current_layer,
-            total_layer_num: live_status.total_layers,
-            task_id: live_status.task_id,
-            subtask_id: live_status.subtask_id,
-            gcode_file: live_status.gcode_file,
-            subtask_name: live_status.subtask_name,
-            print_error: live_status.print_error,
-            job_id: live_status.printer_job_id,
-            hms: live_status.hms,
-            nozzle_temperatures: printer.nozzle_temperatures,
-            nozzle_system,
-            active_nozzle: printer.active_nozzle,
-            bed_temperature_celsius: printer.bed_temperature_celsius,
-            bed_target_temperature_celsius: printer.bed_target_temperature_celsius,
-            chamber_temperature_celsius: printer.chamber_temperature_celsius,
-            chamber_target_temperature_celsius: printer.chamber_target_temperature_celsius,
-            chamber_light_on: printer.chamber_light_on,
-            studio_local_camera,
-            materials: materials_by_printer_id.remove(&printer.id),
-            firmware,
-            pandar_printer_id: printer.id,
-        });
-    }
-
-    Ok(devices)
+        }
+        None => "0".to_owned(),
+    };
+    let nozzle_system = if printer
+        .model
+        .as_deref()
+        .and_then(normalize_model)
+        .as_deref()
+        == Some("H2C")
+    {
+        state
+            .sessions()
+            .current_token_for_capability(
+                tenant_id,
+                printer.agent_id,
+                AgentCapability::H2cAutoNozzleMapping,
+            )
+            .await
+            .filter(|token| {
+                printer.bambu_nozzle_system_session_id.as_deref()
+                    == Some(token.persisted_id().as_str())
+            })
+            .and(printer.bambu_nozzle_system.clone())
+    } else {
+        None
+    };
+    let firmware =
+        current_firmware_projection(state, tenant_id, printer.agent_id, firmware).await?;
+    Ok(PluginPrinterResponse {
+        dev_id: printer.serial_number.clone(),
+        fun,
+        dev_name: printer.name.clone(),
+        name: printer.name,
+        dev_model_name: studio_model_name,
+        model: printer.model,
+        dev_online: online,
+        online,
+        task_status: printer.status.clone(),
+        state: printer.status,
+        gcode_state: live_status.gcode_state,
+        mc_percent: live_status.progress_percent,
+        mc_remaining_time: live_status.remaining_time_minutes,
+        layer_num: live_status.current_layer,
+        total_layer_num: live_status.total_layers,
+        task_id: live_status.task_id,
+        subtask_id: live_status.subtask_id,
+        gcode_file: live_status.gcode_file,
+        subtask_name: live_status.subtask_name,
+        print_error: live_status.print_error,
+        job_id: live_status.printer_job_id,
+        hms: live_status.hms,
+        nozzle_temperatures: printer.nozzle_temperatures,
+        nozzle_system,
+        active_nozzle: printer.active_nozzle,
+        bed_temperature_celsius: printer.bed_temperature_celsius,
+        bed_target_temperature_celsius: printer.bed_target_temperature_celsius,
+        chamber_temperature_celsius: printer.chamber_temperature_celsius,
+        chamber_target_temperature_celsius: printer.chamber_target_temperature_celsius,
+        chamber_light_on: printer.chamber_light_on,
+        studio_local_camera,
+        materials,
+        firmware,
+        pandar_printer_id: printer.id,
+    })
 }
 
 fn studio_online_from_status(status: &str) -> bool {

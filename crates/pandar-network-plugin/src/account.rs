@@ -36,6 +36,30 @@ type AccountVisitor = unsafe extern "C" fn(
 );
 const ACCOUNT_FAILURE: &str = "account_state_unavailable";
 
+pub type AccountTenantVisitor = extern "C" fn(*mut std::ffi::c_void, *const u8, usize);
+
+/// Extracts `tenant_id` from a canonical account profile JSON and hands it to
+/// `visitor(context, ptr, len)` (the slice may be empty). Returns 0 when the
+/// profile parses, 1 otherwise.
+#[unsafe(no_mangle)]
+pub extern "C" fn pandar_plugin_account_profile_tenant_id(
+    profile_json_ptr: *const u8,
+    profile_json_len: usize,
+    context: *mut std::ffi::c_void,
+    visitor: Option<AccountTenantVisitor>,
+) -> i32 {
+    let Some(profile_json) = crate::read_utf8(profile_json_ptr, profile_json_len) else {
+        return 1;
+    };
+    let Ok(profile) = parse_profile(&profile_json) else {
+        return 1;
+    };
+    if let Some(visitor) = visitor {
+        visitor(context, profile.tenant_id.as_ptr(), profile.tenant_id.len());
+    }
+    0
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_account_decode_session(
     body_ptr: *const u8,

@@ -179,7 +179,6 @@ async fn execute_request(
 fn post_request_context(kind: RequestKind) -> &'static str {
     match kind {
         RequestKind::TicketExchange => "POST plugin authentication request",
-        RequestKind::PrinterLookup => "POST plugin printer lookup request",
         RequestKind::JobLookup => "POST plugin job lookup request",
         RequestKind::PrintSubmission => "POST plugin print submission request",
         RequestKind::PrinterOperation => "POST plugin printer operation request",
@@ -365,8 +364,7 @@ pub(super) fn redact_hub_error(kind: RequestKind, http_code: u32, body: &str) ->
         (404, _)
             if matches!(
                 kind,
-                RequestKind::PrinterLookup
-                    | RequestKind::JobLookup
+                RequestKind::JobLookup
                     | RequestKind::PrintSubmission
                     | RequestKind::PrinterOperation
                     | RequestKind::H2cAutoNozzleMapping

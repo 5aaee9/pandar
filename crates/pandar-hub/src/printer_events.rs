@@ -19,6 +19,10 @@ use crate::{
     sessions::SessionRegistry,
 };
 
+mod projection;
+pub use projection::PrinterProjectionChange;
+pub(crate) use projection::ProjectionSubscription;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum PrinterEvent {
@@ -282,6 +286,7 @@ fn credential_key(key: &str) -> bool {
 #[derive(Debug, Clone)]
 pub struct PrinterEventHub {
     senders: Arc<Mutex<HashMap<String, broadcast::Sender<PrinterEvent>>>>,
+    projection: projection::ProjectionEventHub,
     metrics: MetricsState,
     epoch: watch::Sender<u64>,
     epoch_gate: PrinterEventEpochGate,
@@ -311,11 +316,27 @@ impl PrinterEventHub {
     fn with_metrics_and_capacity(metrics: MetricsState, capacity: usize) -> Self {
         Self {
             senders: Arc::new(Mutex::new(HashMap::new())),
+            projection: projection::ProjectionEventHub::new(capacity),
             metrics,
             epoch: watch::channel(0).0,
             epoch_gate: PrinterEventEpochGate::default(),
             capacity,
         }
+    }
+
+    pub async fn subscribe_projection_changes(
+        &self,
+        tenant_id: TenantId,
+    ) -> ProjectionSubscription {
+        self.projection.subscribe(tenant_id).await
+    }
+
+    pub async fn publish_local_projection_change(
+        &self,
+        tenant_id: TenantId,
+        change: PrinterProjectionChange,
+    ) {
+        self.projection.publish(tenant_id, change).await;
     }
 
     #[cfg(test)]

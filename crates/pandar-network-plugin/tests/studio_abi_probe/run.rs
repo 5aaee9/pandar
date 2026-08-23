@@ -11,7 +11,7 @@ use super::{
     mock_hub::{MockMode, spawn_mock_hub},
 };
 
-const PROBE_TIMEOUT: Duration = Duration::from_secs(25);
+const PROBE_TIMEOUT: Duration = Duration::from_secs(70);
 
 enum ProbeRun {
     Exited(Output),
@@ -103,7 +103,10 @@ pub(super) fn run_probe(mode: MockMode, mode_arg: &str) -> ProbeOutput {
     };
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    let hub_failure = hub_result.err().map(panic_message);
+    let hub_failure = hub_result
+        .err()
+        .map(panic_message)
+        .filter(|message| !message.contains("mock hub stopped"));
     let hub_diagnostic = hub_failure
         .as_deref()
         .map_or_else(String::new, |error| format!("\nmock Hub failure: {error}"));

@@ -50,6 +50,7 @@ using PluginWithCurrentAccount = std::int32_t (*)(
 extern "C" std::int32_t with_current_account(
     void*, void*, PluginAccountTransaction
 );
+using PluginAccountTenantVisitor = void (*)(void*, const uint8_t*, std::size_t);
 
 struct PluginLifecycleResult {
     PluginHttpResult http;
@@ -124,6 +125,9 @@ enum class AccountPolicyAction : std::int32_t {
 
 extern "C" {
 int32_t pandar_plugin_account_runtime_config(void*, PluginRuntimeConfigVisitor);
+int32_t pandar_plugin_account_profile_tenant_id(
+    const uint8_t*, std::size_t, void*, PluginAccountTenantVisitor
+);
 bool pandar_plugin_account_debug_consistent(bool);
 PluginHttpResult pandar_plugin_account_login_envelope(
     bool,

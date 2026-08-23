@@ -131,6 +131,9 @@ async fn handle_control_message(state: &AppState, message: HubControlMessage) {
                         "agent session closed before printer operation completed",
                     )
                     .await;
+                    state
+                        .publish_agent_printers_local_projection_changes(tenant_id, agent_id)
+                        .await;
                 }
             }
             Err(err) => {
@@ -145,6 +148,28 @@ async fn handle_control_message(state: &AppState, message: HubControlMessage) {
                 }
             }
         }
+        HubControlMessage::PrinterProjectionChange {
+            tenant_id,
+            printer_id,
+            serial_number,
+        } => match crate::cluster::parse_tenant_id(&tenant_id) {
+            Ok(tenant_id) => {
+                state
+                    .printer_events()
+                    .publish_local_projection_change(
+                        tenant_id,
+                        crate::printer_events::PrinterProjectionChange {
+                            printer_id,
+                            serial_number,
+                        },
+                    )
+                    .await;
+            }
+            Err(err) => tracing::error!(
+                error = %format!("{err:#}"),
+                "failed to parse printer projection change control message"
+            ),
+        },
     }
 }
 
@@ -175,6 +200,9 @@ async fn expire_stale_sessions_with_timeout(
             "agent session expired before printer operation completed",
         )
         .await;
+        state
+            .publish_agent_printers_projection_changes(tenant_id, agent_id)
+            .await;
     }
     Ok(expired_count)
 }
@@ -189,6 +217,7 @@ async fn mark_stalled_pending_jobs_once(state: &AppState, now: &str) -> anyhow::
     let count = stalled.len();
     for job in stalled {
         let tenant_id = job.job.tenant_id;
+        let printer_id = job.job.printer_id.clone();
         let response = crate::routes::jobs::JobResponse::try_from(job)
             .context("failed to build stalled print job event")?;
         state
@@ -199,6 +228,16 @@ async fn mark_stalled_pending_jobs_once(state: &AppState, now: &str) -> anyhow::
                 },
             )
             .await;
+        if let Some(printer) = state
+            .printers()
+            .get_for_tenant(tenant_id, &printer_id)
+            .await
+            .context("failed to resolve stalled job printer for projection change")?
+        {
+            state
+                .publish_printer_projection_change(tenant_id, &printer.id, &printer.serial_number)
+                .await;
+        }
     }
     Ok(count)
 }

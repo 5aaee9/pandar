@@ -158,6 +158,9 @@ impl AgentControlService {
             )
             .await;
         }
+        self.state
+            .publish_agent_printers_projection_changes(tenant_id, agent_id)
+            .await;
 
         let (status_sender, status_receiver) = mpsc::channel(1);
         spawn_inbound_handler(

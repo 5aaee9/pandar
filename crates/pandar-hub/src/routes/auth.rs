@@ -174,6 +174,21 @@ pub(super) async fn authorize_plugin_studio(
     Ok(authenticated)
 }
 
+/// Authorizes a `PluginStudio`-scoped bearer token for the Studio projection
+/// stream: the token tenant must exactly match the path tenant. This grants no
+/// other tenant Viewer permission.
+pub(super) async fn authorize_plugin_studio_for_tenant(
+    state: &AppState,
+    headers: &HeaderMap,
+    tenant_id: TenantId,
+) -> Result<crate::repositories::AuthenticatedTenantToken, ApiError> {
+    let authenticated = authorize_plugin_studio(state, headers).await?;
+    if authenticated.token.tenant_id != tenant_id {
+        return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
+    }
+    Ok(authenticated)
+}
+
 pub(super) fn bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
     let Some(header) = headers.get(AUTHORIZATION) else {
         return Err(ApiError::new(

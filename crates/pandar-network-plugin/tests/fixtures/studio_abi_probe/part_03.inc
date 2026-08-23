@@ -10,6 +10,7 @@ int main(int argc, char** argv) {
     const bool axis_features_mode = mode == "axis-features";
     const bool connection_readiness_mode = mode == "connection-readiness";
     const bool background_timeout_mode = mode == "background-timeout";
+    const bool stream_unavailable_mode = mode == "stream-unavailable";
     const bool auth_rejected_mode = mode == "auth-rejected";
     const bool printer_presence_mode = mode == "printer-presence";
     const bool account_transition_mode = mode == "account-transition";
@@ -30,7 +31,8 @@ int main(int argc, char** argv) {
     const bool official_no_auth_lifecycle_mode =
         official_no_auth_recovery_mode || official_no_auth_logout_recovery_mode;
     if (!failure_mode && !stale_token_mode && !native_print_error_mode && !axis_features_mode &&
-        !connection_readiness_mode && !background_timeout_mode && !auth_rejected_mode &&
+        !connection_readiness_mode && !background_timeout_mode && !stream_unavailable_mode &&
+        !auth_rejected_mode &&
         !printer_presence_mode && !account_transition_mode && !account_exchange_race_mode &&
         !token_refresh_mode &&
         !freshness_claim_mode && !firmware_claim_race_mode && !callback_order_mode &&
@@ -210,7 +212,6 @@ int main(int argc, char** argv) {
         print_json(out);
         return 0;
     }
-
     if (camera_unavailable_mode) {
         const std::string profile = R"({"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"})";
         if (change_user(agent, profile) != 0) {
@@ -251,207 +252,6 @@ int main(int argc, char** argv) {
             golive_camera_url.empty();
         if (!out.camera_unavailable_exact) {
             fail(agent, destroy_agent, "credentials escaped agent-local camera policy");
-        }
-        destroy_agent(agent);
-        print_json(out);
-        return 0;
-    }
-
-    if (connection_readiness_mode) {
-        std::atomic<int> callbacks{0};
-        std::atomic<int> successful_callbacks{0};
-        if (set_server_connected(agent, [&callbacks, &successful_callbacks](int status, int reason) {
-                if (reason != 0) return;
-                ++callbacks;
-                if (status == 0) ++successful_callbacks;
-            }) != 0) {
-            fail(agent, destroy_agent, "connection readiness callback registration failed");
-        }
-        if (is_server_connected(agent)) {
-            fail(agent, destroy_agent, "configured Hub URL was treated as proven reachable");
-        }
-        if (connect_server(agent) != kBambuConnectFailed || is_server_connected(agent) ||
-            callbacks.load() != 1 || successful_callbacks.load() != 0) {
-            fail(agent, destroy_agent, "not-ready Hub was treated as connected");
-        }
-        if (refresh_connection(agent) != kBambuConnectFailed || is_server_connected(agent) ||
-            callbacks.load() != 1) {
-            fail(agent, destroy_agent, "unchanged not-ready Hub repeated the callback");
-        }
-        if (refresh_connection(agent) != 0 || !is_server_connected(agent) ||
-            callbacks.load() != 2 || successful_callbacks.load() != 1) {
-            fail(agent, destroy_agent, "ready Hub did not recover connectivity");
-        }
-        if (refresh_connection(agent) != 0 || !is_server_connected(agent) ||
-            callbacks.load() != 2) {
-            fail(agent, destroy_agent, "unchanged ready Hub repeated the callback");
-        }
-        if (refresh_connection(agent) != kBambuConnectFailed || is_server_connected(agent) ||
-            callbacks.load() != 3) {
-            fail(agent, destroy_agent, "invalid ready payload did not disconnect the Hub");
-        }
-        if (refresh_connection(agent) != kBambuConnectFailed || is_server_connected(agent) ||
-            callbacks.load() != 3) {
-            fail(agent, destroy_agent, "readiness loss did not disconnect the Hub");
-        }
-        if (refresh_connection(agent) != 0 || !is_server_connected(agent) ||
-            callbacks.load() != 4 || successful_callbacks.load() != 2) {
-            fail(agent, destroy_agent, "second ready observation did not recover connectivity");
-        }
-        destroy_agent(agent);
-        print_json(out);
-        return 0;
-    }
-
-    if (background_timeout_mode) {
-        const std::string profile = R"({"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"})";
-        if (change_user(agent, profile) != 0) {
-            fail(agent, destroy_agent, "background timeout profile setup failed");
-        }
-        std::string printers_body;
-        unsigned int printers_code = 0;
-        if (get_print_info(agent, &printers_code, &printers_body) != 0 || printers_code != 200) {
-            fail(agent, destroy_agent, "background timeout printer seed failed");
-        }
-        TunnelCapture cloud;
-        std::atomic<int> connected_callbacks{0};
-        std::atomic<int> disconnected_callbacks{0};
-        if (set_message(agent, [&cloud](std::string dev_id, std::string body) {
-                capture_tunnel_message(cloud, dev_id, body);
-            }) != 0 ||
-            set_server_connected(agent, [&connected_callbacks, &disconnected_callbacks](int status, int reason) {
-                if (reason != 0) return;
-                if (status == 0) ++connected_callbacks;
-                else ++disconnected_callbacks;
-            }) != 0) {
-            fail(agent, destroy_agent, "background timeout callback registration failed");
-        }
-        if (connect_server(agent) != 0 || !is_server_connected(agent) ||
-            connected_callbacks.load() != 0) {
-            fail(agent, destroy_agent, "background timeout readiness setup failed");
-        }
-        add_subscribe(agent, {"studio-serial-1"});
-        const int statuses_before_timeout = status_count(cloud, "studio-serial-1");
-        if (!wait_until([&] { return disconnected_callbacks.load() == 1; }) ||
-            is_server_connected(agent)) {
-            fail(agent, destroy_agent, "background printer timeout did not invalidate Hub reachability");
-        }
-        if (status_count(cloud, "studio-serial-1") != statuses_before_timeout) {
-            fail(agent, destroy_agent, "background printer timeout replayed stale push_status");
-        }
-        destroy_agent(agent);
-        print_json(out);
-        return 0;
-    }
-
-    if (freshness_claim_mode) {
-        const std::string profile = R"({"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"})";
-        if (change_user(agent, profile) != 0) {
-            fail(agent, destroy_agent, "freshness claim profile setup failed");
-        }
-        std::string printers_body;
-        unsigned int printers_code = 0;
-        if (get_print_info(agent, &printers_code, &printers_body) != 0 || printers_code != 200) {
-            fail(agent, destroy_agent, "freshness claim printer seed failed");
-        }
-        if (connect_printer(agent, "studio-serial-1", "127.0.0.1", "user", "pass", false) !=
-                kBambuConnectFailed ||
-            send_printer(agent, "studio-serial-1", "M999", 0, 0) != kBambuConnectFailed) {
-            fail(agent, destroy_agent, "unclaimed local connection was not rolled back");
-        }
-        TunnelCapture cloud;
-        TunnelCapture local;
-        std::atomic<int> connected_callbacks{0};
-        std::atomic<int> local_connected_callbacks{0};
-        if (set_message(agent, [&cloud](std::string dev_id, std::string body) {
-                capture_tunnel_message(cloud, dev_id, body);
-            }) != 0 ||
-            set_local_message(agent, [&local](std::string dev_id, std::string body) {
-                capture_tunnel_message(local, dev_id, body);
-            }) != 0 ||
-            set_printer_connected(agent, [&connected_callbacks](std::string) {
-                ++connected_callbacks;
-            }) != 0 ||
-            set_local_connect(agent, [&local_connected_callbacks](int status, std::string, std::string) {
-                if (status == 0) ++local_connected_callbacks;
-            }) != 0 ||
-            add_subscribe(agent, {"studio-serial-1"}) != 0 ||
-            connect_printer(agent, "studio-serial-1", "127.0.0.1", "user", "pass", false) != 0 ||
-            connected_callbacks.load() != 1 || local_connected_callbacks.load() != 1 ||
-            status_count(cloud, "studio-serial-1") != 1) {
-            fail(agent, destroy_agent, "freshness claim active subscription setup failed");
-        }
-
-        int version_rc = -1;
-        std::thread version_request([&] {
-            version_rc = send_cloud(
-                agent,
-                "studio-serial-1",
-                R"({"info":{"command":"get_version","sequence_id":"freshness-claim"}})",
-                0,
-                0
-            );
-        });
-        const auto version_entered =
-            std::filesystem::path(config_dir) / "freshness-version-entered";
-        if (!wait_until([&] { return std::filesystem::exists(version_entered); })) {
-            version_request.join();
-            fail(agent, destroy_agent, "freshness claim version request did not enter Hub");
-        }
-        int refresh_rc = -1;
-        std::thread refresh_request([&] {
-            unsigned int code = 0;
-            std::string body;
-            refresh_rc = get_print_info(agent, &code, &body);
-        });
-        const auto refresh_entered =
-            std::filesystem::path(config_dir) / "freshness-printer-entered";
-        if (!wait_until([&] { return std::filesystem::exists(refresh_entered); })) {
-            refresh_request.join();
-            version_request.join();
-            fail(agent, destroy_agent, "freshness claim printer refresh did not enter Hub");
-        }
-        int connect_rc = -1;
-        std::atomic<bool> connect_returned{false};
-        std::thread connection_request([&] {
-            connect_rc = connect_server(agent);
-            connect_returned.store(true);
-        });
-        const int local_send_rc =
-            send_printer(agent, "studio-serial-1", "M140 S60", 0, 0);
-        std::filesystem::create_directory(
-            std::filesystem::path(config_dir) / "freshness-local-send-returned"
-        );
-        const bool local_operation_received = std::filesystem::exists(
-            std::filesystem::path(config_dir) / "freshness-local-operation-received"
-        );
-        version_request.join();
-        std::filesystem::create_directory(
-            std::filesystem::path(config_dir) / "freshness-version-returned"
-        );
-        const bool connection_escaped_admission = connect_returned.load();
-        std::filesystem::create_directory(
-            std::filesystem::path(config_dir) / "freshness-connect-checked"
-        );
-        refresh_request.join();
-        connection_request.join();
-        if (local_send_rc != kBambuConnectFailed || local_operation_received ||
-            status_count(local, "studio-serial-1") != 0) {
-            fail(agent, destroy_agent, "local send escaped while printer freshness was unproven");
-        }
-        if (connection_escaped_admission || connect_rc != 0) {
-            fail(agent, destroy_agent, "connect_server escaped printer cache admission ownership");
-        }
-        if (version_rc != kBambuConnectFailed || refresh_rc != 0 ||
-            version_count(cloud, "studio-serial-1") != 0) {
-            fail(agent, destroy_agent, "version callback escaped while printer freshness was unproven");
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1'100));
-        const std::string pushall =
-            R"({"pushing":{"command":"pushall","sequence_id":"freshness-retry","version":1,"push_target":1}})";
-        if (send_cloud(agent, "studio-serial-1", pushall, 0, 0) != 0 ||
-            connected_callbacks.load() != 2) {
-            fail(agent, destroy_agent, "unclaimed version response suppressed the next connection handshake");
         }
         destroy_agent(agent);
         print_json(out);

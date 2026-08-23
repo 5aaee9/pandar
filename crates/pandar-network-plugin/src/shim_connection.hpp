@@ -4,6 +4,8 @@
 
 namespace pandar::network_plugin {
 
+std::string body_from_result(PluginHttpResult);
+
 extern "C" {
 
 struct PluginConnectionResult {
@@ -26,6 +28,8 @@ struct PandarShimBridge {
         void*, int32_t, const uint8_t*, std::size_t, const uint8_t*, std::size_t
     );
     int32_t (*invoke_local_connected)(void*, int32_t, const uint8_t*, std::size_t);
+    int32_t (*invoke_printer_connected)(void*, const uint8_t*, std::size_t);
+    int32_t (*invoke_firmware_status)(void*, int32_t, const uint8_t*, std::size_t);
 };
 
 void pandar_plugin_shim_dispatch_connection_transition(
@@ -56,8 +60,15 @@ int32_t pandar_plugin_printer_refresh_session_update(
 );
 PluginConnectionResult pandar_plugin_connection_refresh(void*);
 int32_t pandar_plugin_connection_is_connected(void*);
+using PluginDispatchWake = void (*)(void*);
+int32_t pandar_plugin_connection_set_dispatch_waker(
+    void*, void*, PluginDispatchWake
+);
 int32_t pandar_plugin_connection_set_account_epoch(void*, uint64_t);
 PluginConnectionResult pandar_plugin_connection_take_transition(void*);
+int32_t pandar_plugin_connection_sync_firmware(
+    void*, void*, uint64_t, uint64_t
+);
 int32_t pandar_plugin_connection_visit_printers(
     void*, void*, PluginConnectionPrinterVisitor
 );
@@ -67,9 +78,19 @@ int32_t pandar_plugin_connection_printer_eligible(
 int32_t pandar_plugin_connection_take_offline(
     void*, void*, PluginConnectionDeviceVisitor
 );
+PluginHttpResult pandar_plugin_connection_take_stream_error(void*);
+int32_t pandar_plugin_printer_refresh_session_set_tenant(
+    void*, const uint8_t*, std::size_t
+);
 void pandar_plugin_printer_refresh_session_destroy(void*);
 
 } // extern "C"
+
+void shim_wake_status_dispatcher(void* context) {
+    auto* agent = static_cast<Agent*>(context);
+    agent->status_wake_generation.fetch_add(1, std::memory_order_release);
+    agent->status_thread_wake.notify_all();
+}
 
 void shim_gate_lock(void* context) {
     static_cast<Agent*>(context)->callback_mutex.lock();
@@ -115,6 +136,43 @@ int32_t shim_invoke_message(
     return 1;
 }
 
+int32_t shim_invoke_printer_connected(
+    void* context, const uint8_t* body, std::size_t body_len
+) {
+    auto* agent = static_cast<Agent*>(context);
+    BBL::OnPrinterConnectedFn callback;
+    {
+        std::lock_guard<std::mutex> lock(agent->status_mutex);
+        callback = agent->on_printer_connected;
+    }
+    if (!callback) return 0;
+    callback(std::string(reinterpret_cast<const char*>(body), body_len));
+    return 1;
+}
+
+int32_t shim_invoke_firmware_status(
+    void* context, int32_t kind, const uint8_t* dev_id, std::size_t dev_id_len
+) {
+    auto* agent = static_cast<Agent*>(context);
+    PluginHttpResult result{};
+    {
+        std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
+        result = pandar_plugin_firmware_next_status_override(
+            agent->firmware_session, dev_id, dev_id_len
+        );
+    }
+    auto body = body_from_result(result);
+    if (result.status != 0) return 0;
+    return shim_invoke_message(
+        context,
+        kind,
+        dev_id,
+        dev_id_len,
+        reinterpret_cast<const uint8_t*>(body.data()),
+        body.size()
+    );
+}
+
 int32_t shim_invoke_local_connected(
     void* context, int32_t state, const uint8_t* dev_id, std::size_t dev_id_len
 ) {
@@ -136,6 +194,8 @@ const PandarShimBridge kShimBridge = {
     shim_invoke_server_connected,
     shim_invoke_message,
     shim_invoke_local_connected,
+    shim_invoke_printer_connected,
+    shim_invoke_firmware_status,
 };
 
 PluginConnectionResult take_connection_transition(Agent* agent) {

@@ -1,7 +1,5 @@
 use std::ffi::c_void;
 
-use crate::{PluginHttpResult, studio_status::FirmwareProjection};
-
 pub type PrinterRefreshObservationReservation = extern "C" fn(*mut c_void);
 pub type PrinterRefreshTransaction = unsafe extern "C" fn(*mut c_void) -> i32;
 pub type PrinterRefreshWithLock =
@@ -35,27 +33,6 @@ pub struct PluginPrinterRefreshAdapter {
     pub reserve_observation: Option<PrinterRefreshObservationReservation>,
     pub with_firmware_observation: Option<PrinterRefreshWithFirmware>,
     pub collect_offline: Option<ConnectionDeviceVisitor>,
-}
-
-pub(super) struct PrinterRefreshResult {
-    pub(super) http: PluginHttpResult,
-    pub(super) firmware: Option<FirmwareProjection>,
-}
-
-impl PrinterRefreshResult {
-    pub(super) fn without_firmware(http: PluginHttpResult) -> Self {
-        Self {
-            http,
-            firmware: None,
-        }
-    }
-
-    pub(super) fn projected(http: PluginHttpResult, firmware: FirmwareProjection) -> Self {
-        Self {
-            http,
-            firmware: Some(firmware),
-        }
-    }
 }
 
 #[repr(C)]

@@ -1,24 +1,29 @@
+use std::collections::BTreeMap;
+
 use anyhow::{Context, bail};
 use pandar_core::PrinterFirmwareState;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use super::{input::PrinterStatus, payload::push_status_json};
 
 #[derive(Deserialize)]
 struct PrinterList {
     message: String,
-    devices: Vec<HubPrinter>,
+    devices: Vec<Box<serde_json::value::RawValue>>,
 }
 
-#[derive(Deserialize)]
-struct HubPrinter {
-    dev_id: String,
-    pandar_printer_id: String,
-    dev_online: bool,
-    online: bool,
+#[derive(Deserialize, Serialize)]
+pub(super) struct HubPrinter {
+    pub(super) dev_id: String,
+    pub(super) pandar_printer_id: String,
+    pub(super) dev_online: bool,
+    pub(super) online: bool,
     #[serde(flatten)]
-    status: PrinterStatus,
-    firmware: Option<PrinterFirmwareState>,
+    pub(super) status: PrinterStatus,
+    pub(super) firmware: Option<PrinterFirmwareState>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, Value>,
 }
 
 pub struct StudioStatusProjection {
@@ -34,11 +39,34 @@ pub struct PrinterObservation {
     pub(crate) status_report: String,
     pub(crate) online: bool,
     pub(crate) studio_local_camera: bool,
+    status: PrinterStatus,
+    pub(crate) raw_device: String,
+    pub(crate) firmware: Option<PrinterFirmwareState>,
 }
 
 pub struct FirmwareProjection {
     source_len: usize,
     observations: Vec<FirmwareObservation>,
+}
+
+impl FirmwareProjection {
+    pub(crate) fn from_observations(
+        source_len: usize,
+        observations: Vec<FirmwareObservation>,
+    ) -> Self {
+        Self {
+            source_len,
+            observations,
+        }
+    }
+
+    pub(crate) fn source_len(&self) -> usize {
+        self.source_len
+    }
+
+    pub(crate) fn observations(&self) -> &[FirmwareObservation] {
+        &self.observations
+    }
 }
 
 pub(crate) struct FirmwareObservation {
@@ -54,25 +82,22 @@ impl StudioStatusProjection {
     pub fn into_firmware(self) -> FirmwareProjection {
         self.firmware
     }
-
-    pub(crate) fn into_parts(self) -> (Vec<PrinterObservation>, FirmwareProjection) {
-        (self.printers, self.firmware)
-    }
 }
 
 impl PrinterObservation {
     pub fn status_report(&self) -> &str {
         &self.status_report
     }
-}
 
-impl FirmwareProjection {
-    pub(crate) fn source_len(&self) -> usize {
-        self.source_len
-    }
-
-    pub(crate) fn observations(&self) -> &[FirmwareObservation] {
-        &self.observations
+    pub(crate) fn project_offline(&mut self) {
+        self.online = false;
+        self.status_report = push_status_json(&self.status, false);
+        let mut device = serde_json::from_str::<HubPrinter>(&self.raw_device)
+            .expect("validated Hub printer remains decodable");
+        device.dev_online = false;
+        device.online = false;
+        self.raw_device =
+            serde_json::to_string(&device).expect("typed Hub printer remains serializable");
     }
 }
 
@@ -82,33 +107,15 @@ pub fn project_hub_printers(body: &str) -> anyhow::Result<StudioStatusProjection
     if response.message != "success" {
         bail!("Hub plugin printer status response was not successful");
     }
-    if response
-        .devices
-        .iter()
-        .any(|printer| printer.dev_id.trim().is_empty())
-    {
-        bail!("Hub plugin printer status response contained an empty device id");
-    }
-
     let mut printers = Vec::with_capacity(response.devices.len());
     let mut firmware = Vec::with_capacity(response.devices.len());
-    for printer in response.devices {
-        let online = printer.dev_online && printer.online;
-        let model = printer.status.dev_model_name.clone();
-        let studio_local_camera = printer.status.studio_local_camera;
-        let status_report = push_status_json(&printer.status, online);
+    for raw_device in response.devices {
+        let observation = project_stream_device(raw_device.get())?;
         firmware.push(FirmwareObservation {
-            dev_id: printer.dev_id.clone(),
-            firmware: printer.firmware,
+            dev_id: observation.dev_id.clone(),
+            firmware: observation.firmware.clone(),
         });
-        printers.push(PrinterObservation {
-            dev_id: printer.dev_id,
-            pandar_printer_id: printer.pandar_printer_id,
-            model,
-            status_report,
-            online,
-            studio_local_camera,
-        });
+        printers.push(observation);
     }
 
     Ok(StudioStatusProjection {
@@ -117,6 +124,34 @@ pub fn project_hub_printers(body: &str) -> anyhow::Result<StudioStatusProjection
             source_len: body.len(),
             observations: firmware,
         },
+    })
+}
+
+/// Projects exactly one hub device object (the payload of a `printer_upsert`
+/// stream frame or one entry of the plugin printer list response).
+pub fn project_stream_device(raw_device: &str) -> anyhow::Result<PrinterObservation> {
+    let printer =
+        serde_json::from_str::<HubPrinter>(raw_device).context("deserialize Hub printer device")?;
+    if printer.dev_id.trim().is_empty() {
+        bail!("Hub printer device contained an empty device id");
+    }
+    if printer.pandar_printer_id.trim().is_empty() {
+        bail!("Hub printer device contained an empty Pandar printer id");
+    }
+    let online = printer.dev_online && printer.online;
+    let model = printer.status.dev_model_name.clone();
+    let studio_local_camera = printer.status.studio_local_camera;
+    let status_report = push_status_json(&printer.status, online);
+    Ok(PrinterObservation {
+        dev_id: crate::connection::normalize_studio_dev_id(printer.dev_id),
+        pandar_printer_id: printer.pandar_printer_id,
+        model,
+        status_report,
+        online,
+        studio_local_camera,
+        status: printer.status,
+        raw_device: raw_device.to_owned(),
+        firmware: printer.firmware,
     })
 }
 

@@ -98,6 +98,11 @@ extern "C" std::int32_t with_printer_refresh_firmware(
     std::lock_guard<std::recursive_mutex> transition(
         adapter->agent->firmware_transition_mutex
     );
+    if (adapter->observation.generation != adapter->agent->firmware_generation) {
+        // The account/config transition that bumped the generation also
+        // invalidated this reserved observation; skip the stale handoff.
+        return 0;
+    }
     return transaction(
         projection_context,
         adapter->agent->firmware_session,
@@ -197,6 +202,7 @@ LocalLostDelivery clear_login_state(Agent* agent, bool sync_sessions = true) {
     agent->user_name.clear();
     agent->avatar.clear();
     agent->profile_json.clear();
+    agent->tenant_id.clear();
     agent->account_session_kind = 0;
     if (sync_sessions) {
         sync_printer_refresh_session(agent);
@@ -215,34 +221,6 @@ std::string borrowed_string(const uint8_t* ptr, std::size_t len) {
     return std::string(reinterpret_cast<const char*>(ptr), len);
 }
 
-bool refresh_printer_status_cache(Agent* agent) {
-    if (!agent || !agent->printer_refresh_session) return false;
-    refresh_local_webserver_config(agent);
-    std::unique_lock<std::mutex> request(agent->printer_refresh_request_mutex);
-    PrinterRefreshAdapterState adapter_state{agent};
-    auto lifecycle = pandar_plugin_printer_refresh_with_session(
-        agent->printer_refresh_session,
-        kPrinterRefreshBackground,
-        agent,
-        with_current_account,
-        printer_refresh_adapter(&adapter_state)
-    );
-    const auto status = lifecycle.http.status;
-    const auto http_code = lifecycle.http.http_code;
-    auto body = body_from_result(lifecycle.http);
-    const auto cache_committed = lifecycle.cache_committed != 0;
-    request.unlock();
-    dispatch_connection_transition(agent, lifecycle.connection);
-    dispatch_printer_offline_transitions(agent, std::move(adapter_state.offline));
-    if (!cache_committed) {
-        trace_plugin_event(
-            agent,
-            "printer status refresh failed status=" + std::to_string(status) +
-                " http_code=" + std::to_string(http_code) + " body=" + body
-        );
-    }
-    return cache_committed;
-}
 
 } // namespace pandar::network_plugin
 

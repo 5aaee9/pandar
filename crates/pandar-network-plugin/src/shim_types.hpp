@@ -209,7 +209,6 @@ PluginHttpResult pandar_plugin_local_connect_json(
 );
 
 PluginHttpResult pandar_plugin_exchange_ticket(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
-PluginHttpResult pandar_plugin_get_printers(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
 void* pandar_plugin_firmware_session_create(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t,
@@ -316,6 +315,7 @@ struct Agent {
     std::string avatar;
     std::string profile_json;
     std::int32_t account_session_kind = 0;
+    std::string tenant_id;
     std::string hub_url = "http://127.0.0.1:8080";
     std::string frontend_url = "http://localhost:3000";
     std::uint64_t account_identity = 0;
@@ -352,6 +352,7 @@ struct Agent {
     BBL::OnServerErrFn on_server_error;
     std::thread status_thread;
     std::atomic<bool> status_thread_stop = false;
+    std::atomic<std::uint64_t> status_wake_generation = 0;
     std::mutex status_thread_mutex;
     std::condition_variable status_thread_wake;
     std::thread firmware_thread;

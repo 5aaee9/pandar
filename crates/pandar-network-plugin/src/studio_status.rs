@@ -14,7 +14,10 @@ pub(super) use firmware::{
 };
 pub use list::{
     FirmwareProjection, PrinterObservation, StudioStatusProjection, project_hub_printers,
+    project_stream_device,
 };
+
+pub(crate) use list::FirmwareObservation;
 
 pub(super) fn local_connect_json(dev_id: &str, model: &str) -> String {
     payload::local_connect_json(dev_id, model)

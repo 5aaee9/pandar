@@ -117,7 +117,7 @@ struct Capture {
         if (contains(body, R"("command":"push_status")") && status_deadline_armed.exchange(false)) {
             status_deadline_entered = true;
             ready.notify_all();
-            std::this_thread::sleep_for(std::chrono::milliseconds(2'200));
+            std::this_thread::sleep_for(std::chrono::milliseconds(2'800));
         }
         if (contains(body, R"("sequence_id":"c-version")")) {
             std::lock_guard<std::mutex> lock(mutex);

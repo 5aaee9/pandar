@@ -4,6 +4,7 @@ use super::compiler::{build_plugin, compile_disposition_probe};
 
 pub(super) struct DispositionProbeOutput {
     pub(super) stdout: String,
+    #[allow(dead_code)]
     pub(super) stderr: String,
     pub(super) compiler: String,
 }

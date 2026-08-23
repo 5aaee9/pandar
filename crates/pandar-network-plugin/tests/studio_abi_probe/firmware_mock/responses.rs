@@ -15,10 +15,6 @@ pub(super) fn login_response() -> String {
     .to_string()
 }
 
-pub(super) fn printer_list() -> String {
-    printer_list_with_version("session-1", "01.02.03.04")
-}
-
 pub(super) fn printer_list_with_version(session_id: &str, printer_version: &str) -> String {
     json!({"message":"success","devices":[{
         "dev_id":"studio-serial-1","dev_name":"Probe Printer","name":"Probe Printer",

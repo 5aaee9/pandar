@@ -63,7 +63,7 @@
         );
         std::string counts;
         std::getline(counts_file, counts);
-        if (counts != "posts=1 tokens=1 audits=1 printers=1") {
+        if (counts != "posts=1 tokens=1 audits=1 upgrades=1") {
             fail(agent, destroy_agent, "no-auth recovery created duplicate server state: " + counts);
         }
 
@@ -149,7 +149,7 @@
         std::getline(counts_stream, counts);
         if (!contains(login.str(), "recovered-token") ||
             false_login_callbacks.load() != 0 ||
-            counts != "posts=1 tokens=1 audits=1 printers=1") {
+            counts != "posts=1 tokens=1 audits=1 upgrades=1") {
             std::ifstream trace_file(
                 std::filesystem::path(config_dir) / "pandar-network-plugin.trace.log"
             );

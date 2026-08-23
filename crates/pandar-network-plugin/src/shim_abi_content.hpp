@@ -10,7 +10,7 @@ PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     refresh_local_webserver_config(a);
     std::unique_lock<std::mutex> request(a->printer_refresh_request_mutex);
-    PrinterRefreshAdapterState adapter_state{a};
+    PrinterRefreshAdapterState adapter_state{a, {}, {}};
     auto lifecycle = pandar_plugin_printer_refresh_with_session(
         a->printer_refresh_session,
         kPrinterRefreshStudioPrintInfo,
@@ -24,6 +24,7 @@ PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http
     request.unlock();
     dispatch_connection_transition(a, lifecycle.connection);
     dispatch_printer_offline_transitions(a, std::move(adapter_state.offline));
+    dispatch_pending_stream_error(a);
     if (lifecycle.snapshot_current == 0 && status == 0) {
         trace_plugin_event(a, "get_user_print_info discarded after login change");
     }

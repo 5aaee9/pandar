@@ -11,7 +11,7 @@ use super::{
     firmware_compat,
     operations::{TestOperation, TestPrintErrorAction, assert_operation_body_eq},
     responses::PRINTERS_RESPONSE,
-    transport::{read_request_until, write_response},
+    transport::write_response,
 };
 
 fn printers_response() -> String {
@@ -48,13 +48,19 @@ fn request_line(request: &str) -> &str {
 pub(super) fn serve(listener: &TcpListener, stop: &Arc<AtomicBool>, deadline: Instant) {
     let printers = printers_response();
     let mut operation_posts = 0_u32;
-    let mut printer_refreshes = 0_u32;
+    let printer_refreshes = 0_u32;
 
     while !stop.load(Ordering::Acquire) {
-        let Some((mut stream, request)) =
-            read_request_until(listener, stop, deadline, "native mock Hub request")
-        else {
-            return;
+        let (mut stream, request) = match super::next_incoming(listener, stop, deadline) {
+            super::Incoming::Stream(upgrade) => {
+                super::server::assert_printer_events_upgrade(&upgrade.request);
+                let frames = upgrade.serve();
+                for frame in super::responses::snapshot_frames(&printers) {
+                    frames.send(frame).expect("serve native probe snapshot");
+                }
+                continue;
+            }
+            super::Incoming::Http(stream, request) => (stream, request),
         };
         let line = request_line(&request);
 
@@ -80,13 +86,6 @@ pub(super) fn serve(listener: &TcpListener, stop: &Arc<AtomicBool>, deadline: In
                 "HTTP/1.1 200 OK",
                 r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
             );
-        } else if line == "GET /api/v1/plugin/printers HTTP/1.1" {
-            assert!(
-                request.contains("authorization: Bearer probe-token"),
-                "native probe printer refresh omitted bearer token: {request}"
-            );
-            printer_refreshes += 1;
-            write_response(&mut stream, "HTTP/1.1 200 OK", &printers);
         } else if line == "GET /probe-operation-count HTTP/1.1" {
             write_response(
                 &mut stream,

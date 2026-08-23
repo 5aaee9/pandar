@@ -19,6 +19,7 @@ const STUDIO_CALLBACK_AUTH_REJECTED: i32 = 5;
 const STUDIO_WORK_CLOUD_MESSAGE: i32 = 1;
 const STUDIO_WORK_LOCAL_MESSAGE: i32 = 2;
 const STUDIO_WORK_LOCAL_CONNECTED: i32 = 3;
+const STUDIO_WORK_PRINTER_CONNECTED: i32 = 4;
 
 #[repr(C)]
 pub struct ShimCallbackBridge {
@@ -28,6 +29,8 @@ pub struct ShimCallbackBridge {
     pub invoke_server_connected: extern "C" fn(*mut c_void, i32, i32) -> i32,
     pub invoke_message: extern "C" fn(*mut c_void, i32, *const u8, usize, *const u8, usize) -> i32,
     pub invoke_local_connected: extern "C" fn(*mut c_void, i32, *const u8, usize) -> i32,
+    pub invoke_printer_connected: extern "C" fn(*mut c_void, *const u8, usize) -> i32,
+    pub invoke_firmware_status: extern "C" fn(*mut c_void, i32, *const u8, usize) -> i32,
 }
 
 struct CallbackGate<'a> {
@@ -75,7 +78,9 @@ pub extern "C" fn pandar_plugin_shim_dispatch_connection_transition(
             } else {
                 STUDIO_CALLBACK_CONNECT_FAILED
             };
-            (bridge.invoke_server_connected)(agent, event, 0);
+            if (bridge.invoke_server_connected)(agent, event, 0) == 0 {
+                session.retry_connection_callback(&result);
+            }
         }
     }
     if result.auth_changed != 0 {
@@ -86,8 +91,10 @@ pub extern "C" fn pandar_plugin_shim_dispatch_connection_transition(
         if !session.claim_delivery(result.auth_ticket) {
             return;
         }
-        if result.auth_rejected != 0 {
-            (bridge.invoke_server_connected)(agent, STUDIO_CALLBACK_AUTH_REJECTED, 0);
+        if result.auth_rejected != 0
+            && (bridge.invoke_server_connected)(agent, STUDIO_CALLBACK_AUTH_REJECTED, 0) == 0
+        {
+            session.retry_connection_callback(&result);
         }
     }
 }
@@ -123,6 +130,10 @@ pub unsafe extern "C" fn pandar_plugin_shim_dispatch_offline_deliveries(
         if !session.studio_claim_delivery(work.ticket) {
             continue;
         }
+        let message_work = matches!(
+            work.kind,
+            STUDIO_WORK_CLOUD_MESSAGE | STUDIO_WORK_LOCAL_MESSAGE
+        );
         let delivered = match work.kind {
             STUDIO_WORK_CLOUD_MESSAGE | STUDIO_WORK_LOCAL_MESSAGE => (bridge.invoke_message)(
                 agent,
@@ -138,8 +149,19 @@ pub unsafe extern "C" fn pandar_plugin_shim_dispatch_offline_deliveries(
                 work.dev_id.as_ptr(),
                 work.dev_id.len(),
             ),
+            STUDIO_WORK_PRINTER_CONNECTED => {
+                (bridge.invoke_printer_connected)(agent, work.body.as_ptr(), work.body.len())
+            }
             _ => 0,
         };
-        session.studio_complete_delivery(work.ticket, delivered != 0);
+        let completed = session.studio_complete_delivery(work.ticket, delivered != 0);
+        if completed && message_work {
+            (bridge.invoke_firmware_status)(
+                agent,
+                work.kind,
+                work.dev_id.as_ptr(),
+                work.dev_id.len(),
+            );
+        }
     }
 }

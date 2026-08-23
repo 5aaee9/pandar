@@ -59,8 +59,15 @@
             fail(agent, destroy_agent, "authorized request admission changed the success path");
         }
 
+        const int version_callbacks_before_transition = version_callbacks.load();
         std::atomic<int> transition_callbacks{0};
         std::atomic<bool> transition_rejected{false};
+        std::atomic<int> transition_operation_rc{999};
+        std::atomic<int> transition_catalog_rc{999};
+        std::atomic<unsigned> transition_catalog_code{0};
+        std::atomic<int> transition_firmware_rc{999};
+        std::atomic<int> transition_subscribe_rc{999};
+        std::atomic<int> transition_version_rc{999};
         if (set_local_connect(agent, [&](int status, std::string, std::string) {
                 if (status != 2) return;
                 ++transition_callbacks;
@@ -79,18 +86,38 @@
                 const int version_rc = send_cloud(
                     agent, "studio-serial-1", get_version, 0, 0
                 );
+                transition_operation_rc = operation_rc;
+                transition_catalog_rc = catalog_rc;
+                transition_catalog_code = transition_code;
+                transition_firmware_rc = firmware_rc;
+                transition_subscribe_rc = subscribe_rc;
+                transition_version_rc = version_rc;
                 transition_rejected = operation_rc == kBambuInvalidResult &&
                     catalog_rc == kBambuInvalidResult && transition_code == 409 &&
                     contains(transition_body, "account_transition") &&
                     firmware_rc == kBambuInvalidResult && subscribe_rc == 0 &&
-                    version_rc == kBambuConnectFailed && version_callbacks.load() == 1;
+                    version_rc == kBambuConnectFailed &&
+                    version_callbacks.load() == version_callbacks_before_transition;
             }) != 0 ||
             connect_printer(
                 agent, "studio-serial-1", "127.0.0.1", "user", "pass", false
             ) != 0 ||
             change_user(agent, profile_b) != 0 ||
             transition_callbacks.load() != 1 || !transition_rejected.load()) {
-            fail(agent, destroy_agent, "account transition admitted a printer request");
+            fail(
+                agent,
+                destroy_agent,
+                "account transition admitted a printer request callbacks=" +
+                    std::to_string(transition_callbacks.load()) + " rejected=" +
+                    std::to_string(transition_rejected.load()) + " operation=" +
+                    std::to_string(transition_operation_rc.load()) + " catalog=" +
+                    std::to_string(transition_catalog_rc.load()) + " code=" +
+                    std::to_string(transition_catalog_code.load()) + " firmware=" +
+                    std::to_string(transition_firmware_rc.load()) + " subscribe=" +
+                    std::to_string(transition_subscribe_rc.load()) + " version_rc=" +
+                    std::to_string(transition_version_rc.load()) + " versions=" +
+                    std::to_string(version_callbacks.load())
+            );
         }
 
         destroy_agent(agent);

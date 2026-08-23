@@ -1,6 +1,6 @@
 use pandar_network_plugin::pandar_plugin_exchange_ticket;
 
-use super::{TOKEN, body, exchange_ticket, get_jobs, get_printers, one_shot_server};
+use super::{TOKEN, body, exchange_ticket, get_jobs, one_shot_server};
 
 #[test]
 fn invalid_hub_url_is_rejected_before_network() {
@@ -48,7 +48,7 @@ fn ticket_exchange_401_maps_to_invalid_plugin_ticket() {
 
 #[test]
 fn empty_auth_token_is_rejected_before_network() {
-    let result = get_printers(b"http://127.0.0.1:9", b"   ");
+    let result = get_jobs(b"http://127.0.0.1:9", b"   ");
 
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 400);
@@ -59,13 +59,13 @@ fn empty_auth_token_is_rejected_before_network() {
 fn authenticated_401_maps_to_invalid_auth_token() {
     let hub_url = one_shot_server(
         "GET",
-        "/api/v1/plugin/printers",
+        "/api/v1/plugin/jobs",
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 401 Unauthorized",
         r#"{"error":"secret token"}"#,
         None,
     );
-    let result = get_printers(hub_url.as_bytes(), TOKEN);
+    let result = get_jobs(hub_url.as_bytes(), TOKEN);
 
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 401);
@@ -76,13 +76,13 @@ fn authenticated_401_maps_to_invalid_auth_token() {
 fn forbidden_maps_to_plugin_forbidden() {
     let hub_url = one_shot_server(
         "GET",
-        "/api/v1/plugin/printers",
+        "/api/v1/plugin/jobs",
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 403 Forbidden",
         r#"{"error":"tenant xyz"}"#,
         None,
     );
-    let result = get_printers(hub_url.as_bytes(), TOKEN);
+    let result = get_jobs(hub_url.as_bytes(), TOKEN);
 
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 403);
@@ -93,13 +93,13 @@ fn forbidden_maps_to_plugin_forbidden() {
 fn not_found_without_stable_code_maps_to_printer_not_found() {
     let hub_url = one_shot_server(
         "GET",
-        "/api/v1/plugin/printers",
+        "/api/v1/plugin/jobs",
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 404 Not Found",
         r#"{"error":"missing /tmp/x"}"#,
         None,
     );
-    let result = get_printers(hub_url.as_bytes(), TOKEN);
+    let result = get_jobs(hub_url.as_bytes(), TOKEN);
 
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 404);
@@ -127,13 +127,13 @@ fn jobs_not_found_without_stable_code_maps_to_printer_not_found() {
 fn token_revoked_body_maps_to_plugin_token_revoked() {
     let hub_url = one_shot_server(
         "GET",
-        "/api/v1/plugin/printers",
+        "/api/v1/plugin/jobs",
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 400 Bad Request",
         r#"{"error":"token_revoked"}"#,
         None,
     );
-    let result = get_printers(hub_url.as_bytes(), TOKEN);
+    let result = get_jobs(hub_url.as_bytes(), TOKEN);
 
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 400);
@@ -144,13 +144,13 @@ fn token_revoked_body_maps_to_plugin_token_revoked() {
 fn unrecognized_server_error_maps_to_invalid_response() {
     let hub_url = one_shot_server(
         "GET",
-        "/api/v1/plugin/printers",
+        "/api/v1/plugin/jobs",
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 500 Internal Server Error",
         r#"{"error":"db password"}"#,
         None,
     );
-    let result = get_printers(hub_url.as_bytes(), TOKEN);
+    let result = get_jobs(hub_url.as_bytes(), TOKEN);
 
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 500);

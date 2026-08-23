@@ -21,19 +21,17 @@
     if (add_subscribe(agent, {"studio-serial-1"}) != 0) {
         fail(agent, destroy_agent, "cloud printer subscription failed");
     }
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
     const auto add_subscribe_messages = message_count.load() - before_messages;
     out.subscribe_messages = add_subscribe_messages;
-    if (!failure_mode && add_subscribe_messages == 0) {
-        fail(agent, destroy_agent, "cloud printer subscription did not emit Studio push status");
+    if (!failure_mode && add_subscribe_messages != 0) {
+        fail(agent, destroy_agent, "duplicate cloud subscription replayed status");
     }
     before_messages = message_count.load();
-    const auto heartbeat_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-    while (message_count.load() == before_messages && std::chrono::steady_clock::now() < heartbeat_deadline) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(2'300));
     out.heartbeat_messages = message_count.load() - before_messages;
-    if (!failure_mode && out.heartbeat_messages == 0) {
-        fail(agent, destroy_agent, "cloud printer subscription did not keep Studio push status alive");
+    if (!failure_mode && out.heartbeat_messages != 0) {
+        fail(agent, destroy_agent, "cloud printer subscription replayed stale status");
     }
     if (cloud_printer_connected_callbacks.load() != expected_cloud_connection_callbacks) {
         fail(
@@ -142,6 +140,7 @@
         }) != 0) {
             fail(agent, destroy_agent, "local message callback registration failed");
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
         const auto cloud_messages_before_pushall = message_count.load();
         const auto local_messages_before_pushall = local_message_count.load();
         if (send_cloud(agent, "studio-serial-1", R"({"pushing":{"command":"pushall","sequence_id":"20004","version":1,"push_target":1}})", 0, 0) != 0) {

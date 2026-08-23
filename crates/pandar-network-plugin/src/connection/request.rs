@@ -4,15 +4,16 @@ use anyhow::Context;
 
 use crate::runtime;
 
-use super::ConnectionSession;
-
-const REQUEST_TIMEOUT: Duration = Duration::from_millis(750);
+const HEALTH_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(super) struct RequestSnapshot {
     pub(super) hub_url: String,
-    pub(super) token: String,
     pub(super) generation: u64,
-    pub(super) printer_epoch: u64,
+    pub(super) account_epoch: u64,
+}
+
+pub(super) fn fetch_readiness(snapshot: &RequestSnapshot) -> anyhow::Result<HubResponse> {
+    fetch(snapshot, "/healthz", None).context("refresh Hub readiness")
 }
 
 pub(super) struct HubResponse {
@@ -20,60 +21,16 @@ pub(super) struct HubResponse {
     pub(super) body: String,
 }
 
-impl ConnectionSession {
-    pub(super) fn begin_printer_refresh(
-        &self,
-        expected: Option<(&str, &str, u64)>,
-        invalidate_freshness: bool,
-    ) -> Option<RequestSnapshot> {
-        let mut state = self.state.lock().expect("connection state");
-        if expected.is_some_and(|(hub_url, token, account_epoch)| {
-            state.hub_url != hub_url || state.token != token || state.account_epoch != account_epoch
-        }) {
-            return None;
-        }
-        state.capture_online();
-        state.printer_epoch = state.printer_epoch.wrapping_add(1);
-        if invalidate_freshness {
-            state.printers_fresh = false;
-        }
-        Some(RequestSnapshot {
-            hub_url: state.hub_url.clone(),
-            token: state.token.clone(),
-            generation: state.generation,
-            printer_epoch: state.printer_epoch,
-        })
-    }
-}
-
-pub(super) fn fetch_readiness(snapshot: &RequestSnapshot) -> anyhow::Result<HubResponse> {
-    fetch(snapshot, "/healthz", None, || {}).context("refresh Hub readiness")
-}
-
-pub(super) fn fetch_printers(
-    snapshot: &RequestSnapshot,
-    reserve_observation: impl FnOnce(),
-) -> anyhow::Result<HubResponse> {
-    fetch(
-        snapshot,
-        "/api/v1/plugin/printers",
-        Some(&snapshot.token),
-        reserve_observation,
-    )
-    .context("refresh Hub printer status")
-}
-
 fn fetch(
     snapshot: &RequestSnapshot,
     path: &str,
     token: Option<&str>,
-    before_send: impl FnOnce(),
 ) -> anyhow::Result<HubResponse> {
     runtime().block_on(async move {
-        tokio::time::timeout(REQUEST_TIMEOUT, async move {
+        tokio::time::timeout(HEALTH_REQUEST_TIMEOUT, async move {
             let client = reqwest::Client::builder()
-                .connect_timeout(REQUEST_TIMEOUT)
-                .timeout(REQUEST_TIMEOUT)
+                .connect_timeout(HEALTH_REQUEST_TIMEOUT)
+                .timeout(HEALTH_REQUEST_TIMEOUT)
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .context("build Hub connection client")?;
@@ -82,7 +39,6 @@ fn fetch(
                 Some(token) => request.bearer_auth(token),
                 None => request,
             };
-            before_send();
             let response = request
                 .send()
                 .await
@@ -97,53 +53,4 @@ fn fetch(
         .await
         .context("Hub connection request timed out")?
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn session_with_fresh_cache() -> ConnectionSession {
-        let session = ConnectionSession::new("http://127.0.0.1:1".into(), "token".into());
-        session
-            .state
-            .lock()
-            .expect("connection state")
-            .printers_fresh = true;
-        session
-    }
-
-    #[test]
-    fn background_refresh_preserves_last_confirmed_cache_while_in_flight() {
-        let session = session_with_fresh_cache();
-
-        session
-            .begin_printer_refresh(None, false)
-            .expect("background refresh snapshot");
-
-        assert!(
-            session
-                .state
-                .lock()
-                .expect("connection state")
-                .printers_fresh
-        );
-    }
-
-    #[test]
-    fn foreground_refresh_invalidates_cache_while_in_flight() {
-        let session = session_with_fresh_cache();
-
-        session
-            .begin_printer_refresh(None, true)
-            .expect("foreground refresh snapshot");
-
-        assert!(
-            !session
-                .state
-                .lock()
-                .expect("connection state")
-                .printers_fresh
-        );
-    }
 }

@@ -13,8 +13,7 @@ mod http_boundary_printer_operations;
 
 use pandar_network_plugin::{
     PluginHttpResult, pandar_plugin_exchange_ticket, pandar_plugin_free_with_capacity,
-    pandar_plugin_get_jobs, pandar_plugin_get_printers, pandar_plugin_submit_print,
-    pandar_plugin_submit_printer_operation,
+    pandar_plugin_get_jobs, pandar_plugin_submit_print, pandar_plugin_submit_printer_operation,
 };
 use std::{fs, io::Write, net::TcpListener, path::Path, thread};
 use support::{
@@ -88,10 +87,6 @@ fn exchange_ticket(hub_url: &[u8], ticket: &[u8]) -> PluginHttpResult {
         ticket.as_ptr(),
         ticket.len(),
     )
-}
-
-fn get_printers(hub_url: &[u8], token: &[u8]) -> PluginHttpResult {
-    pandar_plugin_get_printers(hub_url.as_ptr(), hub_url.len(), token.as_ptr(), token.len())
 }
 
 fn get_jobs(hub_url: &[u8], token: &[u8]) -> PluginHttpResult {

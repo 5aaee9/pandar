@@ -117,6 +117,7 @@ mod epoch;
 mod grpc_events;
 mod replication;
 mod shape;
+mod studio;
 mod tickets;
 
 fn test_audit_actor() -> crate::repositories::AuditActor {

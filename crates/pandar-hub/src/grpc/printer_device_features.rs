@@ -30,7 +30,7 @@ pub(super) async fn handle_device_features_snapshot(
     if !state.sessions().is_current(agent_id, token).await {
         return Ok(());
     }
-    state
+    let outcome = state
         .printers()
         .update_device_features_if_current(
             tenant_id,
@@ -41,6 +41,11 @@ pub(super) async fn handle_device_features_snapshot(
         )
         .await
         .map_err(repository_status)?;
+    if outcome == crate::repositories::DeviceFeatureUpdateOutcome::Updated {
+        state
+            .publish_printer_projection_change_for_serial(tenant_id, &serial)
+            .await;
+    }
 
     Ok(())
 }

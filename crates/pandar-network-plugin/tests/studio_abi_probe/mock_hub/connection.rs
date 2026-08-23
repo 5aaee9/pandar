@@ -1,49 +1,58 @@
+use super::{
+    Incoming, next_incoming, next_stream,
+    responses::{filament_switch_printers_response, snapshot_frames},
+    server::assert_printer_events_upgrade,
+    snapshot_script,
+    transport::{assert_request_with_token, write_response},
+};
 use std::{
     fs,
     net::TcpListener,
     path::Path,
     sync::atomic::{AtomicBool, Ordering},
     thread,
-    time::Instant,
-};
-
-use super::{
-    next_request,
-    responses::{PRINTERS_RESPONSE, filament_switch_printers_response},
-    transport::{assert_request, assert_request_with_token, read_request_until, write_response},
+    time::{Duration, Instant},
 };
 
 pub(super) fn serve_connection_readiness(
     listener: &TcpListener,
     stop: &AtomicBool,
     deadline: Instant,
+    race_directory: &Path,
 ) {
-    let responses = [
-        (
-            "HTTP/1.1 503 Service Unavailable",
-            r#"{"status":"not_ready","checks":{}}"#,
-        ),
-        (
-            "HTTP/1.1 503 Service Unavailable",
-            r#"{"status":"not_ready","checks":{}}"#,
-        ),
-        ("HTTP/1.1 200 OK", r#"{"status":"ok","checks":{}}"#),
-        ("HTTP/1.1 200 OK", r#"{"status":"ok","checks":{}}"#),
-        ("HTTP/1.1 200 OK", r#"{"status":"ok"#),
-        (
-            "HTTP/1.1 503 Service Unavailable",
-            r#"{"status":"not_ready","checks":{}}"#,
-        ),
-        ("HTTP/1.1 200 OK", r#"{"status":"ok","checks":{}}"#),
-    ];
-    for (status, body) in responses {
-        let Some((mut stream, request)) =
-            read_request_until(listener, stop, deadline, "connection readiness request")
-        else {
-            return;
-        };
-        assert_request(&request, "GET", "/healthz", false);
-        write_response(&mut stream, status, body);
+    let upgrade = next_stream(listener, stop, deadline);
+    assert_request_with_token(
+        &upgrade.request,
+        "GET",
+        "/api/v1/tenants/tenant-1/printer-events?projection=studio&version=1",
+        Some("probe-token"),
+    );
+    let frames = upgrade.serve();
+    let release = race_directory.join("stream-release-snapshot");
+    while !release.exists() && !stop.load(Ordering::Acquire) && Instant::now() < deadline {
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                stream.set_nonblocking(false).unwrap();
+                let request = crate::support::read_http_request_with_timeout(
+                    &mut stream,
+                    Some(Duration::from_secs(5)),
+                );
+                assert_eq!(request.lines().next(), Some("GET /healthz HTTP/1.1"));
+                write_response(
+                    &mut stream,
+                    "HTTP/1.1 200 OK",
+                    r#"{"status":"ok","checks":{}}"#,
+                );
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("readiness mock accept failed: {error}"),
+        }
+    }
+    assert!(release.exists(), "readiness snapshot was not released");
+    for frame in snapshot_frames(&filament_switch_printers_response()) {
+        frames.send(frame).expect("serve readiness snapshot");
     }
 }
 
@@ -52,64 +61,60 @@ pub(super) fn serve_no_auth_recovery(
     stop: &AtomicBool,
     deadline: Instant,
     race_directory: &Path,
-    zero_touch: bool,
+    _zero_touch: bool,
     allow_session_delete: bool,
 ) {
     let mut no_auth_posts = 0;
     let mut issued_tokens = 0;
     let mut audit_records = 0;
-    let mut printer_reads = 0;
+    let mut stream_upgrades = 0;
 
     loop {
-        let Some((mut stream, request)) = super::transport::read_request_until(
-            listener,
-            stop,
-            deadline,
-            "no-auth recovery request",
-        ) else {
-            return;
-        };
-        let line = request.lines().next().unwrap_or_default();
-        match line {
-            "POST /api/v1/plugin/no-auth-session HTTP/1.1" => {
-                no_auth_posts += 1;
-                issued_tokens += 1;
-                audit_records += 1;
-                write_response(
-                    &mut stream,
-                    "HTTP/1.1 200 OK",
-                    r#"{"token":"recovered-token","profile":{"token":"recovered-token","user_id":"recovered-user","user_name":"Recovered User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
-                );
-            }
-            "GET /api/v1/plugin/printers HTTP/1.1" => {
+        let incoming = super::next_incoming(listener, stop, deadline);
+        match incoming {
+            super::Incoming::Stream(upgrade) => {
                 assert_request_with_token(
-                    &request,
+                    &upgrade.request,
                     "GET",
-                    "/api/v1/plugin/printers",
+                    "/api/v1/tenants/tenant-1/printer-events?projection=studio&version=1",
                     Some("recovered-token"),
                 );
-                printer_reads += 1;
-                write_response(
-                    &mut stream,
-                    "HTTP/1.1 200 OK",
-                    r#"{"message":"success","devices":[]}"#,
-                );
-                if zero_touch {
-                    break;
+                stream_upgrades += 1;
+                let frames = upgrade.serve();
+                for frame in snapshot_script(&[]) {
+                    frames.send(frame).expect("serve no-auth recovery snapshot");
                 }
             }
-            "GET /healthz HTTP/1.1" => {
-                write_response(
-                    &mut stream,
-                    "HTTP/1.1 200 OK",
-                    r#"{"status":"ok","checks":{}}"#,
-                );
-                break;
+            super::Incoming::Http(mut stream, request) => {
+                let line = request.lines().next().unwrap_or_default();
+                match line {
+                    "POST /api/v1/plugin/no-auth-session HTTP/1.1" => {
+                        no_auth_posts += 1;
+                        issued_tokens += 1;
+                        audit_records += 1;
+                        write_response(
+                            &mut stream,
+                            "HTTP/1.1 200 OK",
+                            r#"{"token":"recovered-token","profile":{"token":"recovered-token","user_id":"recovered-user","user_name":"Recovered User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
+                        );
+                    }
+                    "GET /healthz HTTP/1.1" => {
+                        write_response(
+                            &mut stream,
+                            "HTTP/1.1 200 OK",
+                            r#"{"status":"ok","checks":{}}"#,
+                        );
+                        break;
+                    }
+                    "DELETE /api/v1/plugin/session HTTP/1.1" if allow_session_delete => {
+                        write_response(&mut stream, "HTTP/1.1 204 No Content", "");
+                    }
+                    _ => panic!("unexpected no-auth recovery request: {line}"),
+                }
             }
-            "DELETE /api/v1/plugin/session HTTP/1.1" if allow_session_delete => {
-                write_response(&mut stream, "HTTP/1.1 204 No Content", "");
-            }
-            _ => panic!("unexpected no-auth recovery request: {line}"),
+        }
+        if stream_upgrades > 0 {
+            break;
         }
     }
 
@@ -123,13 +128,13 @@ pub(super) fn serve_no_auth_recovery(
         "no-auth recovery wrote duplicate audit records"
     );
     assert_eq!(
-        printer_reads, 1,
-        "no-auth recovery repeated the initial printer refresh"
+        stream_upgrades, 1,
+        "no-auth recovery repeated the printer-events stream dial"
     );
     fs::write(
         race_directory.join("no-auth-recovery-counts"),
         format!(
-            "posts={no_auth_posts} tokens={issued_tokens} audits={audit_records} printers={printer_reads}"
+            "posts={no_auth_posts} tokens={issued_tokens} audits={audit_records} upgrades={stream_upgrades}"
         ),
     )
     .unwrap();
@@ -139,93 +144,147 @@ pub(super) fn serve_background_timeout(
     listener: &TcpListener,
     stop: &AtomicBool,
     deadline: Instant,
+    race_directory: &Path,
 ) {
-    let (mut stream, request) =
-        next_request(listener, stop, deadline, "GET", "/api/v1/plugin/printers");
-    assert_request_with_token(
-        &request,
-        "GET",
-        "/api/v1/plugin/printers",
-        Some("probe-token"),
-    );
-    write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
-
-    let (mut stream, request) = next_request(listener, stop, deadline, "GET", "/healthz");
-    assert_request(&request, "GET", "/healthz", false);
-    write_response(
-        &mut stream,
-        "HTTP/1.1 200 OK",
-        r#"{"status":"ok","checks":{}}"#,
-    );
-
-    let (_stream, request) =
-        next_request(listener, stop, deadline, "GET", "/api/v1/plugin/printers");
-    assert_request_with_token(
-        &request,
-        "GET",
-        "/api/v1/plugin/printers",
-        Some("probe-token"),
-    );
-    thread::sleep(std::time::Duration::from_millis(1_100));
+    let upgrade = next_stream(listener, stop, deadline);
+    assert_printer_events_upgrade(&upgrade.request);
+    let frames = upgrade.serve();
+    for frame in snapshot_frames(&filament_switch_printers_response()) {
+        frames
+            .send(frame)
+            .expect("serve background timeout snapshot");
+    }
+    wait_for_marker(stop, race_directory, "stream-drop-now");
+    frames.send("@close".to_owned()).expect("drop stream");
+    let upgrade = next_stream(listener, stop, deadline);
+    assert_printer_events_upgrade(&upgrade.request);
+    let frames = upgrade.serve();
+    for frame in snapshot_frames(&filament_switch_printers_response()) {
+        frames.send(frame).expect("serve redialed snapshot");
+    }
+    std::fs::write(race_directory.join("stream-redial-served"), "served").unwrap();
+    wait_for_marker(stop, race_directory, "stream-go-dark");
+    frames.send("@close".to_owned()).expect("go dark");
+    loop {
+        if stop.load(std::sync::atomic::Ordering::Acquire) {
+            return;
+        }
+        match next_incoming(listener, stop, deadline) {
+            Incoming::Stream(upgrade) => upgrade.reject(
+                "HTTP/1.1 503 Service Unavailable",
+                r#"{"error":"stream_unavailable"}"#,
+            ),
+            Incoming::Http(mut stream, request) => {
+                if request.lines().next() == Some("GET /healthz HTTP/1.1") {
+                    write_response(
+                        &mut stream,
+                        "HTTP/1.1 503 Service Unavailable",
+                        r#"{"status":"not_ready","checks":{}}"#,
+                    );
+                } else {
+                    panic!("unexpected background-timeout request: {request}");
+                }
+            }
+        }
+    }
 }
 
-pub(super) fn serve_auth_rejected(listener: &TcpListener, stop: &AtomicBool, deadline: Instant) {
-    let (mut stream, request) =
-        next_request(listener, stop, deadline, "GET", "/api/v1/plugin/printers");
-    assert_request_with_token(
-        &request,
-        "GET",
-        "/api/v1/plugin/printers",
-        Some("probe-token"),
-    );
-    write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
+pub(super) fn serve_stream_unavailable(
+    listener: &TcpListener,
+    stop: &AtomicBool,
+    deadline: Instant,
+    race_directory: &Path,
+) {
+    let upgrade = next_stream(listener, stop, deadline);
+    assert_printer_events_upgrade(&upgrade.request);
+    let frames = upgrade.serve();
+    for frame in snapshot_frames(&filament_switch_printers_response()) {
+        frames
+            .send(frame)
+            .expect("serve stream-unavailable snapshot");
+    }
+    wait_for_marker(stop, race_directory, "stream-go-dark");
+    frames
+        .send("@close".to_owned())
+        .expect("close unhealthy stream");
 
-    let (mut stream, request) = next_request(listener, stop, deadline, "GET", "/healthz");
-    assert_request(&request, "GET", "/healthz", false);
-    write_response(
-        &mut stream,
-        "HTTP/1.1 200 OK",
-        r#"{"status":"ok","checks":{}}"#,
-    );
+    loop {
+        match next_incoming(listener, stop, deadline) {
+            Incoming::Stream(upgrade) => {
+                assert_printer_events_upgrade(&upgrade.request);
+                if race_directory.join("stream-healthy-recover").exists() {
+                    let frames = upgrade.serve();
+                    for frame in snapshot_frames(&filament_switch_printers_response()) {
+                        frames.send(frame).expect("serve healthy stream recovery");
+                    }
+                    std::fs::write(
+                        race_directory.join("stream-healthy-recovery-served"),
+                        "served",
+                    )
+                    .unwrap();
+                    return;
+                }
+                upgrade.reject(
+                    "HTTP/1.1 503 Service Unavailable",
+                    r#"{"error":"stream_unavailable"}"#,
+                );
+            }
+            Incoming::Http(mut stream, request) => {
+                if request.lines().next() == Some("GET /healthz HTTP/1.1") {
+                    thread::sleep(Duration::from_millis(1_100));
+                    write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        r#"{"status":"ok","checks":{}}"#,
+                    );
+                } else {
+                    panic!("unexpected stream-unavailable request: {request}");
+                }
+            }
+        }
+    }
+}
 
-    let (mut stream, request) =
-        next_request(listener, stop, deadline, "GET", "/api/v1/plugin/printers");
-    assert_request_with_token(
-        &request,
-        "GET",
-        "/api/v1/plugin/printers",
-        Some("probe-token"),
-    );
-    write_response(
-        &mut stream,
+pub(super) fn serve_auth_rejected(
+    listener: &TcpListener,
+    stop: &AtomicBool,
+    deadline: Instant,
+    race_directory: &Path,
+) {
+    let upgrade = next_stream(listener, stop, deadline);
+    assert_printer_events_upgrade(&upgrade.request);
+    let frames = upgrade.serve();
+    for frame in snapshot_frames(&filament_switch_printers_response()) {
+        frames.send(frame).expect("serve auth-rejected snapshot");
+    }
+    wait_for_marker(stop, race_directory, "stream-drop-now");
+    frames.send("@close".to_owned()).expect("drop stream");
+
+    let upgrade = next_stream(listener, stop, deadline);
+    assert_printer_events_upgrade(&upgrade.request);
+    upgrade.reject(
         "HTTP/1.1 401 Unauthorized",
         r#"{"error":"invalid_auth_token"}"#,
     );
+    std::fs::write(race_directory.join("stream-reject-1"), "rejected").unwrap();
 
-    for index in 0..2 {
-        let Some((mut stream, request)) = read_request_until(
-            listener,
-            stop,
-            deadline,
-            "authenticated rejection printer refresh",
-        ) else {
-            assert_ne!(
-                index, 0,
-                "repeated authenticated rejection refresh was missing"
-            );
+    wait_for_marker(stop, race_directory, "stream-retry-403");
+    let upgrade = next_stream(listener, stop, deadline);
+    assert_printer_events_upgrade(&upgrade.request);
+    upgrade.reject(
+        "HTTP/1.1 403 Forbidden",
+        r#"{"error":"raw-forbidden-message","token":"secret"}"#,
+    );
+    std::fs::write(race_directory.join("stream-reject-2"), "rejected").unwrap();
+}
+
+fn wait_for_marker(stop: &AtomicBool, directory: &Path, name: &str) {
+    let marker = directory.join(name);
+    while !marker.exists() {
+        if stop.load(Ordering::Acquire) {
             return;
-        };
-        assert_request_with_token(
-            &request,
-            "GET",
-            "/api/v1/plugin/printers",
-            Some("probe-token"),
-        );
-        write_response(
-            &mut stream,
-            "HTTP/1.1 403 Forbidden",
-            r#"{"error":"invalid_auth_token"}"#,
-        );
+        }
+        thread::sleep(Duration::from_millis(25));
     }
 }
 
@@ -233,23 +292,21 @@ pub(super) fn serve_account_transition(
     listener: &TcpListener,
     stop: &AtomicBool,
     deadline: Instant,
+    _race_directory: &Path,
 ) {
-    while !stop.load(Ordering::Acquire) {
-        let Some((mut stream, request)) = read_request_until(
-            listener,
-            stop,
-            deadline,
-            "account transition printer refresh",
-        ) else {
-            return;
-        };
-        assert_request_with_token(
-            &request,
-            "GET",
-            "/api/v1/plugin/printers",
-            Some("probe-token"),
+    for _ in 0..2 {
+        let upgrade = next_stream(listener, stop, deadline);
+        assert!(
+            upgrade
+                .request
+                .contains("/printer-events?projection=studio&version=1")
         );
-        write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
+        let frames = upgrade.serve();
+        for frame in snapshot_frames(&filament_switch_printers_response()) {
+            frames
+                .send(frame)
+                .expect("serve account transition snapshot");
+        }
     }
 }
 
@@ -257,57 +314,78 @@ pub(super) fn serve_token_rotation(
     listener: &TcpListener,
     stop: &AtomicBool,
     deadline: Instant,
-    offline_retry: bool,
+    race_directory: &Path,
+    _offline_retry: bool,
 ) {
-    let mut steps = vec![
-        ("GET", "/api/v1/plugin/printers", Some("stale-token")),
-        ("POST", "/api/v1/plugin/no-auth-session", None),
-        ("GET", "/api/v1/plugin/printers", Some("probe-token")),
-        ("GET", "/api/v1/plugin/printers", Some("probe-token")),
-        ("POST", "/api/v1/plugin/no-auth-session", None),
-        ("GET", "/api/v1/plugin/printers", Some("rotated-token")),
-    ];
-    steps.push(("GET", "/api/v1/plugin/printers", Some("rotated-token")));
-    for (index, (method, path, token)) in steps.into_iter().enumerate() {
-        let (mut stream, request) = next_request(listener, stop, deadline, method, path);
-        assert_request_with_token(&request, method, path, token);
-        match index {
-            0 | 3 => write_response(
-                &mut stream,
-                "HTTP/1.1 401 Unauthorized",
-                r#"{"error":"token_expired"}"#,
-            ),
-            1 => write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
-            ),
-            4 => write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                r#"{"token":"rotated-token","profile":{"token":"rotated-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
-            ),
-            2 => write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                &filament_switch_printers_response(),
-            ),
-            5 | 6 if offline_retry => write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                r#"{"message":"success","devices":[]}"#,
-            ),
-            5 => write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                &filament_switch_printers_response(),
-            ),
-            6 => write_response(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                r#"{"message":"success","devices":["invalid"]}"#,
-            ),
-            _ => unreachable!(),
+    let mut stale_rejected = false;
+    let mut rotated_served = false;
+    while !rotated_served {
+        let upgrade = next_stream(listener, stop, deadline);
+        if upgrade
+            .request
+            .contains("authorization: Bearer stale-token")
+        {
+            if stale_rejected {
+                continue;
+            }
+            stale_rejected = true;
+            upgrade.reject("HTTP/1.1 401 Unauthorized", r#"{"error":"token_expired"}"#);
+        } else if upgrade
+            .request
+            .contains("authorization: Bearer probe-token")
+        {
+            let frames = upgrade.serve();
+            for frame in snapshot_frames(&filament_switch_printers_response()) {
+                frames.send(frame).expect("serve probe-token snapshot");
+            }
+        } else {
+            assert!(
+                upgrade
+                    .request
+                    .contains("authorization: Bearer rotated-token")
+            );
+            let frames = upgrade.serve();
+            for frame in snapshot_frames(&filament_switch_printers_response()) {
+                frames.send(frame).expect("serve rotated snapshot");
+            }
+            std::fs::write(race_directory.join("rotation-rotated-served"), "served").unwrap();
+            let arm = race_directory.join("rotation-invalid-arm");
+            thread::spawn(move || {
+                while !arm.exists() {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                frames
+                    .send(
+                        r#"{"type":"printer_removed","dev_id":"studio-serial-1","pandar_printer_id":"printer-1"}"#
+                            .to_owned(),
+                    )
+                    .expect("arm invalid rotated status");
+            });
+            rotated_served = true;
+        }
+    }
+
+    while !stop.load(Ordering::Acquire) {
+        match next_incoming(listener, stop, deadline) {
+            Incoming::Stream(upgrade) => {
+                let frames = upgrade.serve();
+                for frame in snapshot_frames(&filament_switch_printers_response()) {
+                    frames
+                        .send(frame)
+                        .expect("serve trailing rotation snapshot");
+                }
+            }
+            Incoming::Http(mut stream, request) => {
+                if request.lines().next() == Some("GET /healthz HTTP/1.1") {
+                    write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        r#"{"status":"ok","checks":{}}"#,
+                    );
+                } else if !super::firmware_compat::try_respond(&mut stream, &request) {
+                    panic!("unexpected token rotation request: {request}");
+                }
+            }
         }
     }
 }

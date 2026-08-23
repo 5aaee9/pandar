@@ -1,11 +1,9 @@
+mod work;
+
 use super::*;
 use crate::connection::{AuthDisposition, ConnectionState, Reachability};
 
 const ABI_CONNECT_FAILED: i32 = -2;
-const CLOUD_OFFLINE_WORK: i32 = 1;
-const LOCAL_OFFLINE_WORK: i32 = 2;
-const LOCAL_LOST_WORK: i32 = 3;
-
 impl PluginStudioDeliveryResult {
     fn unavailable() -> Self {
         Self {
@@ -34,7 +32,7 @@ impl StudioState {
             DeliveryKind::LocalConnect { generation }
             | DeliveryKind::LocalOffline { generation }
             | DeliveryKind::LocalLost { generation } => generation,
-            DeliveryKind::ConnectedSignal { .. } | DeliveryKind::CloudOffline => 0,
+            DeliveryKind::ConnectedSignal { .. } | DeliveryKind::CloudOffline { .. } => 0,
         };
         self.issued.insert(
             self.next_ticket,
@@ -224,8 +222,8 @@ impl ConnectionState {
                     && self.studio.local.target.as_deref() == Some(delivery.dev_id.as_str())
                     && self.studio.local.generation == generation
             }
-            DeliveryKind::CloudOffline => {
-                !self.studio_eligible(&delivery.dev_id)
+            DeliveryKind::CloudOffline { forced } => {
+                (forced || !self.studio_eligible(&delivery.dev_id))
                     && self.studio.listeners.cloud_message
                     && self.studio.cloud_target(&delivery.dev_id)
             }
@@ -305,67 +303,5 @@ impl ConnectionState {
         delivery.claimed = true;
         self.studio.issued.insert(ticket, delivery);
         true
-    }
-
-    pub(super) fn take_work(&mut self) -> Vec<StudioWork> {
-        let pending = std::mem::take(&mut self.studio.pending_offline);
-        let body = disconnect_json();
-        let mut work = Vec::new();
-        for (dev_id, offline) in pending {
-            if offline.cloud_allowed
-                && self.studio.listeners.cloud_message
-                && self.studio.cloud_target(&dev_id)
-            {
-                let delivery = self.studio.issue(
-                    DeliveryKind::CloudOffline,
-                    dev_id.clone(),
-                    self.account_epoch,
-                    self.printer_epoch,
-                );
-                work.push(StudioWork {
-                    kind: CLOUD_OFFLINE_WORK,
-                    state: 0,
-                    ticket: delivery.ticket,
-                    generation: 0,
-                    dev_id: dev_id.clone(),
-                    body: body.clone(),
-                });
-            }
-            if let Some(generation) = offline.local_generation {
-                if self.studio.listeners.local_message {
-                    let delivery = self.studio.issue(
-                        DeliveryKind::LocalOffline { generation },
-                        dev_id.clone(),
-                        self.account_epoch,
-                        self.printer_epoch,
-                    );
-                    work.push(StudioWork {
-                        kind: LOCAL_OFFLINE_WORK,
-                        state: 0,
-                        ticket: delivery.ticket,
-                        generation,
-                        dev_id: dev_id.clone(),
-                        body: body.clone(),
-                    });
-                }
-                if self.studio.listeners.local_connected {
-                    let delivery = self.studio.issue(
-                        DeliveryKind::LocalLost { generation },
-                        dev_id.clone(),
-                        self.account_epoch,
-                        self.printer_epoch,
-                    );
-                    work.push(StudioWork {
-                        kind: LOCAL_LOST_WORK,
-                        state: 2,
-                        ticket: delivery.ticket,
-                        generation,
-                        dev_id,
-                        body: body.clone(),
-                    });
-                }
-            }
-        }
-        work
     }
 }

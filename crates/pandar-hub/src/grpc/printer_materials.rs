@@ -164,6 +164,7 @@ pub async fn handle_materials_snapshot(
     else {
         return Ok(());
     };
+    let printer_serial = printer.printer.serial_number.clone();
     let materials = state
         .materials()
         .latest_for_printer(tenant_id, &printer_id)
@@ -178,6 +179,9 @@ pub async fn handle_materials_snapshot(
                 printer: Box::new(printer_event_printer(printer, materials)),
             },
         )
+        .await;
+    state
+        .publish_printer_projection_change(tenant_id, &printer_id, &printer_serial)
         .await;
     Ok(())
 }

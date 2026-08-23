@@ -263,6 +263,8 @@ impl AppState {
                 "agent session closed before printer operation completed",
             )
             .await;
+            self.publish_agent_printers_projection_changes(tenant_id, agent_id)
+                .await;
         }
         if let Err(err) = self
             .control_plane()

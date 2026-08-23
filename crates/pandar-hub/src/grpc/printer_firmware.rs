@@ -64,6 +64,11 @@ pub(super) async fn handle_invalidated(
         "firmware observation generation changed after command dispatch",
     )
     .await;
+    if outcome == PrinterFirmwareUpdateOutcome::Applied {
+        state
+            .publish_printer_projection_change_for_serial(tenant_id, &serial)
+            .await;
+    }
     Ok(())
 }
 
@@ -95,7 +100,7 @@ pub(super) async fn handle_modules_snapshot(
         return Ok(());
     }
     redact_modules_snapshot(state, tenant_id, &serial, &mut modules);
-    state
+    let outcome = state
         .printers()
         .replace_modules_if_current(
             tenant_id,
@@ -108,6 +113,11 @@ pub(super) async fn handle_modules_snapshot(
         )
         .await
         .map_err(repository_status)?;
+    if outcome == PrinterFirmwareUpdateOutcome::Applied {
+        state
+            .publish_printer_projection_change_for_serial(tenant_id, &serial)
+            .await;
+    }
     Ok(())
 }
 
@@ -139,7 +149,7 @@ pub(super) async fn handle_status_snapshot(
     if let Some(upgrade_state) = &mut upgrade_state {
         redact_upgrade_state(upgrade_state, &mut redact);
     }
-    state
+    let outcome = state
         .printers()
         .replace_status_if_current(
             tenant_id,
@@ -153,6 +163,11 @@ pub(super) async fn handle_status_snapshot(
         )
         .await
         .map_err(repository_status)?;
+    if outcome == PrinterFirmwareUpdateOutcome::Applied {
+        state
+            .publish_printer_projection_change_for_serial(tenant_id, &serial)
+            .await;
+    }
     Ok(())
 }
 

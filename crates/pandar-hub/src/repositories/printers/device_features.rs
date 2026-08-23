@@ -16,6 +16,7 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceFeatureUpdateOutcome {
     Updated,
+    Unchanged,
     StaleOrMissing,
 }
 
@@ -90,6 +91,20 @@ impl PrinterRepository {
             return Ok(DeviceFeatureUpdateOutcome::StaleOrMissing);
         };
 
+        let unchanged = match features {
+            Some(features) => {
+                printer.bambu_fun2_bits.as_deref() == Some(features.to_hex().as_str())
+                    && printer.bambu_fun2_session_id.as_deref() == Some(session_id)
+            }
+            None => printer.bambu_fun2_session_id.is_none(),
+        };
+        if unchanged {
+            transaction
+                .commit()
+                .await
+                .context("failed to commit unchanged secondary Bambu device feature update")?;
+            return Ok(DeviceFeatureUpdateOutcome::Unchanged);
+        }
         let mut active = printer.into_active_model();
         match features {
             Some(features) => {
@@ -144,6 +159,20 @@ impl PrinterRepository {
             return Ok(DeviceFeatureUpdateOutcome::StaleOrMissing);
         };
 
+        let unchanged = match features {
+            Some(features) => {
+                printer.bambu_fun_bits.as_deref() == Some(features.to_hex().as_str())
+                    && printer.bambu_fun_session_id.as_deref() == Some(session_id)
+            }
+            None => printer.bambu_fun_session_id.is_none(),
+        };
+        if unchanged {
+            transaction
+                .commit()
+                .await
+                .context("failed to commit unchanged Bambu device feature update")?;
+            return Ok(DeviceFeatureUpdateOutcome::Unchanged);
+        }
         let mut active = printer.into_active_model();
         match features {
             Some(features) => {

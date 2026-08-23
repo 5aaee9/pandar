@@ -128,16 +128,6 @@ bool emit_cloud_printer_connected_status(Agent* agent, const std::string& dev_id
     return emit_printer_status(agent, dev_id, MessageTunnel::Cloud);
 }
 
-void emit_cloud_printer_connected_statuses(
-    Agent* agent,
-    const std::vector<std::string>& dev_ids
-) {
-    for (const auto& dev_id : dev_ids) {
-        if (agent->status_thread_stop.load()) return;
-        emit_cloud_printer_connected_status(agent, dev_id);
-    }
-}
-
 bool handle_studio_status(
     Agent* agent,
     int32_t kind,
@@ -158,7 +148,6 @@ bool handle_studio_status(
         );
     }
     if (kind == kStudioMessagePushAll) {
-        if (!refresh_printer_status_cache(agent)) return false;
         if (tunnel == MessageTunnel::Cloud) {
             emit_cloud_printer_connected_signal(agent, dev_id);
         }

@@ -435,8 +435,20 @@ int main(int argc, char** argv) {
         : mode == "empty"
             ? std::vector<std::string>{}
         : std::vector<std::string>{"logout"};
+    const auto order_deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (events.size() < expected_events.size() &&
+           std::chrono::steady_clock::now() < order_deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    }
     if (events != expected_events) {
-        fail("logout callbacks were missing or out of order");
+        fail("logout callbacks were missing or out of order; got=" +
+            std::to_string(events.size()) + ":" +
+            [&]() {
+                std::string joined;
+                for (const auto& e : events) joined += e + ",";
+                return joined;
+            }());
     }
     if (mode == "failure" &&
         (http_code != 500 || http_body != R"({"error":"invalid_response"})")) {

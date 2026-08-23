@@ -95,10 +95,12 @@
     }) != 0) {
         fail(agent, destroy_agent, "server connected callback registration failed");
     }
-    const int expected_server_connected_callbacks = failure_mode ? 1 : 0;
-    if (connect_server(agent) != 0 ||
+    const int expected_server_connected_callbacks = 1;
+    if (!wait_until([&] {
+            return server_connected_callbacks.load() == expected_server_connected_callbacks;
+        }) || connect_server(agent) != 0 ||
         server_connected_callbacks.load() != expected_server_connected_callbacks) {
-        fail(agent, destroy_agent, "server connect replayed an already observed connection transition");
+        fail(agent, destroy_agent, "server readiness callback was missing or repeated");
     }
     if (connect_server(agent) != 0 ||
         server_connected_callbacks.load() != expected_server_connected_callbacks) {
@@ -279,27 +281,51 @@
     }
 
     int before_messages = message_count.load();
+    const int selected_pushall_rc = failure_mode ? 0 : send_cloud(
+        agent,
+        "studio-serial-1",
+        R"({"pushing":{"command":"pushall","sequence_id":"20000","version":1,"push_target":1}})",
+        0,
+        0
+    );
     if (!failure_mode &&
-        (send_cloud(agent, "studio-serial-1", R"({"pushing":{"command":"pushall","sequence_id":"20000","version":1,"push_target":1}})", 0, 0) != 0 ||
-         cloud_printer_connected_callbacks.load() != 1 || message_count.load() == before_messages)) {
-        fail(agent, destroy_agent, "selected cloud status request did not reach Studio");
+        (selected_pushall_rc != 0 || cloud_printer_connected_callbacks.load() < 1 ||
+         message_count.load() == before_messages)) {
+        fail(
+            agent,
+            destroy_agent,
+            "selected cloud status request did not reach Studio rc=" +
+                std::to_string(selected_pushall_rc) + " connected=" +
+                std::to_string(cloud_printer_connected_callbacks.load()) + " messages=" +
+                std::to_string(message_count.load()) + " before=" +
+                std::to_string(before_messages)
+        );
     }
     if (set_selected_machine(agent, "") != 0) {
         fail(agent, destroy_agent, "selected cloud status target could not be cleared");
     }
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
     before_messages = message_count.load();
-    if (send_cloud(agent, "studio-serial-1", R"({"pushing":{"command":"pushall","sequence_id":"20000-untargeted","version":1,"push_target":1}})", 0, 0) !=
-            kBambuConnectFailed ||
-        cloud_printer_connected_callbacks.load() != (failure_mode ? 0 : 1) ||
+    const int before_unselected_connections = cloud_printer_connected_callbacks.load();
+    const int unselected_rc = send_cloud(
+        agent,
+        "studio-serial-1",
+        R"({"pushing":{"command":"pushall","sequence_id":"20000-untargeted","version":1,"push_target":1}})",
+        0,
+        0
+    );
+    if (unselected_rc != kBambuConnectFailed ||
+        cloud_printer_connected_callbacks.load() != before_unselected_connections ||
         message_count.load() != before_messages) {
         fail(agent, destroy_agent, "unselected and unsubscribed status request reported false success");
     }
     before_messages = message_count.load();
-    const int subscribed_connection_callbacks = failure_mode ? 1 : 2;
+    const int before_subscribed_connections = cloud_printer_connected_callbacks.load();
     if (add_subscribe(agent, {"studio-serial-1"}) != 0 ||
-        cloud_printer_connected_callbacks.load() != subscribed_connection_callbacks ||
-        message_count.load() == before_messages ||
-        set_selected_machine(agent, "studio-serial-1") != 0) {
+        !wait_until([&] {
+            return cloud_printer_connected_callbacks.load() > before_subscribed_connections &&
+                message_count.load() > before_messages;
+        }) || set_selected_machine(agent, "studio-serial-1") != 0) {
         fail(agent, destroy_agent, "explicit cloud subscription did not emit first status");
     }
     if (!failure_mode && !wait_until([&] { return out.message_callback; })) {

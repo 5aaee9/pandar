@@ -44,6 +44,11 @@ pub(in crate::routes) async fn update_printer(
             auth::audit_actor(&auth),
         )
         .await?;
+    if updated.name != printer.name {
+        state
+            .publish_printer_projection_change(tenant_id, &updated.id, &updated.serial_number)
+            .await;
+    }
     state
         .commands()
         .enqueue_reload_printer_connection(tenant_id, printer_id)

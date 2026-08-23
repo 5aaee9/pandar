@@ -166,14 +166,18 @@
             "pass",
             false
         );
-        const bool replacement_heartbeat = wait_until([&] {
-            return status_count(local, "studio-serial-3") > local3_before_replacement;
-        });
+        const int replacement_push_rc = send_printer(
+            agent,
+            "studio-serial-3",
+            R"({"pushing":{"command":"pushall","sequence_id":"replacement","version":1,"push_target":1}})",
+            0,
+            0
+        );
         out.local_replacement_exact =
-            replacement_rc == 0 &&
+            replacement_rc == 0 && replacement_push_rc == 0 &&
             local_connect_callbacks.load() == replacement_connect_before + 1 &&
             get_selected_machine(agent) == selected_before_replacement &&
-            replacement_heartbeat &&
+            status_count(local, "studio-serial-3") == local3_before_replacement + 1 &&
             status_count(local, "studio-serial-2") == local2_before_replacement;
         set_selected_machine(agent, selected_before_replacement);
 
@@ -181,19 +185,16 @@
         const int same_cloud_before = status_count(cloud, "studio-serial-3");
         const int same_local_before = status_count(local, "studio-serial-3");
         out.same_serial_exact = wait_until([&] {
-            return status_count(cloud, "studio-serial-3") > same_cloud_before &&
-                status_count(local, "studio-serial-3") > same_local_before;
-        });
+            return status_count(cloud, "studio-serial-3") > same_cloud_before;
+        }) && status_count(local, "studio-serial-3") == same_local_before;
 
         const int disconnect_local_before = status_count(local, "studio-serial-3");
         const int disconnect_cloud_before = status_count(cloud, "studio-serial-1");
         const int disconnect_rc = disconnect_printer(agent);
-        const bool cloud_advanced_after_disconnect = wait_until([&] {
-            return status_count(cloud, "studio-serial-1") > disconnect_cloud_before;
-        });
+        std::this_thread::sleep_for(std::chrono::milliseconds(2'300));
         out.disconnect_exact =
             disconnect_rc == 0 &&
-            cloud_advanced_after_disconnect &&
+            status_count(cloud, "studio-serial-1") == disconnect_cloud_before &&
             status_count(local, "studio-serial-3") == disconnect_local_before;
 
         out.cloud_version_messages = cloud.version_messages.load();

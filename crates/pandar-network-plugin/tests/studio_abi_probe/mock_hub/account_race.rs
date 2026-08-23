@@ -20,15 +20,16 @@ pub(super) fn serve_account_exchange_race(
     deadline: Instant,
     race_directory: &Path,
 ) {
-    let (mut seed_stream, seed_request) =
-        next_request(listener, stop, deadline, "GET", "/api/v1/plugin/printers");
-    assert_request_with_token(
-        &seed_request,
-        "GET",
-        "/api/v1/plugin/printers",
-        Some("account-a-token"),
+    let upgrade = super::next_stream(listener, stop, deadline);
+    assert!(
+        upgrade
+            .request
+            .contains("authorization: Bearer account-a-token")
     );
-    write_response(&mut seed_stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
+    let frames = upgrade.serve();
+    for frame in super::responses::snapshot_frames(PRINTERS_RESPONSE) {
+        frames.send(frame).expect("serve account-a snapshot");
+    }
 
     let exchange_path = "/api/v1/plugin/login-tickets/exchange";
     let (mut exchange_stream, exchange_request) =
@@ -53,34 +54,31 @@ pub(super) fn serve_account_exchange_race(
 
     let mut stale_revokes = 0;
     let mut replacement_refreshes = 0;
-    for _ in 0..2 {
-        let (mut stream, request) = next_request(
-            listener,
-            stop,
-            deadline,
-            "DELETE or GET",
-            "stale candidate cleanup or replacement refresh",
-        );
-        if request.starts_with("DELETE /api/v1/plugin/session HTTP/1.1\r\n") {
-            stale_revokes += 1;
-            assert_request_with_token(
-                &request,
-                "DELETE",
-                "/api/v1/plugin/session",
-                Some("stale-response-token"),
-            );
-            write_response(&mut stream, "HTTP/1.1 204 No Content", "");
-        } else if request.starts_with("GET /api/v1/plugin/printers HTTP/1.1\r\n") {
-            replacement_refreshes += 1;
-            assert_request_with_token(
-                &request,
-                "GET",
-                "/api/v1/plugin/printers",
-                Some("account-b-token"),
-            );
-            write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
-        } else {
-            panic!("unexpected account race request: {request}");
+    while stale_revokes == 0 || replacement_refreshes == 0 {
+        match super::next_incoming(listener, stop, deadline) {
+            super::Incoming::Stream(upgrade) => {
+                assert!(
+                    upgrade
+                        .request
+                        .contains("authorization: Bearer account-b-token")
+                );
+                replacement_refreshes += 1;
+                let frames = upgrade.serve();
+                for frame in super::responses::snapshot_frames(PRINTERS_RESPONSE) {
+                    frames.send(frame).expect("serve account-b snapshot");
+                }
+            }
+            super::Incoming::Http(mut stream, request) => {
+                assert!(request.starts_with("DELETE /api/v1/plugin/session HTTP/1.1\r\n"));
+                stale_revokes += 1;
+                assert_request_with_token(
+                    &request,
+                    "DELETE",
+                    "/api/v1/plugin/session",
+                    Some("stale-response-token"),
+                );
+                write_response(&mut stream, "HTTP/1.1 204 No Content", "");
+            }
         }
     }
     assert_eq!(

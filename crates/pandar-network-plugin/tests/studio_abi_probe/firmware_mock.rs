@@ -16,11 +16,12 @@ use std::{
 
 use serde_json::{Value, json};
 
+use super::mock_hub::StreamUpgrade;
 use crate::support::read_http_request_with_timeout;
 
 use self::responses::{
-    catalog_response, is_delayed_refresh, json_body, login_response, printer_list,
-    printer_list_with_version, refresh_response, respond, string_field,
+    catalog_response, is_delayed_refresh, json_body, login_response, printer_list_with_version,
+    refresh_response, respond, string_field,
 };
 
 const START_URL: &str = "https://user:secret@example.invalid/fw.bin?sig=ABI_SENTINEL";
@@ -34,7 +35,7 @@ pub(super) struct FirmwareMockHub {
 #[derive(Default)]
 struct State {
     catalog_reads: usize,
-    printer_reads: usize,
+    stream_upgrades: usize,
     delayed_refresh_stream: Option<(TcpStream, Instant)>,
     refresh_sequences: BTreeSet<String>,
     prepared: HashMap<String, Value>,
@@ -80,10 +81,13 @@ pub(super) fn spawn_firmware_mock_hub(race_directory: &Path) -> FirmwareMockHub 
                     }
                     let request =
                         read_http_request_with_timeout(&mut stream, Some(Duration::from_secs(5)));
-                    if request.lines().next().unwrap_or_default()
-                        == "GET /api/v1/plugin/printers HTTP/1.1"
+                    if request
+                        .lines()
+                        .next()
+                        .unwrap_or_default()
+                        .contains("/printer-events?projection=studio&version=1")
                     {
-                        state.handle_printers(stream, &request, &race_directory);
+                        state.handle_stream(stream, request, &race_directory);
                     } else if is_delayed_refresh(&request) {
                         state.handle_delayed_refresh(stream, &request, &race_directory);
                     } else {
@@ -130,42 +134,31 @@ impl State {
         );
     }
 
-    fn handle_printers(&mut self, mut stream: TcpStream, request: &str, race_directory: &Path) {
+    fn handle_stream(&mut self, stream: TcpStream, request: String, race_directory: &Path) {
         assert!(
             request.contains("authorization: Bearer probe-token"),
-            "firmware request lacked plugin auth: {request}"
+            "firmware stream lacked plugin auth: {request}"
         );
-        self.printer_reads += 1;
+        self.stream_upgrades += 1;
+        let frames = StreamUpgrade { stream, request }.serve();
+        for frame in stream_frames(&printer_list_with_version(
+            "session-auxiliary",
+            "08.08.08.08",
+        )) {
+            frames.send(frame).expect("serve firmware stream snapshot");
+        }
         let heartbeat_arm = race_directory.join("version-heartbeat-arm");
-        let version_heartbeat_armed = heartbeat_arm.exists();
-        if version_heartbeat_armed {
-            respond(
-                &mut stream,
-                "HTTP/1.1 200 OK",
-                printer_list_with_version("version-heartbeat", "09.87.65.43"),
-            );
-        } else {
-            match self.printer_reads {
-                1 | 3 => respond(
-                    &mut stream,
-                    "HTTP/1.1 200 OK",
-                    printer_list_with_version("session-auxiliary", "08.08.08.08"),
-                ),
-                2 => {
-                    fs::create_dir(race_directory.join("background-printer-failure-served"))
-                        .unwrap();
-                    respond(
-                        &mut stream,
-                        "HTTP/1.1 503 Service Unavailable",
-                        r#"{"error":"observe cached firmware"}"#.to_owned(),
-                    );
-                }
-                _ => respond(&mut stream, "HTTP/1.1 200 OK", printer_list()),
+        thread::spawn(move || {
+            while !heartbeat_arm.exists() {
+                thread::sleep(Duration::from_millis(5));
             }
-        }
-        if version_heartbeat_armed {
+            let response = printer_list_with_version("version-heartbeat", "09.87.65.43");
+            let device = serde_json::from_str::<Value>(&response).unwrap()["devices"][0].clone();
+            frames
+                .send(format!(r#"{{"type":"printer_upsert","printer":{device}}}"#))
+                .expect("serve streamed firmware observation");
             fs::remove_dir(heartbeat_arm).unwrap();
-        }
+        });
     }
 
     fn handle(&mut self, stream: &mut TcpStream, request: &str) {
@@ -178,9 +171,6 @@ impl State {
             "firmware request lacked plugin auth: {request}"
         );
         match line {
-            "GET /api/v1/plugin/printers HTTP/1.1" => {
-                respond(stream, "HTTP/1.1 200 OK", printer_list())
-            }
             "GET /api/v1/plugin/printers/printer-1/firmware HTTP/1.1" => {
                 self.catalog_reads += 1;
                 let body = catalog_response(self.catalog_reads > 1);
@@ -272,8 +262,8 @@ impl State {
 
     fn assert_complete(&self) {
         assert!(
-            self.printer_reads >= 4,
-            "printer failure and recovery were not exercised"
+            self.stream_upgrades >= 1,
+            "firmware probe never established the printer event stream"
         );
         assert_eq!(
             self.catalog_reads, 2,
@@ -298,6 +288,20 @@ impl State {
         );
         assert!(self.delayed_refresh_stream.is_none());
     }
+}
+
+fn stream_frames(printers_response: &str) -> Vec<String> {
+    let response = serde_json::from_str::<Value>(printers_response).unwrap();
+    let mut frames = vec![r#"{"type":"snapshot_begin","version":1}"#.to_owned()];
+    frames.extend(
+        response["devices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|device| format!(r#"{{"type":"printer_upsert","printer":{device}}}"#)),
+    );
+    frames.push(r#"{"type":"snapshot_end"}"#.to_owned());
+    frames
 }
 
 fn assert_command(command: &Value, name: &str, sequence: &str, execute: bool) {

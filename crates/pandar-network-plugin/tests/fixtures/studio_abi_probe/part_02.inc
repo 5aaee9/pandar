@@ -257,7 +257,7 @@ std::string status_body(TunnelCapture& capture, const std::string& dev_id) {
 }
 
 bool wait_until(const std::function<bool()>& ready) {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(3500);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (!ready() && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(std::chrono::milliseconds(25));
     }

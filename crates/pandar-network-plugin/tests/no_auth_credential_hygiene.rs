@@ -109,22 +109,95 @@ fn compile_fixture() -> Fixture {
     }
 }
 
+/// Reads one HTTP request head. Returns `None` when the peer closed the
+/// connection without sending any bytes; the plugin's stream worker can
+/// abandon a dial when its account episode changes mid-connect.
+fn read_request(stream: &mut TcpStream) -> Option<String> {
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let mut bytes = Vec::new();
+    let mut buffer = [0_u8; 1024];
+    while !bytes.windows(4).any(|value| value == b"\r\n\r\n") {
+        let read = stream.read(&mut buffer).unwrap();
+        if read == 0 {
+            if bytes.is_empty() {
+                return None;
+            }
+            panic!("request ended before headers");
+        }
+        bytes.extend_from_slice(&buffer[..read]);
+    }
+    Some(String::from_utf8(bytes).unwrap())
+}
+
+fn is_printer_events_upgrade(request: &str) -> bool {
+    let request_line = request.lines().next().unwrap_or_default();
+    let upgrade_header = request.lines().any(|line| {
+        line.split_once(':')
+            .is_some_and(|(name, _)| name.eq_ignore_ascii_case("upgrade"))
+    });
+    request_line.starts_with("GET /api/v1/tenants/")
+        && request_line.contains("/printer-events?")
+        && upgrade_header
+}
+
+/// Answers a printer-events upgrade with a 101 handshake and an empty
+/// snapshot, then keeps the socket alive until the peer goes away.
+fn serve_stream_upgrade(mut stream: TcpStream, request: &str) {
+    let key = request.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("sec-websocket-key")
+            .then(|| value.trim().to_owned())
+    });
+    let Some(key) = key else { return };
+    let accept = tungstenite::handshake::derive_accept_key(key.as_bytes());
+    let handshake = format!(
+        "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+    );
+    if stream.write_all(handshake.as_bytes()).is_err() {
+        return;
+    }
+    let mut ws =
+        tungstenite::WebSocket::from_raw_socket(stream, tungstenite::protocol::Role::Server, None);
+    let _ = ws.get_ref().set_nonblocking(true);
+    for frame in [
+        r#"{"type":"snapshot_begin","version":1}"#,
+        r#"{"type":"snapshot_end","version":1}"#,
+    ] {
+        if ws.write(tungstenite::Message::text(frame)).is_err() {
+            return;
+        }
+        let _ = ws.flush();
+    }
+    loop {
+        match ws.read() {
+            Ok(_) => {
+                let _ = ws.flush();
+            }
+            Err(tungstenite::Error::Io(error))
+                if error.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(_) => return,
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// Accepts the next plain HTTP request, servicing stream upgrades and
+/// abandoned dials along the way.
 fn request(listener: &TcpListener, deadline: Instant) -> (TcpStream, String) {
     loop {
         match listener.accept() {
             Ok((mut stream, _)) => {
                 stream.set_nonblocking(false).unwrap();
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(2)))
-                    .unwrap();
-                let mut bytes = Vec::new();
-                let mut buffer = [0_u8; 1024];
-                while !bytes.windows(4).any(|value| value == b"\r\n\r\n") {
-                    let read = stream.read(&mut buffer).unwrap();
-                    assert!(read > 0, "request ended before headers");
-                    bytes.extend_from_slice(&buffer[..read]);
+                let Some(text) = read_request(&mut stream) else {
+                    continue;
+                };
+                if is_printer_events_upgrade(&text) {
+                    thread::spawn(move || serve_stream_upgrade(stream, &text));
+                    continue;
                 }
-                return (stream, String::from_utf8(bytes).unwrap());
+                return (stream, text);
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 assert!(Instant::now() < deadline, "timed out waiting for mock Hub");
@@ -164,12 +237,15 @@ fn no_more_requests(listener: &TcpListener, duration: Duration) {
     loop {
         match listener.accept() {
             Ok((mut stream, _)) => {
-                let mut bytes = [0_u8; 256];
-                let read = stream.read(&mut bytes).unwrap_or_default();
-                panic!(
-                    "unexpected request: {}",
-                    String::from_utf8_lossy(&bytes[..read])
-                );
+                stream.set_nonblocking(false).unwrap();
+                let Some(text) = read_request(&mut stream) else {
+                    continue;
+                };
+                if is_printer_events_upgrade(&text) {
+                    thread::spawn(move || serve_stream_upgrade(stream, &text));
+                    continue;
+                }
+                panic!("unexpected request: {text}");
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 if Instant::now() >= deadline {
@@ -181,7 +257,6 @@ fn no_more_requests(listener: &TcpListener, duration: Duration) {
         }
     }
 }
-
 fn candidate(token: &str) -> String {
     format!(
         r#"{{"token":"{token}","profile":{{"token":"{token}","user_id":"candidate","user_name":"Candidate","tenant_id":"tenant-1","tenant_name":"Tenant"}}}}"#
@@ -230,182 +305,5 @@ fn run(mode: &str, serve: impl FnOnce(TcpListener, Instant, PathBuf) + Send + 's
     );
 }
 
-#[test]
-fn concurrent_task_401_responses_share_one_no_auth_rotation() {
-    run("concurrent", |listener, deadline, _| {
-        let path = "/api/v1/plugin/jobs?dev_id=&status=0&offset=0&limit=20";
-        let (mut first, first_request) = request(&listener, deadline);
-        let (mut second, second_request) = request(&listener, deadline);
-        assert_request(&first_request, "GET", path, Some("stale-token"));
-        assert_request(&second_request, "GET", path, Some("stale-token"));
-        respond(
-            &mut first,
-            "401 Unauthorized",
-            r#"{"error":"invalid_auth_token"}"#,
-        );
-        respond(
-            &mut second,
-            "401 Unauthorized",
-            r#"{"error":"invalid_auth_token"}"#,
-        );
-        let (mut rotate, rotate_request) = request(&listener, deadline);
-        assert_request(
-            &rotate_request,
-            "POST",
-            "/api/v1/plugin/no-auth-session",
-            None,
-        );
-        respond(&mut rotate, "200 OK", &candidate("shared-token"));
-        for _ in 0..2 {
-            let (mut retry, retry_request) = request(&listener, deadline);
-            assert_request(&retry_request, "GET", path, Some("shared-token"));
-            respond(&mut retry, "200 OK", r#"{"total":0,"hits":[]}"#);
-        }
-        no_more_requests(&listener, Duration::from_millis(250));
-    });
-}
-
-#[test]
-fn authenticated_task_401_does_not_fall_back_to_no_auth() {
-    run("authenticated", |listener, deadline, _| {
-        let path = "/api/v1/plugin/jobs?dev_id=&status=0&offset=0&limit=20";
-        let (mut tasks, tasks_request) = request(&listener, deadline);
-        assert_request(&tasks_request, "GET", path, Some("stale-token"));
-        respond(
-            &mut tasks,
-            "401 Unauthorized",
-            r#"{"error":"invalid_auth_token"}"#,
-        );
-        no_more_requests(&listener, Duration::from_millis(500));
-    });
-}
-
-#[test]
-fn ambiguous_no_auth_rotation_is_attempted_only_once_per_credential_key() {
-    run("ambiguous", |listener, deadline, _| {
-        let path = "/api/v1/plugin/jobs?dev_id=&status=0&offset=0&limit=20";
-        let (mut first, first_request) = request(&listener, deadline);
-        let (mut second, second_request) = request(&listener, deadline);
-        assert_request(&first_request, "GET", path, Some("stale-token"));
-        assert_request(&second_request, "GET", path, Some("stale-token"));
-        respond(
-            &mut first,
-            "401 Unauthorized",
-            r#"{"error":"invalid_auth_token"}"#,
-        );
-        respond(
-            &mut second,
-            "401 Unauthorized",
-            r#"{"error":"invalid_auth_token"}"#,
-        );
-        let (mut rotate, rotate_request) = request(&listener, deadline);
-        assert_request(
-            &rotate_request,
-            "POST",
-            "/api/v1/plugin/no-auth-session",
-            None,
-        );
-        respond(
-            &mut rotate,
-            "409 Conflict",
-            r#"{"error":"ambiguous_no_auth_tenant"}"#,
-        );
-        no_more_requests(&listener, Duration::from_millis(500));
-    });
-}
-
-fn run_fence(mode: &'static str) {
-    run(mode, move |listener, deadline, config| {
-        let path = "/api/v1/plugin/jobs?dev_id=&status=0&offset=0&limit=20";
-        let (mut tasks, tasks_request) = request(&listener, deadline);
-        assert_request(&tasks_request, "GET", path, Some("stale-token"));
-        respond(
-            &mut tasks,
-            "401 Unauthorized",
-            r#"{"error":"invalid_auth_token"}"#,
-        );
-        let (mut rotate, rotate_request) = request(&listener, deadline);
-        assert_request(
-            &rotate_request,
-            "POST",
-            "/api/v1/plugin/no-auth-session",
-            None,
-        );
-        std::fs::write(config.join("no-auth-post-entered"), b"entered").unwrap();
-        if mode == "logout-race" {
-            let (mut logout, logout_request) = request(&listener, deadline);
-            assert_request(
-                &logout_request,
-                "DELETE",
-                "/api/v1/plugin/session",
-                Some("stale-token"),
-            );
-            respond(&mut logout, "204 No Content", "");
-        }
-        let release = config.join("no-auth-post-release");
-        while !release.exists() && Instant::now() < deadline {
-            thread::sleep(Duration::from_millis(5));
-        }
-        assert!(release.exists(), "probe did not release no-auth response");
-        respond(&mut rotate, "200 OK", &candidate("race-candidate"));
-        let (mut revoke, revoke_request) = request(&listener, deadline);
-        assert_request(
-            &revoke_request,
-            "DELETE",
-            "/api/v1/plugin/session",
-            Some("race-candidate"),
-        );
-        respond(&mut revoke, "204 No Content", "");
-        no_more_requests(&listener, Duration::from_millis(250));
-    });
-}
-
-#[test]
-fn concurrent_logout_fences_and_revokes_the_uncommitted_candidate() {
-    run_fence("logout-race");
-}
-
-#[test]
-fn concurrent_change_user_fences_and_revokes_the_uncommitted_candidate() {
-    run_fence("change-race");
-}
-
-#[test]
-fn concurrent_config_change_fences_and_revokes_the_uncommitted_candidate() {
-    run_fence("config-race");
-}
-
-#[test]
-fn persistence_preflight_failure_prevents_candidate_creation_and_retry() {
-    run("persist-failure", |listener, _, _| {
-        no_more_requests(&listener, Duration::from_millis(650));
-    });
-}
-
-#[test]
-fn post_preflight_persistence_failure_best_effort_revokes_the_candidate() {
-    run(
-        "post-preflight-persist-failure",
-        |listener, deadline, config| {
-            let (mut rotate, rotate_request) = request(&listener, deadline);
-            assert_request(
-                &rotate_request,
-                "POST",
-                "/api/v1/plugin/no-auth-session",
-                None,
-            );
-            std::fs::remove_dir_all(&config).unwrap();
-            std::fs::write(&config, b"block").unwrap();
-            respond(&mut rotate, "200 OK", &candidate("persist-candidate"));
-            let (mut revoke, revoke_request) = request(&listener, deadline);
-            assert_request(
-                &revoke_request,
-                "DELETE",
-                "/api/v1/plugin/session",
-                Some("persist-candidate"),
-            );
-            respond(&mut revoke, "204 No Content", "");
-            no_more_requests(&listener, Duration::from_millis(650));
-        },
-    );
-}
+#[path = "no_auth_credential_hygiene/cases.rs"]
+mod cases;

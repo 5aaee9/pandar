@@ -84,6 +84,11 @@ pub enum HubControlMessage {
         tenant_id: String,
         event: PrinterEvent,
     },
+    PrinterProjectionChange {
+        tenant_id: String,
+        printer_id: String,
+        serial_number: String,
+    },
 }
 
 pub(crate) fn parse_tenant_id(value: &str) -> anyhow::Result<TenantId> {

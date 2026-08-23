@@ -55,6 +55,19 @@ pub extern "C" fn pandar_plugin_printer_refresh_session_update(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn pandar_plugin_connection_set_dispatch_waker(
+    session_ptr: *mut c_void,
+    context: *mut c_void,
+    callback: Option<extern "C" fn(*mut c_void)>,
+) -> i32 {
+    let Some(session) = session(session_ptr) else {
+        return 1;
+    };
+    session.set_dispatcher_waker(context, callback);
+    0
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_connection_set_account_epoch(
     session_ptr: *mut c_void,
     account_epoch: u64,
@@ -94,16 +107,76 @@ pub extern "C" fn pandar_plugin_printer_refresh(
     observation_context: *mut c_void,
     reserve_observation: Option<PrinterRefreshObservationReservation>,
 ) -> PluginHttpResult {
+    // Reserved ABI parameters from the retired polling path; the cache is the
+    // only data source now.
+    let _ = (observation_context, reserve_observation);
     let Some(session) = session(session_ptr) else {
         return invalid_input("invalid_printer_refresh_session");
     };
-    session
-        .refresh_printers(None, true, || {
-            if let Some(reserve_observation) = reserve_observation {
-                reserve_observation(observation_context);
-            }
-        })
-        .http
+    session.wake_worker();
+    match session.cached_print_info() {
+        Some(body) => result(0, 200, body),
+        None => result(1, 503, stable_error_body("cache_initializing")),
+    }
+}
+
+/// Stores the account tenant used to build the printer-events stream URL.
+#[unsafe(no_mangle)]
+pub extern "C" fn pandar_plugin_printer_refresh_session_set_tenant(
+    session_ptr: *mut c_void,
+    tenant_id_ptr: *const u8,
+    tenant_id_len: usize,
+) -> i32 {
+    let Some(session) = session(session_ptr) else {
+        return 1;
+    };
+    match read_utf8(tenant_id_ptr, tenant_id_len) {
+        Some(tenant_id) => {
+            session.set_tenant(tenant_id);
+            0
+        }
+        None => 1,
+    }
+}
+
+/// Polls the once-per-episode stream-unavailable notification. Returns
+/// `status == 0` with an empty body when nothing is pending, otherwise a
+/// `PluginHttpResult` with `http_code == 503` and body
+/// `{"error":"printer_event_stream_unavailable"}`.
+#[unsafe(no_mangle)]
+pub extern "C" fn pandar_plugin_connection_take_stream_error(
+    session_ptr: *mut c_void,
+) -> PluginHttpResult {
+    match session(session_ptr) {
+        Some(session) => session.take_stream_error(),
+        None => result(0, 0, String::new()),
+    }
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `firmware_session_ptr` must point to a live Rust firmware session.
+pub unsafe extern "C" fn pandar_plugin_connection_sync_firmware(
+    session_ptr: *mut c_void,
+    firmware_session_ptr: *mut c_void,
+    generation: u64,
+    observation_sequence: u64,
+) -> i32 {
+    let (Some(session), Some(firmware_session)) = (session(session_ptr), unsafe {
+        crate::firmware::session_ref(firmware_session_ptr)
+    }) else {
+        return 1;
+    };
+    let Some(projection) = session.cached_firmware_projection() else {
+        return 1;
+    };
+    match firmware_session.observe_printers(&projection, generation, observation_sequence) {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("pandar streamed firmware projection failed: {error:#}");
+            1
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -185,8 +258,8 @@ pub extern "C" fn pandar_plugin_connection_claim_delivery(
 #[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_printer_refresh_session_destroy(session: *mut c_void) {
     if !session.is_null() {
-        unsafe {
-            drop(Box::from_raw(session.cast::<ConnectionSession>()));
-        }
+        let boxed = unsafe { Box::from_raw(session.cast::<ConnectionSession>()) };
+        boxed.stop_worker();
+        drop(boxed);
     }
 }
