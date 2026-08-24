@@ -101,6 +101,7 @@ Printer inventory and live events:
 - `POST /api/v1/tenants/{tenant_id}/agents/{agent_id}/refresh-printers` queues a `refresh_printers` command for a live agent through the command ledger.
 - `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/materials:refresh` queues an Agent command to refresh the printer's current AMS/external-spool material snapshot. The Agent synchronizes material patches to Hub over gRPC; browser live updates continue through the tenant printer event stream.
 - `GET /api/v1/tenants/{tenant_id}/printer-events` upgrades to a tenant-scoped WebSocket for future `printer_snapshot` and `job_progress` events. It does not replay historical state; clients should load initial state over HTTP and treat WebSocket delivery as best-effort live updates.
+- The same endpoint with `projection=studio&version=1` is the Bambu Studio network-plugin stream. It authorizes only same-tenant `plugin:studio` tokens and sends one atomic complete printer snapshot followed by typed full-record upserts/removals, sharing the Studio printer projection with the HTTP list endpoint and invalidating on lag or event-epoch gaps. The default Viewer/ticket contract is unchanged.
 
 Tenant-scoped print dispatch:
 
@@ -129,11 +130,27 @@ Phase 29 live printer operations are dispatch-only operations for compatible pri
 
 The Hub stores and forwards typed printer operations. Bambu-specific MQTT construction remains inside `pandar-agent`. The network plugin maps recognized Studio `send_message_to_printer` G-code to semantic operation requests and uses the authenticated plugin route's narrow typed `gcode_line` path for other string parameters; the normal tenant controls route does not expose that path.
 
+Workspace rename is audited: `PATCH /api/v1/tenants/{tenant_id}` updates the display name for tenant administrators (or no-auth operators). Tenant tokens are rejected, empty names fail validation, and the `tenant.rename` audit metadata records the previous and new names.
+
+Authenticated Bambu Studio personal-preset routes:
+
+- `GET /api/v1/plugin/presets` returns the owner's complete Process/Filament/Printer catalogue; `POST /api/v1/plugin/presets` creates one preset replay-safe by type and name.
+- `GET|PATCH|DELETE /api/v1/plugin/presets/{setting_id}` reads, replaces, or idempotently deletes one owned preset.
+- All five routes require the live Operator user attached to the exact `plugin:studio` token; no-auth sessions and tenant-wide token identities are rejected. Request bodies are bounded at 512 KiB, responses send `cache-control: no-store`, and quota exhaustion returns error code `14`.
+
+Printer cameras stream through the owning live Agent for whitelisted models (A1, A1 Mini, P1S, A2L):
+
+- `GET /api/v1/tenants/{tenant_id}/printers/{printer_id}/camera.mp4` serves the browser relay path.
+- `GET /api/v1/plugin/printers/{printer_id}/camera.mjpeg` serves the Studio network-plugin path; the plugin receives only a random one-use loopback relay URL and never sees the printer host or access code.
+- Retained camera responses are capped per tenant with `PANDAR_HUB_CAMERA_MAX_STREAMS_PER_TENANT` (see Operations).
+
 ## Frontend Runtime
 
 Run `npm --prefix frontend run lint`, `npm run test:web`, and `npm run typecheck:web` before submitting frontend changes. The workspace production-module guard (`cargo test -p pandar-core --test module_size`) enforces the 400-line limit across Rust, C/C++ headers and sources, and frontend TypeScript/TSX while excluding tests and generated output.
 
 Server-side frontend code reads the hub through `APP_API_URL`, defaulting to `http://localhost:8080` when unset. Browser code never calls the hub directly; reads and mutations cross the Hub proxy (`frontend/app/hub-proxy.ts` and the `frontend/app/api/tenants/[tenantId]/` routes). `APP_BASE_URL` remains the frontend's public URL for deployment wiring. The public `/.well-known/pandar` document advertises `APP_PUBLIC_API_URL`, falling back to `APP_API_URL`, so Studio can derive its Hub URL from the Web URL; set `APP_PUBLIC_API_URL` when the server-side Hub address is not reachable from Studio.
+
+The dashboard resolves the selected tenant from the `pandar.tenant` cookie (falling back to the first effective tenant), so SSR stays correct without hydration flicker. The sidebar switcher writes the cookie and re-renders the current view, server actions receive their target tenant through hidden form fields, and dashboard navigation hrefs stay tenant-free. The standalone plugin/mobile sign-in flows intentionally keep their explicit tenant picker parameter. Dashboard mutations return typed action states rendered as in-place pending feedback and toasts instead of status redirects.
 
 `APP_AUTH_PROVIDER` selects the browser-facing provider metadata for `pandar-web`. Supported values are `clerk`, `logto`, `betterauth`, or unset/`none`; any other value fails Web startup. Provider-specific frontend metadata is configured with `APP_AUTH_CLERK_PUBLISHABLE_KEY`, `APP_AUTH_LOGTO_ENDPOINT`, `APP_AUTH_LOGTO_APP_ID`, or `APP_AUTH_BETTER_AUTH_BASE_URL`. The frontend still forwards only a bearer token from the configured cookie or static single-user bridge to `pandar-hub`; Pandar tenant membership is resolved by the hub.
 

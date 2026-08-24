@@ -1792,7 +1792,9 @@ Exit criteria:
 
 ## Immediate Next
 
-- Validate Bambu Studio **Synchronize personal data** with a packaged plugin and two isolated Studio installations for the same authenticated user: create one Process, Filament, and Printer preset, update and delete across installations, preserve dirty local work, and prove outage/cancellation never applies a partial catalogue. Record exact Studio version, ABI series, platform, plugin hash, Hub revision, and backend before changing the compatibility row from evidence-pending.
+- Deploy Hub printer-event-stream support before updating the network plugin, then repeat the forced short-interruption versus real-outage smoke in a packaged supported Bambu Studio installation.
+- Validate Bambu Studio **Synchronize personal data** with a packaged plugin and two isolated Studio installations for the same authenticated user: create one Process, Filament, and Printer preset, update and delete across installations, preserve dirty local work, and prove outage/cancellation never applies a partial catalogue. The same authenticated session confirms the ` [pandar]` display-name suffix. Record exact Studio version, ABI series, platform, plugin hash, Hub revision, and backend before changing the compatibility row from evidence-pending.
+- Consolidate the duplicated Machine snapshot-to-Agent-event projection into one focused module (the named follow-up from the Agent report-interpretation deepening).
 - After deploying the updated Web frontend, validate camera picture-in-picture with a live stream in
   current Chrome/Edge and Safari, including returning to Devices controls while PiP is active and
   confirming that closing PiP releases the camera stream. Firefox lacks the standard video PiP API
@@ -1807,18 +1809,7 @@ Exit criteria:
   host, access code, or Hub bearer appears in the Studio URL, logs, or evidence bundle. Do not broaden
   the whitelist or claim hardware compatibility from source-backed tests alone.
 - Finish the open [GitHub issue #2](https://github.com/ProjectPandar/pandar/issues/2) H2C acceptance rows: with separate operator approval, passively capture nozzle-only and holder-only deltas during a manufacturer-supported rack action; run a real Studio callback/submission; and inspect the exact physical mapping in `project_file` before any small print. Safe-idle full telemetry, protected FTPS listing, V0/V1 mapping, correlated failure delivery, and replacement-session bit-60 fencing are recorded in `docs/compatibility/h2c-hardware-2026-08-04.md`. The Web UI now exposes Studio-shaped rack move/confirm/re-read operations, but no physical rack action has been exercised on hardware yet; validating one of the UI-issued rack commands against a real printer is part of this gate. Do not enable signing, laser/cut, eMMC/`fun2`, or new physical IDs from this evidence.
-- After the next `main` push, verify GitHub Actions can publish Hub/Web images and the Helm chart under the `ghcr.io/projectpandar/pandar` package namespace.
-- Added macOS desktop publishing for both amd64 and Apple Silicon: both tag-workflow rows use the
-  Apple Silicon `macos-26` runner; arm64 runs natively, while amd64 cross-compiles and runs its CLI,
-  ABI probe, and release-smoke under Rosetta 2. The jobs reject AppleDouble archive entries. Local
-  Apple Silicon release build and packaged smoke passed the current 108 network and 21 File Transfer
-  export contract; the official `02.07.01.62` stable app loaded both exact dylibs and reached its normal UI.
-  A local x86_64 Mach-O cross-build and Rosetta packaged-smoke preflight also passed; the pinned amd64
-  ABI workflow run, real Intel Studio load, and authenticated Studio behavior remain separate next
-  steps.
 - Deploy the updated Web frontend and confirm a printer with a fresh RFC3339 report and a retained `FAILED` task state shows 1/1 online plus a fresh Online presence label in a UTC+8 browser, while the task status remains Failed.
-- Deploy the updated Web frontend and confirm Pause/Resume and the other printer server-form controls navigate to their status feedback without logging `NEXT_REDIRECT` or replacing the dashboard with the data-load fallback.
-- Deploy the camera-option fix to the local Agent, restart only `pandar-agent`, and rerun the authenticated Hub camera probe to confirm the production route changes from HTTP 200 with zero bytes to a non-empty fragmented MP4 stream before checking browser playback.
 - After deploying the updated Web and Agent, confirm the paused X2D `0500-8062` report surfaces the existing Devices recovery reminder, then use its operator-approved action to continue the print; keep additional real file uploads outside automated validation.
 - Track stable `rumqttc-v4-next` releases and security advisories; keep the Agent on the MQTT 3.1.1 package, and rerun raw-broker, PUBACK, firmware-session, reconnect, TLS, and native package gates before any fork upgrade.
 - Treat real Better Auth WebView/ticket/session, real Hub/Agent/database integration, and all hardware,
@@ -1827,16 +1818,14 @@ Exit criteria:
 - Run the same authenticated checklist with a newly frozen native archive in real Windows Bambu
   Studio. Historical native MSVC, PE, ABI, and release-smoke evidence does not itself prove Studio
   behavior; no Windows Studio process was launched for final16.
-- Run the macOS amd64 job on the Apple Silicon GitHub Actions runner and record exact-version Studio
-  authenticated-session evidence on both macOS architectures; local Apple Silicon arm64 package
-  evidence alone does not prove those remaining boundaries.
+- Record exact-version Studio authenticated-session evidence on both macOS architectures, including a
+  real Intel Studio load of the published amd64 archive; release CI builds both macOS rows on Apple
+  Silicon `macos-26` runners, and local Apple Silicon arm64 package evidence alone does not prove
+  those boundaries.
 - Run live-printer validation only with an explicitly safe printer state and agent-local credentials:
   chamber target readout, pause/resume/stop/print-speed, home/move/hotend, print/cancel, and other
   hardware-dependent behavior remain unclaimed. Any live firmware-update validation remains a
   separately authorized hardware gate; none was run for final16.
-- After a current three-file `v0.1.0` archive is published, record target-host checksum, install, CLI,
-  library-load, and real Studio evidence without treating historical two-file workflow artifacts as
-  current candidates.
 
 ## Completed: Android App
 

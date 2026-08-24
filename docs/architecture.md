@@ -520,27 +520,32 @@ Agent phase status after Phase 15:
 
 ### frontend
 
-- Tenant-scoped dashboard.
-- Agent status and pairing screens.
-- Printer inventory and live state.
-- Job dispatch and command controls.
-- Operational settings for database-independent hub behavior.
+The dashboard (Devices, Jobs, Agents, Users, Settings) runs as server-component route pages under
+`frontend/app/(dashboard)/` with per-route `loading.tsx` skeletons and a shared client shell
+(`DashboardShellProvider`/`DashboardShellLayout`). Server pages fetch shared data through
+`dashboard-data.tsx`, and all hub traffic crosses the server-side proxy (`hub-proxy.ts` and the
+`frontend/app/api/tenants/[tenantId]/` routes); browser code never calls the hub directly. Bearer
+forwarding follows the credential precedence: request cookie `APP_AUTH_COOKIE_NAME` defaulting to
+`pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. When `APP_TENANT_ID`
+binds the deployment to one tenant, dashboard reads stay on tenant-scoped APIs.
 
-Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form for artifact and print flags through the Rust hub API; Phase 25 moves that browser path to multipart upload so artifact bytes are no longer base64-encoded through server actions. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. Phase 10 centralizes frontend bearer forwarding: request cookie `APP_AUTH_COOKIE_NAME` defaulting to `pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. Phase 11 keeps configured tenant dashboards on tenant-scoped APIs when `APP_TENANT_ID` is set, so ordinary tenant tokens do not need bootstrap authority. Phase 13 exposes linked agents, discovery commands, diagnostic commands, and selected command details. It renders discovery rows, diagnostic checks, and compatibility capability availability from hub command `result_json`; it does not accept or display Bambu access codes. Phase 14 renders printer material summaries and job material mapping/usage rows from Rust API response shapes while keeping dispatch-form mapping fields API-client-only. Phase 15 adds ticket-backed browser WebSocket consumption, live status, transition notifications, and token-safe tenant operation references. Phase 17-20 add tenant administration, recovery controls, backend error-code surfacing, and a Studio sign-in page that uses Studio's localhost callback discovery when available.
+Current product surfaces:
 
-Frontend phase status after Phase 7:
+- The selected tenant resolves from the `pandar.tenant` cookie with first-effective-tenant fallback; the sidebar switcher writes the cookie and re-renders the current view, server actions receive their target tenant through hidden form fields, and navigation hrefs stay tenant-free.
+- Live updates consume ticket-authenticated tenant printer-event WebSockets socket-first; REST supplies authoritative baselines, and enriched print/build-plate state repairs on a serialized cadence.
+- Printer controls declare typed control intents in `frontend/app/printer-controls.tsx`. Mutations return typed action states rendered as in-place pending feedback and localized toasts instead of status redirects. Dashboard health/attention derives from shared `dashboard-attention.ts` helpers feeding the devices/jobs/agents pages.
+- Devices cards expose cooling-fan telemetry and presets, print-speed modes, HMS messages with localized Bambu detail links, AMS drying control, H2C nozzle-rack state and operations, and a camera viewer with fullscreen and native picture-in-picture that lives in the persistent layout so streams survive navigation.
+- Settings provides audited workspace rename, token management, agent enrollment, audit panels, and scrollspy section navigation. User locale/theme preferences persist through zustand under the `pandar.settings` key.
+- Tenant administration covers users, roles, identity links, scoped tenant tokens, agent pairing/enrollment, and audit events without rendering token values.
 
-- Phase 9 exposed job progress and terminal print failure/success state from HTTP job history and hub live `job_progress` events.
-- Phase 10 forwards Clerk or Logto identity-provider bearer tokens to the Rust API through server-side cookie/static-token helpers. Provider SDK sign-in UI remains out of scope.
-- Phase 11 added tenant-bound reads for configured deployments, while full tenant-admin screens remain future work.
-- Phase 13 exposes discovery and compatibility diagnostics.
-- Phase 14 exposes material summaries and job material rows from HTTP responses.
-- Phase 15 consumes authenticated WebSocket events for day-to-day monitoring and notifications through one-use browser tickets.
+`frontend/auth` is the separate self-hosted Better Auth issuer app with its own UI primitives.
+`mobile/android` is the Jetpack Compose Android client speaking the same Hub HTTP/WebSocket APIs
+(see `docs/android.md`).
 
 Remaining frontend limitations:
 
-- Live printer controls are typed, compatibility-gated dispatch actions. Frontend/final end-to-end verification is not recorded in this workspace, so physical control behavior must still be proven by later hardware probes.
-- Artifact uploads now use multipart transport through the frontend API proxy; production proxies still need request body limits aligned with `PANDAR_MAX_ARTIFACT_BYTES`.
+- Live printer controls are typed, compatibility-gated dispatch actions. Physical control behavior must still be proven by the hardware evidence gates tracked in `docs/roadmap.md`.
+- Production proxies still need request body limits aligned with `PANDAR_MAX_ARTIFACT_BYTES`.
 
 ## Data Model Draft
 
@@ -584,9 +589,4 @@ Material-state semantics should stay split by boundary: raw Bambu report parsing
 
 ## Open Questions
 
-- Whether Pandar will support Bambu cloud account integration or LAN-only operation first.
-- Whether printer access codes are stored in hub, agent-local config, or both.
-- Whether the file channel should expose the term SFTP, FTPS, or a protocol-neutral "file transfer" surface.
-- Which printer families are required for the first compatibility target.
-- Whether virtual-printer/proxy behavior from `bambuddy` is in scope for the first release.
-- Whether SeaORM's migration system should replace SQLx migrations after repository migration is complete, or whether SQLx migrations should remain the schema authority.
+The previously open questions are resolved in the implementation: machine file transfer is protected implicit FTPS behind the protocol-neutral `MachineFileTransfer` boundary; access codes stay agent-local by default with optional encrypted Hub storage (`PANDAR_PRINTER_ACCESS_CODE_KEY`); the first compatibility targets are catalogued per Studio ABI series in `docs/compatibility/`; SeaORM repositories run over SQLx-managed migrations; Bambu cloud integration is limited to the Hub-backed Studio virtual-local proxy with cloud settings and AMS cloud sync explicitly unsupported; and virtual-printer/proxy behavior remains out of scope pending a roadmap decision. Active next steps are tracked in `docs/roadmap.md`.

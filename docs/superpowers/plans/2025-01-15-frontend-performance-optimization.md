@@ -94,18 +94,15 @@ Implement route-level loading states, component code splitting, and React Server
    - External tenants (already normalized in effectiveTenants)
    - `APP_TENANT_ID` (already synthesized in effectiveTenants)
 7. Add typed route loaders:
+
    ```tsx
-   export async function loadDevicesRoute(
-     tenantId: string,
-   ): Promise<{
+   export async function loadDevicesRoute(tenantId: string): Promise<{
      printers: Printer[];
      agents: Agent[];
      jobs: Job[];
      error: string | null;
    }>;
-   export async function loadJobsRoute(
-     tenantId: string,
-   ): Promise<{
+   export async function loadJobsRoute(tenantId: string): Promise<{
      jobs: Job[];
      printers: Printer[];
      agents: Agent[];
@@ -121,17 +118,13 @@ Implement route-level loading states, component code splitting, and React Server
      commandData: CommandData | null;
      error: string | null;
    }>;
-   export async function loadUsersRoute(
-     tenantId: string,
-   ): Promise<{
+   export async function loadUsersRoute(tenantId: string): Promise<{
      users: User[];
      identities: UserIdentity[];
      joinLinks: JoinLink[];
      adminError: string | null;
    }>;
-   export async function loadSettingsRoute(
-     tenantId: string,
-   ): Promise<{
+   export async function loadSettingsRoute(tenantId: string): Promise<{
      tenantTokens: TenantToken[];
      agents: Agent[];
      printers: Printer[];
@@ -145,6 +138,7 @@ Implement route-level loading states, component code splitting, and React Server
    - `loadAgentsRoute` includes `parseCommandResult` for command data (returns `CommandResultData`)
    - `loadUsersRoute` and `loadSettingsRoute` use `adminError` for administrative endpoint failures (users, join-links, tenant-tokens, audit-events)
    - Membership roles fetched separately via `getMembershipForRequest()` (not in loaders)
+
 8. Export functions for use in route pages
 9. Preserve existing behavior: onboarding, redirects, membership roles
 
