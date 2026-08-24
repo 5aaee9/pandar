@@ -48,6 +48,16 @@ pub(super) fn serve_freshness_claim(
             &super::responses::printers_response_with_progress(73),
         )))
         .expect("serve freshness generation update");
+    // The update and firmware response use different connections. Wait until
+    // the plugin commits the update before releasing the stale response.
+    let stream_committed = race_directory.join("freshness-stream-committed");
+    while !stream_committed.exists() && !stop.load(Ordering::Acquire) && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert!(
+        stream_committed.exists(),
+        "freshness stream update was not committed before the response"
+    );
     write_response(
         &mut version_stream,
         "HTTP/1.1 200 OK",

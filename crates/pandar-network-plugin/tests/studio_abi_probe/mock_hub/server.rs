@@ -93,7 +93,7 @@ pub(super) fn spawn(mode: MockMode, artifact: Vec<u8>, race_directory: &Path) ->
                 serve_callback_order(&listener, &thread_stop, deadline, &race_directory);
             }
             MockMode::RequestAdmission => {
-                serve_request_admission(&listener, &thread_stop, deadline);
+                serve_request_admission(&listener, &thread_stop, deadline, &race_directory);
             }
             MockMode::CameraAvailable => {
                 let upgrade = next_stream(&listener, &thread_stop, deadline);

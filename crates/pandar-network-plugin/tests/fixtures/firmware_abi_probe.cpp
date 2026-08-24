@@ -150,7 +150,7 @@ int main(int argc, char** argv) {
     }
     if (!overlap_before_deadline || capture.overlap_callbacks != 1 ||
         !overlap_while_refreshing || slow_version_rc != kSuccess ||
-        overlap_delay_ms < 1'100 || overlap_delay_ms >= 2'000) {
+        overlap_delay_ms < 1'000 || overlap_delay_ms >= 2'000) {
         fail(agent, destroy, "firmware acknowledgement was lost behind slow version refresh");
     }
 

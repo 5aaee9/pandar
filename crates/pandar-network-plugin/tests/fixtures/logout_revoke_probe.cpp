@@ -310,6 +310,19 @@ int main(int argc, char** argv) {
             fail("unresponsive Hub blocked logout beyond its finite bound");
         }
         logout_thread.join();
+        if (mode == "timeout") {
+            const auto retry_checked =
+                std::filesystem::path(argv[3]) / "timeout-no-immediate-retry";
+            const auto retry_deadline =
+                std::chrono::steady_clock::now() + std::chrono::seconds(3);
+            while (!std::filesystem::exists(retry_checked) &&
+                   std::chrono::steady_clock::now() < retry_deadline) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            if (!std::filesystem::exists(retry_checked)) {
+                fail("mock Hub did not complete the immediate retry check");
+            }
+        }
     } else if (mode == "stage-failure-delete-delayed-success" ||
                mode == "stage-failure-delete-relogin-success" ||
                mode == "stage-failure-delete-relogin-failure") {

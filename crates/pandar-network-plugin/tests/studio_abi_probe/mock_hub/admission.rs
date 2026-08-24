@@ -1,8 +1,10 @@
 use std::{
     collections::BTreeMap,
     net::TcpListener,
+    path::Path,
     sync::atomic::{AtomicBool, Ordering},
-    time::Instant,
+    thread,
+    time::{Duration, Instant},
 };
 
 use serde::{Deserialize, Serialize};
@@ -16,6 +18,7 @@ pub(super) fn serve_request_admission(
     listener: &TcpListener,
     stop: &AtomicBool,
     deadline: Instant,
+    race_directory: &Path,
 ) {
     let mut printers: PrinterList = serde_json::from_str(PRINTERS_RESPONSE).unwrap();
     printers.devices[0].pandar_printer_id = "00000000-0000-0000-0000-000000000123".to_owned();
@@ -26,8 +29,21 @@ pub(super) fn serve_request_admission(
     let mut prepares = 0;
     let mut executes = 0;
     let mut refreshes = 0;
-    while !stop.load(Ordering::Acquire) {
-        let (mut stream, request) = match super::next_incoming(listener, stop, deadline) {
+    let completed = race_directory.join("request-admission-complete");
+    while !completed.exists() {
+        let Some(incoming) = super::stream::try_next_incoming(listener, deadline) else {
+            assert!(
+                !stop.load(Ordering::Acquire),
+                "request admission probe exited before completion"
+            );
+            assert!(
+                Instant::now() < deadline,
+                "timed out waiting for request admission completion"
+            );
+            thread::sleep(Duration::from_millis(10));
+            continue;
+        };
+        let (mut stream, request) = match incoming {
             super::Incoming::Stream(upgrade) => {
                 assert!(
                     upgrade

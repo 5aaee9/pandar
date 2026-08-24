@@ -1,4 +1,4 @@
-use std::{fs, process::Command};
+use std::{fs, net::TcpListener, process::Command};
 
 use super::compiler::{build_plugin, compile_disposition_probe};
 
@@ -21,12 +21,19 @@ pub(super) fn run_disposition_probe() -> DispositionProbeOutput {
     fs::copy(&built_library, &library).expect("copy Studio plugin library into run directory");
     let config_directory = run_directory.path().join("config");
     fs::create_dir(&config_directory).expect("create disposition ABI config directory");
+    let hub_listener = TcpListener::bind("127.0.0.1:0").expect("bind disposition ABI Hub listener");
+    let hub_url = format!(
+        "http://{}",
+        hub_listener
+            .local_addr()
+            .expect("read disposition ABI Hub listener address")
+    );
 
     let output = Command::new(&compiled.executable)
         .arg(library)
         .arg(config_directory)
         .current_dir(run_directory.path())
-        .env_remove("PANDAR_PLUGIN_HUB_URL")
+        .env("PANDAR_PLUGIN_HUB_URL", hub_url)
         .env_remove("APP_API_URL")
         .env_remove("PANDAR_PLUGIN_FRONTEND_URL")
         .env_remove("APP_BASE_URL")

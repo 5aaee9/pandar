@@ -56,7 +56,9 @@
           let
             rel = lib.removePrefix "${toString root}/" (toString path);
           in
-          rel == "Cargo.lock"
+          rel == ".config"
+          || rel == ".config/nextest.toml"
+          || rel == "Cargo.lock"
           || rel == "Cargo.toml"
           || rel == "studio-abi-profiles.json"
           || rel == "crates"

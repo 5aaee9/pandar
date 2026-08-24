@@ -67,55 +67,65 @@ fn is_printer_events_upgrade(request: &str) -> bool {
         && upgrade_header
 }
 
-/// Accepts connections until the deadline. WebSocket upgrades are returned
-/// unresolved; HTTP requests are returned with their raw request text.
+/// Tries one pending connection. WebSocket upgrades are returned unresolved;
+/// HTTP requests are returned with their raw request text.
+pub(super) fn try_next_incoming(
+    listener: &std::net::TcpListener,
+    deadline: Instant,
+) -> Option<Incoming> {
+    match listener.accept() {
+        Ok((stream, _)) => {
+            stream.set_nonblocking(false).unwrap();
+            let timeout = deadline
+                .checked_duration_since(Instant::now())
+                .filter(|remaining| !remaining.is_zero());
+            stream.set_read_timeout(timeout).unwrap();
+            stream.set_write_timeout(timeout).unwrap();
+            let mut stream = stream;
+            let mut first = [0_u8; 1];
+            match stream.peek(&mut first) {
+                Ok(0) => return None,
+                Ok(_) => {}
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::UnexpectedEof
+                    ) =>
+                {
+                    return None;
+                }
+                Err(error) => panic!("mock hub failed waiting for request bytes: {error}"),
+            }
+            let request = read_http_request_with_timeout(&mut stream, timeout);
+            if is_printer_events_upgrade(&request) {
+                Some(Incoming::Stream(StreamUpgrade { stream, request }))
+            } else {
+                Some(Incoming::Http(stream, request))
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
+        Err(error) => panic!("failed accepting mock hub request: {error}"),
+    }
+}
+
+/// Accepts connections until the deadline.
 pub(super) fn next_incoming(
     listener: &std::net::TcpListener,
     stop: &AtomicBool,
     deadline: Instant,
 ) -> Incoming {
     loop {
-        match listener.accept() {
-            Ok((stream, _)) => {
-                stream.set_nonblocking(false).unwrap();
-                let timeout = deadline
-                    .checked_duration_since(Instant::now())
-                    .filter(|remaining| !remaining.is_zero());
-                stream.set_read_timeout(timeout).unwrap();
-                stream.set_write_timeout(timeout).unwrap();
-                let mut stream = stream;
-                let mut first = [0_u8; 1];
-                match stream.peek(&mut first) {
-                    Ok(0) => continue,
-                    Ok(_) => {}
-                    Err(error)
-                        if matches!(
-                            error.kind(),
-                            std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::UnexpectedEof
-                        ) =>
-                    {
-                        continue;
-                    }
-                    Err(error) => panic!("mock hub failed waiting for request bytes: {error}"),
-                }
-                let request = read_http_request_with_timeout(&mut stream, timeout);
-                if is_printer_events_upgrade(&request) {
-                    return Incoming::Stream(StreamUpgrade { stream, request });
-                }
-                return Incoming::Http(stream, request);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                if stop.load(Ordering::Acquire) {
-                    panic!("mock hub stopped while waiting for a connection");
-                }
-                assert!(
-                    Instant::now() < deadline,
-                    "timed out waiting for a mock hub connection"
-                );
-                thread::sleep(Duration::from_millis(10));
-            }
-            Err(error) => panic!("failed accepting mock hub request: {error}"),
+        if let Some(incoming) = try_next_incoming(listener, deadline) {
+            return incoming;
         }
+        if stop.load(Ordering::Acquire) {
+            panic!("mock hub stopped while waiting for a connection");
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for a mock hub connection"
+        );
+        thread::sleep(Duration::from_millis(10));
     }
 }
 

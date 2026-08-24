@@ -4,7 +4,7 @@
 mod support;
 
 use std::{
-    thread,
+    fs, thread,
     time::{Duration, Instant},
 };
 use support::{assert_no_request, next_request, run_probe, wait_for_client_close, write_response};
@@ -130,7 +130,7 @@ fn disconnected_revoke_still_clears_state_and_preserves_a_redacted_cause_chain()
 
 #[test]
 fn unresponsive_revoke_clears_local_state_promptly_and_has_a_finite_bound() {
-    let output = run_probe("timeout", |listener, deadline, _| {
+    let output = run_probe("timeout", |listener, deadline, directory| {
         let (stream, request) = next_request(&listener, deadline);
         assert!(request.starts_with("DELETE /api/v1/plugin/session HTTP/1.1"));
         assert!(
@@ -139,7 +139,8 @@ fn unresponsive_revoke_clears_local_state_promptly_and_has_a_finite_bound() {
                 .contains("authorization: bearer logout-secret-token")
         );
         wait_for_client_close(stream, deadline);
-        assert_no_request(&listener, Instant::now() + Duration::from_millis(300));
+        assert_no_request(&listener, Instant::now() + Duration::from_secs(1));
+        fs::write(directory.join("timeout-no-immediate-retry"), "").unwrap();
     });
     assert_eq!(output.trim(), r#"{"ok":true,"mode":"timeout"}"#);
 }

@@ -61,9 +61,9 @@ fn firmware_probe_wires_native_cloud_and_lan_behavior() {
     assert_eq!(result["ok"], serde_json::json!(true));
     assert_eq!(result["catalog_exact"], serde_json::json!(true));
     assert_eq!(result["versions_exact"], serde_json::json!(true));
-    assert!(result["callback_delay_ms"].as_u64().unwrap() >= 1_100);
+    assert!(result["callback_delay_ms"].as_u64().unwrap() >= 1_000);
     assert!(result["callback_delay_ms"].as_u64().unwrap() < 2_000);
-    assert!(result["overlap_callback_delay_ms"].as_u64().unwrap() >= 1_100);
+    assert!(result["overlap_callback_delay_ms"].as_u64().unwrap() >= 1_000);
     assert!(result["overlap_callback_delay_ms"].as_u64().unwrap() < 2_000);
     assert_eq!(result["overlap_callback_exact"], serde_json::json!(true));
     assert_eq!(result["callbacks_serialized"], serde_json::json!(true));

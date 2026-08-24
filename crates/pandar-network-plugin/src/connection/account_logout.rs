@@ -359,6 +359,7 @@ impl AccountLogoutOwner<'_> {
         self.session
             .account_logout
             .complete(self.generation, requested, outcome);
+        self.session.notify_dispatcher();
         self.completed = true;
     }
 }

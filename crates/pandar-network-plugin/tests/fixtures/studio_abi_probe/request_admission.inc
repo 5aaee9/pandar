@@ -1,4 +1,5 @@
     if (request_admission_mode) {
+        const auto directory = std::filesystem::path(config_dir);
         const std::string profile_a = R"({"token":"probe-token","user_id":"admission-a","user_name":"Admission A","tenant_id":"tenant-a","tenant_name":"Tenant A"})";
         const std::string profile_b = R"({"token":"probe-token","user_id":"admission-b","user_name":"Admission B","tenant_id":"tenant-b","tenant_name":"Tenant B"})";
         const std::string operation =
@@ -121,6 +122,7 @@
         }
 
         destroy_agent(agent);
+        std::filesystem::create_directory(directory / "request-admission-complete");
         print_json(out);
         return 0;
     }

@@ -1,5 +1,10 @@
 use std::{
-    sync::{Arc, mpsc},
+    ffi::c_void,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+        mpsc,
+    },
     thread,
 };
 
@@ -18,6 +23,29 @@ fn failure_outcome() -> NoAuthRotationOutcome {
         http_code: 503,
         body: r#"{"error":"invalid_response"}"#.to_owned(),
     }
+}
+
+static DISPATCH_WAKES: AtomicUsize = AtomicUsize::new(0);
+
+extern "C" fn count_dispatch_wake(_: *mut c_void) {
+    DISPATCH_WAKES.fetch_add(1, Ordering::SeqCst);
+}
+
+#[test]
+fn completed_logout_restarts_the_status_dispatcher_delay() {
+    DISPATCH_WAKES.store(0, Ordering::SeqCst);
+    let session = session();
+    session.set_dispatcher_waker(std::ptr::null_mut(), Some(count_dispatch_wake));
+    let mut owner = match session.begin_account_logout(true) {
+        AccountLogoutBegin::Owner(owner) => owner,
+        _ => panic!("requested logout did not become owner"),
+    };
+    owner.begin_finalization();
+    assert!(owner.seal_finalization());
+
+    owner.complete(true, failure_outcome());
+
+    assert_eq!(DISPATCH_WAKES.load(Ordering::SeqCst), 1);
 }
 
 #[test]

@@ -220,7 +220,8 @@ pub(super) fn assert_no_request(listener: &TcpListener, deadline: Instant) {
                     thread::spawn(move || serve_stream_upgrade(stream, &request));
                     continue;
                 }
-                panic!("logout sent an unexpected request: {request}");
+                let request_line = request.lines().next().unwrap_or_default();
+                panic!("logout sent an unexpected request: {request_line}");
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 if Instant::now() >= deadline {

@@ -232,8 +232,14 @@
         TunnelCapture local;
         std::atomic<int> connected_callbacks{0};
         std::atomic<int> local_connected_callbacks{0};
-        if (set_message(agent, [&cloud](std::string dev_id, std::string body) {
+        const auto directory = std::filesystem::path(config_dir);
+        if (set_message(agent, [&cloud, directory](std::string dev_id, std::string body) {
                 capture_tunnel_message(cloud, dev_id, body);
+                if (contains(body, R"("mc_percent":73)")) {
+                    std::filesystem::create_directory(
+                        directory / "freshness-stream-committed"
+                    );
+                }
             }) != 0 ||
             set_local_message(agent, [&local](std::string dev_id, std::string body) {
                 capture_tunnel_message(local, dev_id, body);
@@ -272,7 +278,6 @@
                 0
             );
         });
-        const auto directory = std::filesystem::path(config_dir);
         const auto version_entered = directory / "freshness-version-entered";
         if (!wait_until([&] { return std::filesystem::exists(version_entered); })) {
             version_request.join();
