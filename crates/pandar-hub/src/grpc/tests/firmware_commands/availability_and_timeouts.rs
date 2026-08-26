@@ -130,7 +130,7 @@ async fn firmware_command_execute_full_channel_is_known_pre_publish_failure() {
     for index in 0..8 {
         session
             .command_sender
-            .try_send(Ok(crate::protocol::agent::v1::HubCommand {
+            .try_send(Ok(pandar_protocol::agent::v1::HubCommand {
                 command_id: format!("execute-filler-{index}"),
                 command: None,
             }))

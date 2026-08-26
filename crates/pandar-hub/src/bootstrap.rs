@@ -14,10 +14,10 @@ use crate::{
     AppState,
     grpc::AgentControlService,
     grpc_connection_limit,
-    protocol::agent::v1::agent_control_server::AgentControlServer,
     routes::{self, ApiError},
     runtime,
 };
+use pandar_protocol::agent::v1::agent_control_server::AgentControlServer;
 
 pub(crate) fn authorize_bootstrap(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
     if state.no_auth_enabled() {

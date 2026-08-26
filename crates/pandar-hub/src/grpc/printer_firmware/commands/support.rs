@@ -32,7 +32,7 @@ pub(super) fn identity_matches_session(
 }
 
 pub(super) fn core_status(
-    status: crate::protocol::agent::v1::PrinterFirmwareStatus,
+    status: pandar_protocol::agent::v1::PrinterFirmwareStatus,
 ) -> CoreFirmwareStatus {
     CoreFirmwareStatus {
         upgrade_state: status.upgrade_state.map(core_upgrade_state),

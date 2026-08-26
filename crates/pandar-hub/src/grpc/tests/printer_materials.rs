@@ -1,8 +1,6 @@
 use super::*;
-use crate::{
-    grpc::printer_materials::handle_materials_snapshot, printer_events::PrinterEvent,
-    protocol::agent::v1::PrinterMaterialsSnapshot,
-};
+use crate::{grpc::printer_materials::handle_materials_snapshot, printer_events::PrinterEvent};
+use pandar_protocol::agent::v1::PrinterMaterialsSnapshot;
 
 mod support;
 

@@ -4,7 +4,7 @@ use axum::body::Bytes;
 use futures_util::StreamExt;
 
 use super::*;
-use crate::protocol::agent::v1::{
+use pandar_protocol::agent::v1::{
     AgentCameraChunk, AgentCameraClosed, AgentCameraEvent, AgentCameraHello, agent_camera_event,
     hub_command,
 };

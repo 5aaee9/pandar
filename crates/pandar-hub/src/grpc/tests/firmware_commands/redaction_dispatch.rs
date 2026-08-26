@@ -28,7 +28,7 @@ async fn firmware_command_redaction_keeps_url_transient_and_execute_at_most_once
         .unwrap()
         .command
         .and_then(|command| match command {
-            crate::protocol::agent::v1::firmware_command::Command::Start(start) => Some(start),
+            pandar_protocol::agent::v1::firmware_command::Command::Start(start) => Some(start),
             _ => None,
         })
         .unwrap();

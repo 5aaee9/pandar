@@ -1,17 +1,16 @@
-use crate::{
-    protocol::agent::v1::{
-        AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsStartDryingOperation,
-        AmsStopDryingOperation, AmsUnloadFilamentOperation, AutoNozzleMappingFilamentInfo,
-        AutoNozzleMappingGroupInfo, AutoNozzleMappingNozzleInfo, Axis, AxisMovement,
-        GcodeLineOperation, GetAutoNozzleMappingOperation, HandlePrintErrorOperation,
-        HolderNozzleRefreshOperation, HomeOperation, MoveAxesOperation, NozzleHolderCtrlOperation,
-        NozzleInfoConfirmOperation, PauseOperation, PrintErrorAction as ProtoPrintErrorAction,
-        ResumeOperation, SelectExtruderOperation, SetBedTemperatureOperation,
-        SetChamberLightOperation, SetChamberTemperatureOperation, SetFanSpeedOperation,
-        SetHotendTemperatureOperation, SetPrintSpeedOperation, StopOperation, ToggleLightOperation,
-        printer_operation,
-    },
-    repositories::{PrintErrorAction, PrinterAxis, PrinterAxisMovement, PrinterOperationKind},
+use crate::repositories::{
+    PrintErrorAction, PrinterAxis, PrinterAxisMovement, PrinterOperationKind,
+};
+use pandar_protocol::agent::v1::{
+    AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsStartDryingOperation,
+    AmsStopDryingOperation, AmsUnloadFilamentOperation, AutoNozzleMappingFilamentInfo,
+    AutoNozzleMappingGroupInfo, AutoNozzleMappingNozzleInfo, Axis, AxisMovement,
+    GcodeLineOperation, GetAutoNozzleMappingOperation, HandlePrintErrorOperation,
+    HolderNozzleRefreshOperation, HomeOperation, MoveAxesOperation, NozzleHolderCtrlOperation,
+    NozzleInfoConfirmOperation, PauseOperation, PrintErrorAction as ProtoPrintErrorAction,
+    ResumeOperation, SelectExtruderOperation, SetBedTemperatureOperation, SetChamberLightOperation,
+    SetChamberTemperatureOperation, SetFanSpeedOperation, SetHotendTemperatureOperation,
+    SetPrintSpeedOperation, StopOperation, ToggleLightOperation, printer_operation,
 };
 
 pub(super) fn proto_printer_operation(

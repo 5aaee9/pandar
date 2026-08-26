@@ -27,11 +27,11 @@ pub use types::{
 
 use crate::{
     AppState,
-    protocol::agent::v1::{
-        FirmwareCommand as ProtoFirmwareCommand, FirmwareConsistencyConfirm, FirmwareStart,
-        FirmwareSwitchAmsFirmware, FirmwareUpgradeConfirm, firmware_command,
-    },
     sessions::{FirmwareCommandIdentity, FirmwareSessionDispatch, SessionToken},
+};
+use pandar_protocol::agent::v1::{
+    FirmwareCommand as ProtoFirmwareCommand, FirmwareConsistencyConfirm, FirmwareStart,
+    FirmwareSwitchAmsFirmware, FirmwareUpgradeConfirm, firmware_command,
 };
 
 struct FirmwareTarget {
@@ -62,7 +62,7 @@ async fn resolve_target(
         .current_token_for_capability(
             tenant_id,
             agent_id,
-            crate::protocol::agent::v1::AgentCapability::FirmwareControl,
+            pandar_protocol::agent::v1::AgentCapability::FirmwareControl,
         )
         .await
         .ok_or(FirmwareServiceError::Unavailable)?;

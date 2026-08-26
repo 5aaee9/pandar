@@ -14,7 +14,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
 use uuid::Uuid;
 
-use crate::protocol::agent::v1::{
+use pandar_protocol::agent::v1::{
     CameraStreamMode, CloseCameraStream, HubCameraCommand, HubCommand, OpenCameraStream,
     hub_camera_command, hub_command,
 };

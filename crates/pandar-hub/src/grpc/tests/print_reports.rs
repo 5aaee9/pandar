@@ -4,9 +4,9 @@ use tonic::Code;
 use super::*;
 use crate::{
     printer_events::PrinterEvent,
-    protocol::agent::v1::{MachineDiagnostic, PrintJobReport, PrinterHmsItem},
     repositories::{CreatePrintJob, test_helpers::insert_printer_fixture},
 };
+use pandar_protocol::agent::v1::{MachineDiagnostic, PrintJobReport, PrinterHmsItem};
 
 mod live_status;
 

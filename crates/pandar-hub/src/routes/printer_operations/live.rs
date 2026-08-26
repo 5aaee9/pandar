@@ -4,13 +4,13 @@ use super::plugin_operation_error;
 use crate::{
     AppState,
     grpc::commands::live_printer_operation_hub_command,
-    protocol::agent::v1::AgentCapability,
     repositories::{
         AuditActor, PersistedLivePrinterOperation, PrinterOperationKind, RepositoryError,
     },
     routes::ApiError,
     sessions::LiveDispatchError,
 };
+use pandar_protocol::agent::v1::AgentCapability;
 
 pub(super) async fn dispatch(
     state: &AppState,

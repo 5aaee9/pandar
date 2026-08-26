@@ -12,8 +12,8 @@ use tokio::sync::{Mutex, OwnedMutexGuard, mpsc};
 use tonic::Status;
 use uuid::Uuid;
 
-use crate::protocol::agent::v1::{AgentCapability, HubCommand};
 use crate::repositories::{AgentRepository, RepositoryError, RepositoryResult};
+use pandar_protocol::agent::v1::{AgentCapability, HubCommand};
 
 #[cfg(test)]
 use pandar_core::{AgentStatus, CommandId};

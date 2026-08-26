@@ -1,5 +1,5 @@
 use super::*;
-use crate::protocol::agent::v1::{CommandResult, FirmwareCommandResult, agent_event};
+use pandar_protocol::agent::v1::{CommandResult, FirmwareCommandResult, agent_event};
 
 #[tokio::test]
 async fn firmware_wire_results_enter_typed_validation_before_generic_handling() {

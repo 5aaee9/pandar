@@ -3,10 +3,8 @@ use std::collections::{BTreeMap, HashSet};
 use pandar_core::PrinterFirmwareState;
 
 use super::*;
-use crate::{
-    protocol::agent::v1::AgentCapability,
-    sessions::{AgentSession, SessionToken, empty_pending_live_commands},
-};
+use crate::sessions::{AgentSession, SessionToken, empty_pending_live_commands};
+use pandar_protocol::agent::v1::AgentCapability;
 
 #[tokio::test]
 async fn plugin_firmware_batch_requires_current_capable_exact_session_generation() {

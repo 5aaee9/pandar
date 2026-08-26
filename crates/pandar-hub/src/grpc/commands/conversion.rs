@@ -5,18 +5,15 @@ mod operations;
 
 use operations::proto_printer_operation;
 
-use crate::{
-    protocol::agent::v1::{
-        DiagnosePrinter, DiscoverPrinters, HubCommand, PrintProjectFile, PrintProjectFileOptions,
-        PrintSubmissionSource, PrinterOperation, RefreshPrinterMaterials, RefreshPrinters,
-        ReloadPrinterConnection, StudioAmsMappingEntry, StudioAmsMappingInfo, StudioNozzleInfo,
-        StudioTaskMetadata, hub_command,
-    },
-    repositories::{
-        DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
-        PrinterOperationKind, PrinterOperationPayload, RefreshPrinterMaterialsPayload,
-        ReloadPrinterConnectionPayload,
-    },
+use crate::repositories::{
+    DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, PrinterOperationKind,
+    PrinterOperationPayload, RefreshPrinterMaterialsPayload, ReloadPrinterConnectionPayload,
+};
+use pandar_protocol::agent::v1::{
+    DiagnosePrinter, DiscoverPrinters, HubCommand, PrintProjectFile, PrintProjectFileOptions,
+    PrintSubmissionSource, PrinterOperation, RefreshPrinterMaterials, RefreshPrinters,
+    ReloadPrinterConnection, StudioAmsMappingEntry, StudioAmsMappingInfo, StudioNozzleInfo,
+    StudioTaskMetadata, hub_command,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

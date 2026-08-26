@@ -1,7 +1,7 @@
 use tokio::sync::mpsc;
 
 use super::*;
-use crate::protocol::agent::v1::{
+use pandar_protocol::agent::v1::{
     AgentCapability, CameraStreamMode, HubCommand, hub_camera_command, hub_command,
 };
 

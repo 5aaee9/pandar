@@ -285,7 +285,7 @@ async fn rejected_full_dispatch_preserves_safe_cause_without_signed_url() {
     for index in 0..8 {
         session
             .command_sender
-            .try_send(Ok(crate::protocol::agent::v1::HubCommand {
+            .try_send(Ok(pandar_protocol::agent::v1::HubCommand {
                 command_id: format!("execute-cause-filler-{index}"),
                 command: None,
             }))

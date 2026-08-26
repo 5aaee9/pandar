@@ -103,7 +103,7 @@ async fn open_grpc_session(
     agent_id: AgentId,
 ) -> (
     tokio::sync::mpsc::Sender<AgentEvent>,
-    impl tokio_stream::Stream<Item = Result<crate::protocol::agent::v1::HubCommand, tonic::Status>>
+    impl tokio_stream::Stream<Item = Result<pandar_protocol::agent::v1::HubCommand, tonic::Status>>
     + Unpin,
 ) {
     let mut client = AgentControlClient::connect(format!("http://{grpc_addr}"))
@@ -316,7 +316,7 @@ async fn studio_projection_streams_print_and_material_changes_once() {
         agent_id: fixture.agent_id.to_string(),
         event_id: "materials".to_owned(),
         event: Some(agent_event::Event::PrinterMaterialsSnapshot(
-            crate::protocol::agent::v1::PrinterMaterialsSnapshot {
+            pandar_protocol::agent::v1::PrinterMaterialsSnapshot {
                 serial: fixture.serial_number.clone(),
                 printer_id: fixture.printer_id.clone(),
                 printer_materials_json: materials_json.clone(),

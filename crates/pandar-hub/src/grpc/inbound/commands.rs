@@ -7,10 +7,10 @@ use crate::{
         handle_ack_and_job, handle_result_and_job, parse_command_id, repository_status,
     },
     printer_events::{PrinterEvent, PrinterEventCommand},
-    protocol::agent::v1::{CommandAck, CommandResult},
     repositories::{PrinterOperationKind, PrinterOperationPayload},
     sessions::{LiveCommandClaimOutcome, SessionToken},
 };
+use pandar_protocol::agent::v1::{CommandAck, CommandResult};
 
 pub(super) async fn handle_command_ack(
     state: &AppState,

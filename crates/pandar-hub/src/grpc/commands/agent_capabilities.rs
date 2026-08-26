@@ -2,10 +2,10 @@ use pandar_core::{AgentId, TenantId};
 
 use crate::{
     AppState,
-    protocol::agent::v1::AgentCapability,
     repositories::{PrinterOperationKind, PrinterOperationPayload},
     sessions::SessionToken,
 };
+use pandar_protocol::agent::v1::AgentCapability;
 
 pub(super) async fn queued_command_gate_failure(
     state: &AppState,

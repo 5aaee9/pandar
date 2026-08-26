@@ -321,7 +321,7 @@ async fn register_feature_session(
         state,
         tenant_id,
         agent_id,
-        capable.then_some(crate::protocol::agent::v1::AgentCapability::RequiredDeviceFeatures),
+        capable.then_some(pandar_protocol::agent::v1::AgentCapability::RequiredDeviceFeatures),
     )
     .await
 }
@@ -330,7 +330,7 @@ async fn register_capability_session(
     state: &AppState,
     tenant_id: TenantId,
     agent_id: pandar_core::AgentId,
-    capabilities: impl IntoIterator<Item = crate::protocol::agent::v1::AgentCapability>,
+    capabilities: impl IntoIterator<Item = pandar_protocol::agent::v1::AgentCapability>,
 ) -> crate::sessions::SessionToken {
     let token = crate::sessions::SessionToken::new();
     claim_feature_session(state, tenant_id, agent_id, token).await;

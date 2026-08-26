@@ -78,7 +78,7 @@ async fn reassign_to_new_agent(
 ) -> (
     AgentId,
     SessionToken,
-    mpsc::Receiver<Result<crate::protocol::agent::v1::HubCommand, tonic::Status>>,
+    mpsc::Receiver<Result<pandar_protocol::agent::v1::HubCommand, tonic::Status>>,
 ) {
     let agent = fixture
         .state

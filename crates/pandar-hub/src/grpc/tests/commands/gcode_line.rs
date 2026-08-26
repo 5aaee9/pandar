@@ -9,10 +9,10 @@ use crate::{
         CommandConversionOptions, SessionQueuedDispatch, dispatch_next_queued_for_session,
         hub_command_from_record, required_feature_dispatch_pause,
     },
-    protocol::agent::v1::{AgentCapability, HubCommand, hub_command, printer_operation},
     repositories::{AuditActor, PrinterOperationKind},
     sessions::{AgentSession, SessionToken, empty_pending_live_commands},
 };
+use pandar_protocol::agent::v1::{AgentCapability, HubCommand, hub_command, printer_operation};
 
 const EXACT_PARAM: &str = "M620 C1 \r\n; keep trailing  \n\n";
 

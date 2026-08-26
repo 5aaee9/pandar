@@ -8,10 +8,10 @@ use tonic::Status;
 use crate::{
     AppState,
     printer_events::{PrinterEvent, fence_printer_nozzle_system, printer_event_printer},
-    protocol::agent::v1::PrinterSnapshot,
     repositories::{PrinterSnapshotUpsert, RepositoryError},
     sessions::SessionToken,
 };
+use pandar_protocol::agent::v1::PrinterSnapshot;
 
 pub async fn handle_snapshot(
     state: &AppState,
@@ -25,17 +25,9 @@ pub async fn handle_snapshot(
     let name = required(&snapshot.name, "name must not be blank")?;
     let status = trim_optional(snapshot.state);
     let model = trim_optional(snapshot.model);
-    let (device_features, device_features2) =
-        snapshot.device_features.map_or((None, None), |features| {
-            (
-                features
-                    .bambu_fun_bits
-                    .map(pandar_core::BambuDeviceFeatures::from_bits),
-                features
-                    .bambu_fun2_bits
-                    .map(pandar_core::BambuDeviceFeatures::from_bits),
-            )
-        });
+    let (device_features, device_features2) = snapshot
+        .device_features
+        .map_or((None, None), pandar_protocol::core_device_features);
     let nozzle_system = snapshot
         .nozzle_system
         .map(proto_nozzle_system)
@@ -156,9 +148,9 @@ pub async fn handle_snapshot(
 }
 
 fn proto_cooling_system(
-    system: crate::protocol::agent::v1::PrinterCoolingSystem,
+    system: pandar_protocol::agent::v1::PrinterCoolingSystem,
 ) -> Result<PrinterCoolingSystem, Status> {
-    use crate::protocol::agent::v1::{
+    use pandar_protocol::agent::v1::{
         PrinterCoolingFanKind as ProtoFanKind, PrinterCoolingMode as ProtoMode,
     };
 
@@ -215,7 +207,7 @@ fn proto_cooling_system(
 }
 
 fn proto_nozzle_system(
-    system: crate::protocol::agent::v1::PrinterNozzleSystem,
+    system: pandar_protocol::agent::v1::PrinterNozzleSystem,
 ) -> Result<BambuNozzleSystem, Status> {
     let nozzle = system
         .nozzle

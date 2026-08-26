@@ -1,10 +1,8 @@
 use pandar_core::{AgentId, TenantId};
 use tonic::Status;
 
-use crate::{
-    AppState,
-    protocol::agent::v1::{AgentCameraEvent, AgentCameraHello, agent_camera_event},
-};
+use crate::AppState;
+use pandar_protocol::agent::v1::{AgentCameraEvent, AgentCameraHello, agent_camera_event};
 
 pub(super) fn parse_camera_hello(
     event: AgentCameraEvent,

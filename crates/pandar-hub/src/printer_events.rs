@@ -12,11 +12,11 @@ use tokio::sync::{Mutex, broadcast, watch};
 
 use crate::{
     metrics::{MetricsState, SubscriptionGuard},
-    protocol::agent::v1::AgentCapability,
     repositories::{MaterialSnapshot, PrinterHms, PrinterWithLiveStatus},
     routes::jobs::JobResponse,
     sessions::SessionRegistry,
 };
+use pandar_protocol::agent::v1::AgentCapability;
 
 mod materials;
 mod projection;

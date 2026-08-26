@@ -11,17 +11,17 @@ use super::log_capture::CapturedLogs;
 use super::*;
 use crate::{
     firmware_control::{FirmwareExecutePhase, FirmwareServiceError},
-    protocol::agent::v1::{
-        AgentCapability, AgentEvent, AmsFirmwareDescriptor, AmsFirmwareDescriptorList,
-        AmsFirmwareSwitchState, CommandAck, CommandResult, FirmwareAcknowledgement,
-        FirmwareCommandResult, FirmwarePrepared, FirmwarePublished, FirmwareRefreshedModules,
-        PrinterFirmwareInvalidated, PrinterFirmwareModule, PrinterFirmwareModulesSnapshot,
-        PrinterFirmwareStatus, PrinterFirmwareStatusSnapshot, PrinterFirmwareVersion,
-        PrinterFirmwareVersionList, PrinterUpgradeState, agent_event, firmware_command_result,
-        hub_command,
-    },
     repositories::AuditActor,
     sessions::{AgentSession, SessionToken, empty_pending_live_commands},
+};
+use pandar_protocol::agent::v1::{
+    AgentCapability, AgentEvent, AmsFirmwareDescriptor, AmsFirmwareDescriptorList,
+    AmsFirmwareSwitchState, CommandAck, CommandResult, FirmwareAcknowledgement,
+    FirmwareCommandResult, FirmwarePrepared, FirmwarePublished, FirmwareRefreshedModules,
+    PrinterFirmwareInvalidated, PrinterFirmwareModule, PrinterFirmwareModulesSnapshot,
+    PrinterFirmwareStatus, PrinterFirmwareStatusSnapshot, PrinterFirmwareVersion,
+    PrinterFirmwareVersionList, PrinterUpgradeState, agent_event, firmware_command_result,
+    hub_command,
 };
 
 const GENERATION: u64 = 7;

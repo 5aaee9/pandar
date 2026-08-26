@@ -7,10 +7,8 @@ use pandar_core::{AgentId, CommandId, TenantId};
 use tokio::sync::{OwnedMutexGuard, mpsc};
 
 use super::{AgentSession, SessionRegistry, SessionToken};
-use crate::{
-    AppState,
-    protocol::agent::v1::{AgentCapability, HubCommand, hub_command},
-};
+use crate::AppState;
+use pandar_protocol::agent::v1::{AgentCapability, HubCommand, hub_command};
 
 pub type PendingLiveCommands = Arc<StdMutex<HashMap<CommandId, PendingLiveCommand>>>;
 

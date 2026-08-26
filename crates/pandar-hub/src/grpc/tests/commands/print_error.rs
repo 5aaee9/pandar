@@ -10,11 +10,11 @@ use tonic::Status;
 use crate::{
     AppState,
     grpc::commands::{hub_command_from_record, live_printer_operation_hub_command},
-    protocol::agent::v1::{
-        AgentCapability, AgentEvent, CommandAck, CommandResult,
-        PrintErrorAction as ProtoPrintErrorAction, agent_event, hub_command, printer_operation,
-    },
     repositories::{PrintErrorAction, PrinterOperationKind, PrinterOperationPayload},
+};
+use pandar_protocol::agent::v1::{
+    AgentCapability, AgentEvent, CommandAck, CommandResult,
+    PrintErrorAction as ProtoPrintErrorAction, agent_event, hub_command, printer_operation,
 };
 
 mod reconnect;

@@ -1,11 +1,9 @@
 use serde::Serialize;
 
 use super::*;
-use crate::{
-    AppState,
-    protocol::agent::v1::{AgentEvent, PrinterMaterialsSnapshot, agent_event},
-};
+use crate::AppState;
 use pandar_core::{AgentId, TenantId};
+use pandar_protocol::agent::v1::{AgentEvent, PrinterMaterialsSnapshot, agent_event};
 
 pub(super) async fn fixture_printer(state: &AppState) -> (TenantId, AgentId, String) {
     let (tenant_id, agent_id) = tenant_agent(state).await;

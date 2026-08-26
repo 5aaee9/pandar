@@ -9,7 +9,7 @@ pub(super) struct FirmwareFixture {
     pub(super) serial: String,
     pub(super) token: SessionToken,
     pub(super) command_receiver:
-        mpsc::Receiver<Result<crate::protocol::agent::v1::HubCommand, Status>>,
+        mpsc::Receiver<Result<pandar_protocol::agent::v1::HubCommand, Status>>,
 }
 
 impl FirmwareFixture {
@@ -146,7 +146,7 @@ impl FirmwareFixture {
             .unwrap()
     }
 
-    pub(super) async fn next_command(&mut self) -> crate::protocol::agent::v1::HubCommand {
+    pub(super) async fn next_command(&mut self) -> pandar_protocol::agent::v1::HubCommand {
         tokio::time::timeout(Duration::from_millis(200), self.command_receiver.recv())
             .await
             .expect("firmware command dispatch timed out")

@@ -4,10 +4,10 @@ use tonic::Status;
 use crate::{
     AppState,
     printer_events::{PrinterEvent, fence_printer_nozzle_system, printer_event_printer},
-    protocol::agent::v1::PrinterMaterialsSnapshot,
     repositories::{CurrentMaterialPatchOutcome, MaterialPatchOutcome, RepositoryError},
     sessions::SessionToken,
 };
+use pandar_protocol::agent::v1::PrinterMaterialsSnapshot;
 
 pub async fn handle_materials_snapshot(
     state: &AppState,

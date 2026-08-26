@@ -7,9 +7,9 @@ use super::{
 };
 use crate::{
     AppState,
-    protocol::agent::v1::{HubCommand, RefreshFirmwareVersion, hub_command},
     repositories::{AuditActor, FirmwareCommandOwner},
 };
+use pandar_protocol::agent::v1::{HubCommand, RefreshFirmwareVersion, hub_command};
 
 impl AppState {
     pub async fn refresh_version(

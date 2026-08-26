@@ -4,9 +4,7 @@ use pandar_core::{
 };
 use tonic::Status;
 
-use super::{
-    core_module, core_upgrade_state, module_names_are_valid, required_serial, storage_value,
-};
+use super::{module_names_are_valid, required_serial, storage_value};
 use crate::{
     AppState,
     firmware_control::{
@@ -14,15 +12,16 @@ use crate::{
         finish_cancelled_commands, finish_pre_publish_failure,
     },
     grpc::commands::{parse_command_id, repository_status},
-    protocol::agent::v1::{
-        CommandResult, FirmwareCommandResult, FirmwarePrepared, FirmwarePublished,
-        firmware_command_result,
-    },
     repositories::{FirmwarePersistedPhase, FirmwarePersistedResult, PrinterFirmwareUpdateOutcome},
     sessions::{
         ClaimedFirmwareCommand, ClaimedFirmwareKind, FirmwareCommandIdentity, SessionToken,
     },
 };
+use pandar_protocol::agent::v1::{
+    CommandResult, FirmwareCommandResult, FirmwarePrepared, FirmwarePublished,
+    firmware_command_result,
+};
+use pandar_protocol::{core_module, core_upgrade_state};
 
 mod completion;
 mod redaction;

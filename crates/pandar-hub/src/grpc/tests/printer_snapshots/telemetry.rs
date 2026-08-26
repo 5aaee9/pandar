@@ -6,7 +6,7 @@ async fn grpc_partial_snapshot_preserves_absent_telemetry_and_updates_present_fi
     let (tenant_id, agent_id) = tenant_agent(&state).await;
     let token = register_test_session(&state, tenant_id, agent_id).await;
     let mut full = snapshot("SN-PARTIAL", "Printer", "X2D", "PRINTING");
-    full.nozzle_temperatures = vec![crate::protocol::agent::v1::NozzleTemperature {
+    full.nozzle_temperatures = vec![pandar_protocol::agent::v1::NozzleTemperature {
         label: "L".to_owned(),
         current_celsius: "41".to_owned(),
         target_celsius: "220".to_owned(),
@@ -21,10 +21,10 @@ async fn grpc_partial_snapshot_preserves_absent_telemetry_and_updates_present_fi
     full.chamber_temperature_celsius = "32".to_owned();
     full.chamber_target_temperature_celsius = "45".to_owned();
     full.chamber_light_on = Some(true);
-    full.cooling_system = Some(crate::protocol::agent::v1::PrinterCoolingSystem {
-        mode: Some(crate::protocol::agent::v1::PrinterCoolingMode::Cooling as i32),
-        fans: vec![crate::protocol::agent::v1::PrinterCoolingFan {
-            kind: crate::protocol::agent::v1::PrinterCoolingFanKind::PartCooling as i32,
+    full.cooling_system = Some(pandar_protocol::agent::v1::PrinterCoolingSystem {
+        mode: Some(pandar_protocol::agent::v1::PrinterCoolingMode::Cooling as i32),
+        fans: vec![pandar_protocol::agent::v1::PrinterCoolingFan {
+            kind: pandar_protocol::agent::v1::PrinterCoolingFanKind::PartCooling as i32,
             speed_percent: 70,
         }],
     });
@@ -74,7 +74,7 @@ async fn grpc_authoritative_telemetry_snapshot_can_clear_stale_fields_independen
     let (tenant_id, agent_id) = tenant_agent(&state).await;
     let token = register_test_session(&state, tenant_id, agent_id).await;
     let mut full = snapshot("SN-CLEAR", "Printer", "X2D", "PRINTING");
-    full.nozzle_temperatures = vec![crate::protocol::agent::v1::NozzleTemperature {
+    full.nozzle_temperatures = vec![pandar_protocol::agent::v1::NozzleTemperature {
         label: "L".to_owned(),
         current_celsius: "41".to_owned(),
         target_celsius: "220".to_owned(),

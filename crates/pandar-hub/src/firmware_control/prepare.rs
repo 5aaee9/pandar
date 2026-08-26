@@ -9,9 +9,9 @@ use super::{
 };
 use crate::{
     AppState,
-    protocol::agent::v1::{HubCommand, PrepareFirmwareControl, hub_command},
     repositories::{AuditActor, FirmwareCommandOwner},
 };
+use pandar_protocol::agent::v1::{HubCommand, PrepareFirmwareControl, hub_command};
 
 const PREPARE_LIFETIME: Duration = Duration::from_secs(1);
 const PREPARE_EXPIRY_REASON: &str = "firmware prepare expired before execute";

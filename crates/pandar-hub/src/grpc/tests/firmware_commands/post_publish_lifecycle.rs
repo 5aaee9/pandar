@@ -11,7 +11,7 @@ async fn firmware_lifecycle_stale_generation_invalidation_cannot_cancel_newer_co
 
     fixture
         .event(agent_event::Event::PrinterFirmwareInvalidated(
-            crate::protocol::agent::v1::PrinterFirmwareInvalidated {
+            pandar_protocol::agent::v1::PrinterFirmwareInvalidated {
                 serial: fixture.serial.clone(),
                 generation: GENERATION - 1,
             },

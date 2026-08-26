@@ -17,10 +17,10 @@ use crate::{
         FirmwareExecutePhase, FirmwareExecuteResult, FirmwareRefreshResult, FirmwareServiceError,
         PreparedFirmwareControl,
     },
-    protocol::agent::v1::AgentCapability,
     repositories::RepositoryError,
     routes::{ApiError, auth},
 };
+use pandar_protocol::agent::v1::AgentCapability;
 
 mod ownership;
 

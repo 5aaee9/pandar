@@ -5,10 +5,10 @@ use tokio::sync::{Mutex, mpsc};
 
 use super::*;
 use crate::{
-    protocol::agent::v1::AgentCapability,
     repositories::{PrintErrorAction, PrinterOperationKind},
     sessions::{AgentSession, PendingLiveCommand, SessionToken, empty_pending_live_commands},
 };
+use pandar_protocol::agent::v1::AgentCapability;
 
 #[tokio::test]
 async fn local_close_cleans_exact_removed_session_and_preserves_replacement() {

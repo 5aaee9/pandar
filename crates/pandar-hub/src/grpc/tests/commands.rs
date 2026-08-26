@@ -10,9 +10,6 @@ use tonic::Code;
 use tracing_subscriber::fmt::MakeWriter;
 
 use super::*;
-use crate::protocol::agent::v1::{
-    Axis, CommandAck, CommandResult, DeviceFeature, HubCommand, LinkPrinter, printer_operation,
-};
 use crate::{
     grpc::commands::{
         CommandConversionOptions, handle_result_and_job, hub_command_from_record,
@@ -23,6 +20,9 @@ use crate::{
         PrintProjectFilePayload, PrinterAxis, PrinterOperationKind, PrinterOperationPayload,
         RefreshPrinterMaterialsPayload, ReloadPrinterConnectionPayload,
     },
+};
+use pandar_protocol::agent::v1::{
+    Axis, CommandAck, CommandResult, DeviceFeature, HubCommand, LinkPrinter, printer_operation,
 };
 
 mod acknowledgements;

@@ -8,10 +8,8 @@ use tokio::sync::mpsc;
 
 use super::super::*;
 use super::support::*;
-use crate::{
-    protocol::agent::v1::AgentCapability,
-    sessions::{AgentSession, SessionToken, empty_pending_live_commands},
-};
+use crate::sessions::{AgentSession, SessionToken, empty_pending_live_commands};
+use pandar_protocol::agent::v1::AgentCapability;
 
 #[tokio::test]
 async fn plugin_firmware_routes_require_only_plugin_studio_auth_and_hide_other_tenants() {

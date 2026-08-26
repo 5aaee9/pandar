@@ -216,7 +216,7 @@ async fn firmware_execute_fails_pre_publish_when_reassigned_after_durable_transi
 
 async fn reassign_to_new_agent(
     fixture: &FirmwareFixture,
-) -> mpsc::Receiver<Result<crate::protocol::agent::v1::HubCommand, Status>> {
+) -> mpsc::Receiver<Result<pandar_protocol::agent::v1::HubCommand, Status>> {
     let agent = fixture
         .state
         .agents()
@@ -321,8 +321,8 @@ fn reassignment_snapshot(fixture: &FirmwareFixture) -> PrinterSnapshotUpsert {
 }
 
 async fn assert_no_dispatch(
-    original: &mut mpsc::Receiver<Result<crate::protocol::agent::v1::HubCommand, Status>>,
-    reassigned: &mut mpsc::Receiver<Result<crate::protocol::agent::v1::HubCommand, Status>>,
+    original: &mut mpsc::Receiver<Result<pandar_protocol::agent::v1::HubCommand, Status>>,
+    reassigned: &mut mpsc::Receiver<Result<pandar_protocol::agent::v1::HubCommand, Status>>,
 ) {
     tokio::task::yield_now().await;
     assert!(original.try_recv().is_err());

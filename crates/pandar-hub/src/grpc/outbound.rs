@@ -7,9 +7,9 @@ use crate::{
     grpc::commands::{
         CommandConversionOptions, SessionQueuedDispatch, dispatch_next_queued_for_session,
     },
-    protocol::agent::v1::HubCommand,
     sessions::SessionToken,
 };
+use pandar_protocol::agent::v1::HubCommand;
 
 #[derive(Clone, Copy)]
 pub(super) struct OutboundSession {

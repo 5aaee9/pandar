@@ -1,10 +1,8 @@
 use std::time::Duration;
 
 use super::*;
-use crate::{
-    protocol::agent::v1::PrinterSnapshot, repositories::FirmwareCommandOwner,
-    sessions::FirmwareCommandIdentity,
-};
+use crate::{repositories::FirmwareCommandOwner, sessions::FirmwareCommandIdentity};
+use pandar_protocol::agent::v1::PrinterSnapshot;
 
 mod same_owner;
 mod stale_generation;

@@ -2,8 +2,8 @@ use pandar_core::{AgentId, TenantId};
 use tokio::sync::mpsc;
 use tonic::Status;
 
-use crate::protocol::agent::v1::AgentCapability;
-use crate::protocol::agent::v1::HubCommand;
+use pandar_protocol::agent::v1::AgentCapability;
+use pandar_protocol::agent::v1::HubCommand;
 
 use super::SessionRegistry;
 

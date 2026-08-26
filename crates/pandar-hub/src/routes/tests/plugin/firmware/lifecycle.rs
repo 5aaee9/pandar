@@ -2,7 +2,7 @@ use axum::http::{Method, StatusCode};
 use serde_json::json;
 
 use super::support::*;
-use crate::protocol::agent::v1::hub_command;
+use pandar_protocol::agent::v1::hub_command;
 
 #[tokio::test]
 async fn firmware_refresh_route_is_fresh_preserves_sequence_and_commits_modules_before_success() {

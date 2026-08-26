@@ -8,10 +8,8 @@ use pandar_core::{AgentId, CommandId, FirmwareCommand, FirmwareControlMetadata, 
 use tokio::sync::{mpsc, oneshot};
 
 use super::{SessionRegistry, SessionToken};
-use crate::{
-    firmware_control::{FirmwareExecuteResult, FirmwareRefreshResult, FirmwareServiceError},
-    protocol::agent::v1::{AgentCapability, HubCommand},
-};
+use crate::firmware_control::{FirmwareExecuteResult, FirmwareRefreshResult, FirmwareServiceError};
+use pandar_protocol::agent::v1::{AgentCapability, HubCommand};
 
 mod execute;
 mod lookup;

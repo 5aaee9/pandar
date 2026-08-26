@@ -38,8 +38,8 @@ async fn h2c_auto_mapping_returns_correlated_failure_from_failed_command() {
             close_sender: mpsc::channel(1).0,
             command_sender,
             capabilities: [
-                crate::protocol::agent::v1::AgentCapability::RequiredDeviceFeatures,
-                crate::protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping,
+                pandar_protocol::agent::v1::AgentCapability::RequiredDeviceFeatures,
+                pandar_protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping,
             ]
             .into_iter()
             .collect(),
@@ -113,12 +113,12 @@ async fn h2c_auto_mapping_returns_correlated_failure_from_failed_command() {
     });
     let emitted = command_receiver.recv().await.unwrap().unwrap();
     let command_id = pandar_core::CommandId::parse(&emitted.command_id).unwrap();
-    let Some(crate::protocol::agent::v1::hub_command::Command::PrinterOperation(operation)) =
+    let Some(pandar_protocol::agent::v1::hub_command::Command::PrinterOperation(operation)) =
         emitted.command
     else {
         panic!("expected printer operation");
     };
-    let Some(crate::protocol::agent::v1::printer_operation::Operation::GetAutoNozzleMapping(
+    let Some(pandar_protocol::agent::v1::printer_operation::Operation::GetAutoNozzleMapping(
         operation,
     )) = operation.operation
     else {
@@ -206,7 +206,7 @@ async fn h2c_auto_mapping_returns_correlated_failure_from_failed_command() {
         &state,
         tenant.id,
         agent_id,
-        [crate::protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping],
+        [pandar_protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping],
     )
     .await;
     let printer = state
@@ -229,7 +229,7 @@ async fn h2c_auto_mapping_returns_correlated_failure_from_failed_command() {
         crate::repositories::PrinterOperationKind::GetAutoNozzleMapping { request },
         crate::repositories::AuditActor::tenant_token(None, "h2c-test", vec!["plugin:studio"]),
         session,
-        crate::protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping,
+        pandar_protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping,
     )
     .await;
     assert!(stale_dispatch.is_err());

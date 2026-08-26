@@ -4,7 +4,7 @@ pub(super) async fn complete_refresh(
     state: &AppState,
     mut claimed: ClaimedFirmwareCommand,
     revision: u64,
-    modules: Vec<crate::protocol::agent::v1::PrinterFirmwareModule>,
+    modules: Vec<pandar_protocol::agent::v1::PrinterFirmwareModule>,
 ) -> Result<(), Status> {
     storage_value(revision, "module_revision")?;
     if modules.is_empty() {

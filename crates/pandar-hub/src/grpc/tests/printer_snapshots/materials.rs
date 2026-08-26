@@ -87,7 +87,7 @@ async fn printer_snapshot_event_includes_temperatures() {
     let mut receiver = state.printer_events().subscribe(tenant_id).await;
     let mut snapshot = snapshot("SN-TEMP", "Printer", "X2D", "IDLE");
     snapshot.nozzle_temperatures = vec![
-        crate::protocol::agent::v1::NozzleTemperature {
+        pandar_protocol::agent::v1::NozzleTemperature {
             label: "L".to_owned(),
             current_celsius: "41".to_owned(),
             target_celsius: "220".to_owned(),
@@ -96,7 +96,7 @@ async fn printer_snapshot_event_includes_temperatures() {
             snow: None,
             hnow: None,
         },
-        crate::protocol::agent::v1::NozzleTemperature {
+        pandar_protocol::agent::v1::NozzleTemperature {
             label: "R".to_owned(),
             current_celsius: "42".to_owned(),
             target_celsius: "230".to_owned(),

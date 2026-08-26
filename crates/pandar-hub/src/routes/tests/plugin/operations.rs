@@ -7,11 +7,11 @@ use tokio::sync::{Mutex, mpsc};
 
 use super::*;
 use crate::{
-    protocol::agent::v1::{
-        AgentCapability, PrintErrorAction as ProtoPrintErrorAction, hub_command, printer_operation,
-    },
     repositories::{PrintErrorAction, PrinterOperationKind, PrinterOperationPayload},
     sessions::{AgentSession, SessionToken, empty_pending_live_commands},
+};
+use pandar_protocol::agent::v1::{
+    AgentCapability, PrintErrorAction as ProtoPrintErrorAction, hub_command, printer_operation,
 };
 
 mod ownership;
@@ -722,7 +722,7 @@ async fn operation_fixture(slug: &str) -> OperationFixture {
 async fn register_session(
     fixture: &OperationFixture,
     wake_sender: mpsc::Sender<()>,
-    command_sender: mpsc::Sender<Result<crate::protocol::agent::v1::HubCommand, tonic::Status>>,
+    command_sender: mpsc::Sender<Result<pandar_protocol::agent::v1::HubCommand, tonic::Status>>,
     capabilities: impl IntoIterator<Item = AgentCapability>,
 ) {
     register_session_for_agent(
@@ -739,7 +739,7 @@ async fn register_session_for_agent(
     fixture: &OperationFixture,
     agent_id: AgentId,
     wake_sender: mpsc::Sender<()>,
-    command_sender: mpsc::Sender<Result<crate::protocol::agent::v1::HubCommand, tonic::Status>>,
+    command_sender: mpsc::Sender<Result<pandar_protocol::agent::v1::HubCommand, tonic::Status>>,
     capabilities: impl IntoIterator<Item = AgentCapability>,
 ) {
     fixture

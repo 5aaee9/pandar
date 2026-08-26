@@ -32,7 +32,7 @@ async fn firmware_lifecycle_non_owner_and_generation_change_never_replay_or_clai
     ));
     fixture
         .event(agent_event::Event::PrinterFirmwareInvalidated(
-            crate::protocol::agent::v1::PrinterFirmwareInvalidated {
+            pandar_protocol::agent::v1::PrinterFirmwareInvalidated {
                 serial: fixture.serial.clone(),
                 generation: GENERATION + 1,
             },

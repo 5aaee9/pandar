@@ -9,9 +9,9 @@ use pandar_core::compatibility::studio_local_camera_supported;
 use crate::{
     AppState,
     camera_sessions::CameraOpenError,
-    protocol::agent::v1::{AgentCapability, CameraStreamMode},
     routes::{ApiError, auth},
 };
+use pandar_protocol::agent::v1::{AgentCapability, CameraStreamMode};
 
 pub(crate) async fn stream_camera(
     State(state): State<AppState>,

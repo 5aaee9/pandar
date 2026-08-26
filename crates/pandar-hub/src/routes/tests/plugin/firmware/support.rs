@@ -13,14 +13,12 @@ use tower::ServiceExt;
 
 use super::super::*;
 use super::event_helpers::{control_result, control_result_with_status};
-use crate::{
-    protocol::agent::v1::{
-        AgentCapability, AgentEvent, CommandResult, FirmwareAcknowledgement, FirmwarePrepared,
-        FirmwarePublished, FirmwareRefreshedModules, HubCommand, PrinterFirmwareInvalidated,
-        PrinterFirmwareModule as ProtoPrinterFirmwareModule,
-        PrinterFirmwareStatus as ProtoPrinterFirmwareStatus, agent_event, firmware_command_result,
-    },
-    sessions::{AgentSession, SessionToken, empty_pending_live_commands},
+use crate::sessions::{AgentSession, SessionToken, empty_pending_live_commands};
+use pandar_protocol::agent::v1::{
+    AgentCapability, AgentEvent, CommandResult, FirmwareAcknowledgement, FirmwarePrepared,
+    FirmwarePublished, FirmwareRefreshedModules, HubCommand, PrinterFirmwareInvalidated,
+    PrinterFirmwareModule as ProtoPrinterFirmwareModule,
+    PrinterFirmwareStatus as ProtoPrinterFirmwareStatus, agent_event, firmware_command_result,
 };
 
 pub(super) const GENERATION: u64 = 7;

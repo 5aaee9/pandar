@@ -191,8 +191,8 @@ async fn h2c_rack_projection_requires_current_capable_session_telemetry() {
         tenant.id,
         agent_id,
         [
-            crate::protocol::agent::v1::AgentCapability::RequiredDeviceFeatures,
-            crate::protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping,
+            pandar_protocol::agent::v1::AgentCapability::RequiredDeviceFeatures,
+            pandar_protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping,
         ],
     )
     .await;
@@ -259,8 +259,8 @@ async fn h2c_rack_projection_requires_current_capable_session_telemetry() {
         tenant.id,
         agent_id,
         [
-            crate::protocol::agent::v1::AgentCapability::RequiredDeviceFeatures,
-            crate::protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping,
+            pandar_protocol::agent::v1::AgentCapability::RequiredDeviceFeatures,
+            pandar_protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping,
         ],
     )
     .await;

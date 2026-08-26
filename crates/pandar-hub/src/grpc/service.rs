@@ -1,8 +1,8 @@
 use tonic::{Request, Response, Status};
 
-use crate::{
-    grpc_connection_limit::GrpcConnectInfo,
-    protocol::agent::v1::{AgentCameraEvent, AgentEvent, agent_control_server::AgentControl},
+use crate::grpc_connection_limit::GrpcConnectInfo;
+use pandar_protocol::agent::v1::{
+    AgentCameraEvent, AgentEvent, agent_control_server::AgentControl,
 };
 
 use super::{AgentControlService, CameraResponseStream, ResponseStream};

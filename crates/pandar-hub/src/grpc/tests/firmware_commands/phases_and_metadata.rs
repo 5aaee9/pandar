@@ -72,7 +72,7 @@ async fn firmware_command_prepare_rejection_and_closed_or_full_channel_are_pre_p
     for index in 0..8 {
         session
             .command_sender
-            .try_send(Ok(crate::protocol::agent::v1::HubCommand {
+            .try_send(Ok(pandar_protocol::agent::v1::HubCommand {
                 command_id: format!("filler-{index}"),
                 command: None,
             }))
@@ -196,7 +196,7 @@ async fn firmware_command_rejection_and_published_without_ack_are_typed_terminal
             unknown.command_id,
             &fixture.serial,
             firmware_command_result::Outcome::PublishedWithoutAcknowledgement(
-                crate::protocol::agent::v1::PublishedWithoutAcknowledgement {},
+                pandar_protocol::agent::v1::PublishedWithoutAcknowledgement {},
             ),
         ))
         .await;

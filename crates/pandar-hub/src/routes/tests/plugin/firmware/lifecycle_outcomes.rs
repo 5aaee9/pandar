@@ -3,7 +3,7 @@ use pandar_core::CommandId;
 use serde_json::json;
 
 use super::support::*;
-use crate::protocol::agent::v1::{
+use pandar_protocol::agent::v1::{
     FirmwareAcknowledgement, PrinterFirmwareStatus, PrinterUpgradeState,
     PublishedWithoutAcknowledgement, firmware_command_result,
 };

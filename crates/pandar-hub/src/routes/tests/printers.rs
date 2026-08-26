@@ -17,7 +17,7 @@ use tokio::sync::mpsc;
 use tonic::Status;
 use tracing_subscriber::fmt::MakeWriter;
 
-use crate::protocol::agent::v1::{CameraStreamMode, HubCommand, hub_camera_command, hub_command};
+use pandar_protocol::agent::v1::{CameraStreamMode, HubCommand, hub_camera_command, hub_command};
 
 mod requests;
 
@@ -1652,7 +1652,7 @@ async fn register_h2c_session(
             wake_sender: mpsc::channel(1).0,
             close_sender: mpsc::channel(1).0,
             command_sender: mpsc::channel(1).0,
-            capabilities: [crate::protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping]
+            capabilities: [pandar_protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping]
                 .into_iter()
                 .collect(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),

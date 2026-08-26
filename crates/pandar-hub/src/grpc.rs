@@ -14,22 +14,22 @@ use inbound::spawn_inbound_handler;
 #[cfg(test)]
 use inbound::{disconnect_session, handle_ack, handle_event, handle_result};
 
-#[cfg(test)]
-use crate::protocol::agent::v1::CommandResult;
 use crate::{
     AppState,
     grpc::commands::repository_status,
     grpc::outbound::{OutboundSession, spawn_outbound_pump},
     grpc_connection_limit::GrpcConnectInfo,
-    protocol::agent::v1::{
-        AgentCameraEvent, AgentCapability, AgentEvent, AgentHello, HubCameraCommand, HubCommand,
-        agent_event,
-    },
     repositories::hash_secret,
     sessions::{
         AgentSession, SessionToken, empty_pending_live_commands,
         live_commands::fail_pending_live_commands,
     },
+};
+#[cfg(test)]
+use pandar_protocol::agent::v1::CommandResult;
+use pandar_protocol::agent::v1::{
+    AgentCameraEvent, AgentCapability, AgentEvent, AgentHello, HubCameraCommand, HubCommand,
+    agent_event,
 };
 
 mod camera_events;

@@ -7,12 +7,8 @@ use super::{
     CommandConversionOptions, agent_capabilities, conversion::persisted_printer_operation_payload,
     hub_command_from_record_with_options, mark_sent_and_job, repository_status,
 };
-use crate::{
-    AppState,
-    protocol::agent::v1::{AgentCapability, DeviceFeature, HubCommand},
-    repositories::PrinterOperationPayload,
-    sessions::SessionToken,
-};
+use crate::{AppState, repositories::PrinterOperationPayload, sessions::SessionToken};
+use pandar_protocol::agent::v1::{AgentCapability, DeviceFeature, HubCommand};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use super::super::*;
 use super::support::*;
-use crate::protocol::agent::v1::{firmware_command, hub_command};
+use pandar_protocol::agent::v1::{firmware_command, hub_command};
 
 #[tokio::test]
 async fn firmware_prepare_is_url_free_and_execute_is_typed_exact_and_one_use() {

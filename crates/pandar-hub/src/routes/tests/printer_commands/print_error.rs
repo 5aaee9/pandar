@@ -6,11 +6,11 @@ use tokio::sync::{Mutex, mpsc};
 
 use super::*;
 use crate::{
-    protocol::agent::v1::{
-        AgentCapability, PrintErrorAction as ProtoPrintErrorAction, hub_command, printer_operation,
-    },
     repositories::{PrintErrorAction, PrinterOperationKind, PrinterOperationPayload, UserRole},
     sessions::{AgentSession, SessionToken, empty_pending_live_commands},
+};
+use pandar_protocol::agent::v1::{
+    AgentCapability, PrintErrorAction as ProtoPrintErrorAction, hub_command, printer_operation,
 };
 
 const ERROR_GENERATION: u64 = 9;
@@ -800,7 +800,7 @@ struct RecoveryFixture {
     session_id: String,
     uri: String,
     plugin_uri: String,
-    command_receiver: mpsc::Receiver<Result<crate::protocol::agent::v1::HubCommand, tonic::Status>>,
+    command_receiver: mpsc::Receiver<Result<pandar_protocol::agent::v1::HubCommand, tonic::Status>>,
     wake_receiver: mpsc::Receiver<()>,
 }
 

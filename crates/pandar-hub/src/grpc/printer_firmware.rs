@@ -1,20 +1,18 @@
 use pandar_core::{
-    AgentId, AmsFirmwareDescriptor, AmsFirmwareSwitchState,
-    PrinterFirmwareModule as CoreFirmwareModule, PrinterFirmwareVersion,
-    PrinterUpgradeState as CoreUpgradeState, TenantId,
+    AgentId, PrinterFirmwareModule as CoreFirmwareModule, PrinterUpgradeState as CoreUpgradeState,
+    TenantId,
 };
 use tonic::Status;
 
 use crate::{
-    AppState,
-    grpc::commands::repository_status,
-    protocol::agent::v1::{
-        PrinterFirmwareInvalidated, PrinterFirmwareModule, PrinterFirmwareModulesSnapshot,
-        PrinterFirmwareStatusSnapshot, PrinterUpgradeState,
-    },
-    repositories::PrinterFirmwareUpdateOutcome,
+    AppState, grpc::commands::repository_status, repositories::PrinterFirmwareUpdateOutcome,
     sessions::SessionToken,
 };
+use pandar_protocol::agent::v1::{
+    PrinterFirmwareInvalidated, PrinterFirmwareModule, PrinterFirmwareModulesSnapshot,
+    PrinterFirmwareStatusSnapshot,
+};
+use pandar_protocol::{core_module, core_upgrade_state};
 
 mod commands;
 #[cfg(test)]
@@ -185,66 +183,8 @@ fn storage_value(value: u64, name: &'static str) -> Result<u64, Status> {
         .map_err(|_| Status::invalid_argument(format!("{name} must be at most i64::MAX")))
 }
 
-fn core_module(module: PrinterFirmwareModule) -> CoreFirmwareModule {
-    CoreFirmwareModule {
-        name: module.name,
-        software_version: module.software_version,
-        software_new_version: module.software_new_version,
-        new_version: module.new_version,
-        visible: module.visible,
-        product_name: module.product_name,
-        serial_number: module.serial_number,
-        hardware_version: module.hardware_version,
-        firmware_flag: module.firmware_flag,
-    }
-}
-
 fn module_names_are_valid(modules: &[PrinterFirmwareModule]) -> bool {
     modules.iter().all(|module| !module.name.is_empty())
-}
-
-fn core_upgrade_state(state: PrinterUpgradeState) -> CoreUpgradeState {
-    CoreUpgradeState {
-        status: state.status,
-        progress: state.progress,
-        message: state.message,
-        module: state.module,
-        error_code: state.error_code,
-        new_version_state: state.new_version_state,
-        consistency_request: state.consistency_request,
-        force_upgrade: state.force_upgrade,
-        display_state: state.display_state,
-        ota_new_version_number: state.ota_new_version_number,
-        ams_new_version_number: state.ams_new_version_number,
-        ahb_new_version_number: state.ahb_new_version_number,
-        new_versions: state.new_versions.map(|versions| {
-            versions
-                .versions
-                .into_iter()
-                .map(|version| PrinterFirmwareVersion {
-                    name: version.name,
-                    current_version: version.current_version,
-                    new_version: version.new_version,
-                })
-                .collect()
-        }),
-        ams_firmware: state.ams_firmware.map(|ams| AmsFirmwareSwitchState {
-            firmware: ams.firmware.map(|firmware| {
-                firmware
-                    .firmware
-                    .into_iter()
-                    .map(|entry| AmsFirmwareDescriptor {
-                        id: entry.id,
-                        name: entry.name,
-                        version: entry.version,
-                    })
-                    .collect()
-            }),
-            current_firmware_id: ams.current_firmware_id,
-            current_run_firmware_id: ams.current_run_firmware_id,
-            status: ams.status,
-        }),
-    }
 }
 
 fn redact_modules_snapshot(

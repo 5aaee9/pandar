@@ -9,10 +9,10 @@ use crate::{
         CommandConversionOptions, SessionQueuedDispatch, dispatch_next_queued_for_session,
         required_feature_dispatch_pause,
     },
-    protocol::agent::v1::{AgentCapability, DeviceFeature, hub_command},
     repositories::{AuditActor, PrinterOperationKind},
     sessions::{AgentSession, SessionToken, empty_pending_live_commands},
 };
+use pandar_protocol::agent::v1::{AgentCapability, DeviceFeature, hub_command};
 
 const HOMING_BITS: u64 = 1_u64 << 32;
 

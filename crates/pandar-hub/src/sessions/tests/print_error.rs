@@ -1,9 +1,9 @@
 use super::*;
 use crate::{
-    protocol::agent::v1::{AgentCapability, LinkPrinter, hub_command},
     repositories::{AuditActor, LinkPrinterPayload},
     sessions::live_commands::fail_pending_live_commands,
 };
+use pandar_protocol::agent::v1::{AgentCapability, LinkPrinter, hub_command};
 
 mod capabilities;
 mod claims;

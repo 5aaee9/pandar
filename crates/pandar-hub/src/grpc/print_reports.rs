@@ -7,11 +7,11 @@ use crate::{
     grpc::commands::repository_status,
     metrics::PrintReportMetric,
     printer_events::{PrinterEvent, fence_printer_nozzle_system, printer_event_printer},
-    protocol::agent::v1::PrintJobReport,
     repositories::{ApplyPrintReport, MaterialPatchOutcome, PrintReportDiagnostic, PrinterHms},
     routes::jobs::JobResponse,
     sessions::SessionToken,
 };
+use pandar_protocol::agent::v1::PrintJobReport;
 
 pub async fn handle_print_report(
     state: &AppState,
@@ -243,7 +243,7 @@ fn trim_optional(value: String) -> Option<String> {
 }
 
 fn diagnostic(
-    diagnostic: crate::protocol::agent::v1::MachineDiagnostic,
+    diagnostic: pandar_protocol::agent::v1::MachineDiagnostic,
 ) -> Option<PrintReportDiagnostic> {
     let kind = trim_optional(diagnostic.kind)?;
     let message = trim_optional(diagnostic.message).unwrap_or_default();

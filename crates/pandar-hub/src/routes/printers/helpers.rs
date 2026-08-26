@@ -4,10 +4,10 @@ use axum::http::StatusCode;
 use pandar_core::{AgentId, CommandId, CommandRecord, TenantId};
 
 use crate::{
-    protocol::agent::v1::{HubCommand, LinkPrinter, hub_command},
     repositories::{LinkPrinterPayload, RepositoryResult},
     routes::ApiError,
 };
+use pandar_protocol::agent::v1::{HubCommand, LinkPrinter, hub_command};
 
 pub(super) fn parse_agent_id(value: &str) -> Result<AgentId, ApiError> {
     AgentId::parse(value).map_err(|_| ApiError::bad_request("invalid_agent_id"))

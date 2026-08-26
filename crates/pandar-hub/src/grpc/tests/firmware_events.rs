@@ -4,12 +4,10 @@ use pandar_core::{
 use tonic::Code;
 
 use super::*;
-use crate::{
-    protocol::agent::v1::{
-        PrinterFirmwareInvalidated, PrinterFirmwareModule, PrinterFirmwareModulesSnapshot,
-        PrinterFirmwareStatusSnapshot, PrinterUpgradeState, agent_event,
-    },
-    repositories::test_helpers::insert_printer_fixture,
+use crate::repositories::test_helpers::insert_printer_fixture;
+use pandar_protocol::agent::v1::{
+    PrinterFirmwareInvalidated, PrinterFirmwareModule, PrinterFirmwareModulesSnapshot,
+    PrinterFirmwareStatusSnapshot, PrinterUpgradeState, agent_event,
 };
 
 mod module_names;

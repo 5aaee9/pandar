@@ -9,10 +9,10 @@ use crate::{
     grpc::print_reports::handle_print_report,
     grpc::printer_materials::handle_materials_snapshot,
     grpc::printer_snapshots::handle_snapshot,
-    protocol::agent::v1::{AgentEvent, agent_event},
     repositories::RepositoryError,
     sessions::{AgentSession, SessionToken, live_commands::fail_pending_live_commands},
 };
+use pandar_protocol::agent::v1::{AgentEvent, agent_event};
 
 use super::validate_rfc3339;
 

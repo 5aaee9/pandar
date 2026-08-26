@@ -7,9 +7,9 @@ use super::{
     FirmwareExecuteResult, FirmwareServiceError, begin_dispatch_ownership_fence,
     commit_current_session_fence, identity_is_current, proto_firmware_command,
 };
-use crate::{
-    AppState,
-    protocol::agent::v1::{ExecuteFirmwareControl, HubCommand, firmware_command, hub_command},
+use crate::AppState;
+use pandar_protocol::agent::v1::{
+    ExecuteFirmwareControl, HubCommand, firmware_command, hub_command,
 };
 
 impl AppState {

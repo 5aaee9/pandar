@@ -19,6 +19,7 @@ base64.workspace = true
 futures-util.workspace = true
 jsonwebtoken.workspace = true
 pandar-core.workspace = true
+pandar-protocol.workspace = true
 prost.workspace = true
 quick-xml.workspace = true
 reqwest.workspace = true
@@ -34,16 +35,11 @@ tokio.workspace = true
 tokio-stream.workspace = true
 tokio-rustls.workspace = true
 tonic = { workspace = true, features = ["tls-aws-lc"] }
-tonic-prost.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 zeroize.workspace = true
 zip.workspace = true
-
-[build-dependencies]
-protoc-bin-vendored.workspace = true
-tonic-prost-build.workspace = true
 
 [dev-dependencies]
 http-body-util.workspace = true

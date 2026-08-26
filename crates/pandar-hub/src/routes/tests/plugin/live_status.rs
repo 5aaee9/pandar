@@ -301,12 +301,12 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
         tenant.id,
         agent.id,
         session_token,
-        crate::protocol::agent::v1::PrinterSnapshot {
+        pandar_protocol::agent::v1::PrinterSnapshot {
             serial: "studio-live-printer".to_string(),
             name: "Live Printer".to_string(),
             state: "unknown".to_string(),
             model: "A1".to_string(),
-            nozzle_temperatures: vec![crate::protocol::agent::v1::NozzleTemperature {
+            nozzle_temperatures: vec![pandar_protocol::agent::v1::NozzleTemperature {
                 current_celsius: "42".to_string(),
                 ..Default::default()
             }],

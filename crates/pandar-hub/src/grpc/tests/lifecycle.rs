@@ -2,11 +2,9 @@ use tokio_stream::StreamExt;
 use tonic::Code;
 
 use super::*;
-use crate::{
-    protocol::agent::v1::{HubCommand, LinkPrinter, hub_command},
-    repositories::LinkPrinterPayload,
-};
+use crate::repositories::LinkPrinterPayload;
 use pandar_core::CommandStatus;
+use pandar_protocol::agent::v1::{HubCommand, LinkPrinter, hub_command};
 
 #[tokio::test]
 async fn replacement_session_survives_old_stream_shutdown() {

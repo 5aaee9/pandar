@@ -14,10 +14,10 @@ use serde::Deserialize;
 
 use crate::{
     AppState,
-    protocol::agent::v1::AgentCapability,
     repositories::{PrinterOperationKind, RepositoryError},
     routes::{ApiError, auth, printer_operations::live},
 };
+use pandar_protocol::agent::v1::AgentCapability;
 
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(7);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);

@@ -5,9 +5,9 @@ use crate::{
     grpc::commands::{
         SessionQueuedDispatch, dispatch_next_queued_for_session, required_feature_dispatch_pause,
     },
-    protocol::agent::v1::hub_command,
     repositories::{AuditActor, CreatePrintJob},
 };
+use pandar_protocol::agent::v1::hub_command;
 
 #[tokio::test]
 async fn cancellation_winning_dispatch_cas_skips_command_and_keeps_session_usable() {

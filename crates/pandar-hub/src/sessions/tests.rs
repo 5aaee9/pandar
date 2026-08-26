@@ -1,6 +1,6 @@
 use super::*;
 use crate::AppState;
-use crate::protocol::agent::v1::{LinkPrinter, hub_command};
+use pandar_protocol::agent::v1::{LinkPrinter, hub_command};
 
 mod print_error;
 

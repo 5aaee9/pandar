@@ -2,14 +2,14 @@ use super::*;
 use crate::{
     grpc::AgentControlService,
     jobs::{DEFAULT_MAX_ARTIFACT_BYTES, JobStorageConfig},
-    protocol::agent::v1::{
-        AgentEvent, AgentHello, PrintJobReport, PrinterSnapshot,
-        agent_control_client::AgentControlClient, agent_control_server::AgentControlServer,
-        agent_event,
-    },
     repositories::CreatePrintJob,
 };
 use pandar_core::AgentId;
+use pandar_protocol::agent::v1::{
+    AgentEvent, AgentHello, PrintJobReport, PrinterSnapshot,
+    agent_control_client::AgentControlClient, agent_control_server::AgentControlServer,
+    agent_event,
+};
 use serde::{Deserialize, de::DeserializeOwned};
 use tokio::net::TcpListener;
 use tokio_stream::{

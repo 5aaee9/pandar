@@ -3,10 +3,10 @@ use pandar_core::{CommandRecord, TenantId};
 use super::{PrinterOperationRequest, TenantPrinterOperation, live};
 use crate::{
     AppState,
-    protocol::agent::v1::AgentCapability,
     repositories::{AuditActor, PrintErrorAction, RepositoryError, WebPrintErrorRecovery},
     routes::ApiError,
 };
+use pandar_protocol::agent::v1::AgentCapability;
 
 pub(in crate::routes) async fn dispatch_tenant_printer_operation(
     state: &AppState,

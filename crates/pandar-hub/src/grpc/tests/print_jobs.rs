@@ -5,12 +5,12 @@ use tonic::Code;
 use super::*;
 use crate::{
     db::Database,
-    protocol::agent::v1::hub_command,
     repositories::{
         CreatePrintJob, PrinterOperationKind,
         test_helpers::{insert_printer_fixture, insert_printer_fixture_with_model},
     },
 };
+use pandar_protocol::agent::v1::hub_command;
 
 mod support;
 use support::*;
@@ -58,7 +58,7 @@ async fn grpc_dispatch_print_project_file_sends_payload_and_marks_job_sent() {
     assert!(options.try_emmc_print);
     assert_eq!(
         print.submission_source,
-        crate::protocol::agent::v1::PrintSubmissionSource::Web as i32
+        pandar_protocol::agent::v1::PrintSubmissionSource::Web as i32
     );
     assert!(print.task_metadata.is_none());
     assert_eq!(
@@ -112,7 +112,7 @@ async fn grpc_dispatch_studio_print_projects_exact_metadata_and_source() {
     };
     assert_eq!(
         print.submission_source,
-        crate::protocol::agent::v1::PrintSubmissionSource::Studio as i32
+        pandar_protocol::agent::v1::PrintSubmissionSource::Studio as i32
     );
     assert_eq!(
         print.studio_submission_id,

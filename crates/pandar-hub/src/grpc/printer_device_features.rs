@@ -1,10 +1,8 @@
 use pandar_core::{AgentId, BambuDeviceFeatures, TenantId};
 use tonic::Status;
 
-use crate::{
-    AppState, grpc::commands::repository_status,
-    protocol::agent::v1::PrinterDeviceFeaturesSnapshot, sessions::SessionToken,
-};
+use crate::{AppState, grpc::commands::repository_status, sessions::SessionToken};
+use pandar_protocol::agent::v1::PrinterDeviceFeaturesSnapshot;
 
 pub(super) async fn handle_device_features_snapshot(
     state: &AppState,

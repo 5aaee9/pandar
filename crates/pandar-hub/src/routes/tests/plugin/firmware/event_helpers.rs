@@ -1,6 +1,6 @@
 use pandar_core::CommandId;
 
-use crate::protocol::agent::v1::{
+use pandar_protocol::agent::v1::{
     CommandResult, FirmwareCommandResult, PrinterFirmwareStatus as ProtoPrinterFirmwareStatus,
     agent_event, firmware_command_result,
 };

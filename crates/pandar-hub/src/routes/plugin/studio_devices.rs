@@ -7,11 +7,11 @@ use serde::Serialize;
 use crate::{
     AppState,
     printer_events::PrinterEventMaterials,
-    protocol::agent::v1::AgentCapability,
     repositories::{PrinterHms, PrinterWithLiveStatus},
     routes::ApiError,
     routes::plugin::firmware::current_firmware_projection,
 };
+use pandar_protocol::agent::v1::AgentCapability;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct PluginPrinterListResponse {

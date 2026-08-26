@@ -16,7 +16,8 @@ pub(super) use device_features::{
     finalize_required_features_for_closing_session,
 };
 
-use crate::{AppState, protocol::agent::v1::CommandResult, repositories::RepositoryError};
+use crate::{AppState, repositories::RepositoryError};
+use pandar_protocol::agent::v1::CommandResult;
 
 async fn mark_sent_and_job(
     state: &AppState,
