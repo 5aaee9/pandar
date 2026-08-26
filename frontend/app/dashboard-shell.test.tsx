@@ -32,6 +32,14 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 vi.mock("../components/ui/sidebar", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../components/ui/sidebar")>();
   return {
@@ -373,6 +381,28 @@ describe("AppSidebar", () => {
     await user.click(screen.getByRole("button", { name: "Tenant Two" }));
     expect(document.cookie).toContain("pandar.tenant=t2");
     expect(refreshMock).toHaveBeenCalled();
+  });
+
+  it("shows redirected ?status= action results as a toast", async () => {
+    const { toast } = await import("sonner");
+    window.history.replaceState({}, "", "/agents?status=refresh_queued");
+
+    renderWithMessages(
+      <DashboardShellProvider selectedTenant={tenants[0]}>
+        <DashboardShellLayout
+          auth={auth}
+          sidebarDefaultOpen
+          tenants={tenants}
+        >
+          Dashboard content
+        </DashboardShellLayout>
+      </DashboardShellProvider>,
+    );
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Refresh queued"),
+    );
+    expect(window.location.search).toBe("");
   });
 
   it("renders a jobs navigation link", () => {

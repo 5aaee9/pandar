@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { AppSidebar } from "../components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "../components/ui/sidebar";
@@ -8,7 +9,6 @@ import type { AuthMetadata, Tenant } from "./dashboard-types";
 import { DashboardShellHeader } from "./dashboard-shell-header";
 import { ActionStatusToast } from "./action-status-toast";
 import { useDashboardShell } from "./dashboard-shell-provider";
-import { useDashboardShellStore } from "./dashboard-shell-store";
 import { DashboardCameraProvider } from "./dashboard-printer-camera-control";
 
 export function DashboardShellLayout({
@@ -23,8 +23,7 @@ export function DashboardShellLayout({
   auth: AuthMetadata;
 }) {
   const { shellView, shellTenant } = useDashboardShell();
-  const actionToast = useDashboardShellStore((state) => state.actionToast);
-  const errorBanner = useDashboardShellStore((state) => state.errorBanner);
+  const status = useSearchParams().get("status") ?? undefined;
 
   return (
     <DashboardCameraProvider>
@@ -37,20 +36,8 @@ export function DashboardShellLayout({
         />
         <SidebarInset>
           <DashboardShellHeader view={shellView} />
-          <main className="flex-1 p-4" id="main-content">
-            {errorBanner ? (
-              <div
-                className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-                role="alert"
-              >
-                {errorBanner}
-              </div>
-            ) : null}
-            {children}
-          </main>
-          {actionToast ? (
-            <ActionStatusToast status={actionToast.message} />
-          ) : null}
+          <main className="flex-1 p-4" id="main-content">{children}</main>
+          <ActionStatusToast status={status} />
         </SidebarInset>
       </SidebarProvider>
     </DashboardCameraProvider>
