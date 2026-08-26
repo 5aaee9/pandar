@@ -1,0 +1,16 @@
+[package]
+name = "pandar-protocol"
+version = "0.1.4"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+pandar-core.workspace = true
+prost.workspace = true
+tonic.workspace = true
+tonic-prost.workspace = true
+
+[build-dependencies]
+protoc-bin-vendored.workspace = true
+tonic-prost-build.workspace = true

@@ -6,6 +6,7 @@ members = [
     "crates/pandar-core",
     "crates/pandar-hub",
     "crates/pandar-network-plugin",
+    "crates/pandar-protocol",
     "crates/pandar-studio-profile",
     "crates/pandar-studio-hook",
 ]
@@ -43,6 +44,7 @@ if-addrs = "0.15.0"
 jsonwebtoken = { version = "11.0.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 md-5 = "0.11.0"
 pandar-core = { path = "crates/pandar-core" }
+pandar-protocol = { path = "crates/pandar-protocol" }
 pandar-studio-profile = { path = "crates/pandar-studio-profile" }
 pandar-studio-hook = { path = "crates/pandar-studio-hook" }
 prost = "0.14"

@@ -2952,8 +2952,7 @@ dependencies = [
  "if-addrs",
  "md-5",
  "pandar-core",
- "prost",
- "protoc-bin-vendored",
+ "pandar-protocol",
  "rcgen",
  "reqwest",
  "rumqttc-v4-next",
@@ -2967,8 +2966,6 @@ dependencies = [
  "tokio-rustls",
  "tokio-stream",
  "tonic",
- "tonic-prost",
- "tonic-prost-build",
  "tracing",
  "tracing-core",
  "tracing-subscriber",
@@ -3026,8 +3023,8 @@ dependencies = [
  "http-body-util",
  "jsonwebtoken",
  "pandar-core",
+ "pandar-protocol",
  "prost",
- "protoc-bin-vendored",
  "quick-xml",
  "rcgen",
  "reqwest",
@@ -3045,8 +3042,6 @@ dependencies = [
  "tokio-stream",
  "tokio-tungstenite 0.30.0",
  "tonic",
- "tonic-prost",
- "tonic-prost-build",
  "tower",
  "tracing",
  "tracing-subscriber",
@@ -3079,6 +3074,18 @@ dependencies = [
  "tungstenite 0.30.0",
  "uuid",
  "zip",
+]
+
+[[package]]
+name = "pandar-protocol"
+version = "0.1.4"
+dependencies = [
+ "pandar-core",
+ "prost",
+ "protoc-bin-vendored",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
 ]
 
 [[package]]
