@@ -32,7 +32,18 @@ impl MqttReportQueue {
     async fn push(&self, report: anyhow::Result<Value>) {
         let mut reports = self.reports.lock().await;
         if reports.len() == MQTT_REPORT_QUEUE_CAPACITY {
-            reports.pop_front();
+            // Buffered reports can include incremental material patches whose
+            // loss later frames cannot repair; surface the loss instead of
+            // silently dropping entries so the consumer fails and requests a
+            // fresh pushall resync.
+            tracing::warn!(
+                capacity = MQTT_REPORT_QUEUE_CAPACITY,
+                "MQTT report queue overflow; failing the report consumer for resync"
+            );
+            reports.clear();
+            reports.push_back(Err(anyhow::anyhow!(
+                "MQTT report queue overflowed its capacity of {MQTT_REPORT_QUEUE_CAPACITY}"
+            )));
         }
         reports.push_back(report);
         drop(reports);
@@ -110,14 +121,29 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn report_queue_drops_oldest_entry_at_capacity() {
+    async fn report_queue_overflow_surfaces_an_error_instead_of_dropping_entries() {
         let reports = MqttReportQueue::new();
-        for sequence in 0..=MQTT_REPORT_QUEUE_CAPACITY {
+        for sequence in 0..MQTT_REPORT_QUEUE_CAPACITY {
             reports
                 .push(Ok(serde_json::json!({"sequence": sequence})))
                 .await;
         }
 
-        assert_eq!(reports.next().await.unwrap()["sequence"], 1);
+        reports
+            .push(Ok(serde_json::json!({
+                "sequence": MQTT_REPORT_QUEUE_CAPACITY
+            })))
+            .await;
+
+        let error = reports
+            .next()
+            .await
+            .expect_err("overflow must fail the consumer for resync");
+        assert!(error.to_string().contains("overflow"), "{error:#}");
+
+        assert_eq!(
+            reports.next().await.unwrap()["sequence"],
+            MQTT_REPORT_QUEUE_CAPACITY
+        );
     }
 }

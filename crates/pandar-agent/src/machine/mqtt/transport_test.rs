@@ -71,7 +71,7 @@ async fn queued_reports_do_not_block_publish_event_loop() {
         let connect = read_frame(&mut stream).await.unwrap();
         assert_eq!(connect.header >> 4, 1, "expected MQTT CONNECT");
         stream.write_all(&[0x20, 0x02, 0x00, 0x00]).await.unwrap();
-        for sequence in 0..=32 {
+        for sequence in 0..32 {
             write_report(&mut stream, sequence).await.unwrap();
         }
         reports_sent.send(()).unwrap();
