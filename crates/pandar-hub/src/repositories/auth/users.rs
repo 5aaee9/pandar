@@ -1,8 +1,7 @@
 use anyhow::Context;
 use pandar_core::TenantId;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, QueryOrder,
 };
 
 use crate::{
@@ -43,24 +42,6 @@ impl AuthRepository {
     }
 }
 
-pub(super) async fn select_user_role<C>(
-    connection: &C,
-    tenant_id: TenantId,
-    user_id: &str,
-) -> RepositoryResult<UserRole>
-where
-    C: sea_orm::ConnectionTrait,
-{
-    users::Entity::find_by_id(user_id)
-        .filter(users::Column::TenantId.eq(tenant_id.to_string()))
-        .one(connection)
-        .await
-        .context("failed to select user role")?
-        .map(|user| UserRole::parse(&user.role))
-        .transpose()?
-        .ok_or(RepositoryError::MissingUser)
-}
-
 pub(super) async fn select_user<C>(
     connection: &C,
     tenant_id: TenantId,
@@ -77,22 +58,6 @@ where
         .map(user_from_model)
         .transpose()?
         .ok_or(RepositoryError::MissingUser)
-}
-
-pub(super) async fn count_tenant_admins<C>(
-    connection: &C,
-    tenant_id: TenantId,
-) -> RepositoryResult<u64>
-where
-    C: sea_orm::ConnectionTrait,
-{
-    users::Entity::find()
-        .filter(users::Column::TenantId.eq(tenant_id.to_string()))
-        .filter(users::Column::Role.eq(UserRole::TenantAdmin.as_str()))
-        .count(connection)
-        .await
-        .context("failed to count tenant admins")
-        .map_err(Into::into)
 }
 
 pub(super) async fn delete_user<C>(

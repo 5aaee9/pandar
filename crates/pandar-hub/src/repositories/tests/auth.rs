@@ -161,6 +161,85 @@ async fn remove_user_with_audit_deletes_user_and_identities() {
 }
 
 #[tokio::test]
+async fn last_tenant_admin_cannot_be_demoted() {
+    let database = sqlite_database().await;
+    let tenants = TenantRepository::new(database.clone());
+    let auth = AuthRepository::new(database);
+    let tenant = tenants
+        .create("acme-demote-admin", "Acme Demote Admin")
+        .await
+        .unwrap();
+    let admin = auth
+        .create_user(
+            tenant.id,
+            "admin@example.test",
+            "Admin",
+            UserRole::TenantAdmin,
+        )
+        .await
+        .unwrap();
+
+    let err = auth
+        .update_user_role_with_audit(
+            tenant.id,
+            &admin.id,
+            UserRole::Viewer,
+            AuditActor::user(admin.id.clone()),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(err, RepositoryError::LastTenantAdmin));
+    assert_eq!(
+        auth.list_users_for_tenant(tenant.id).await.unwrap()[0].role,
+        UserRole::TenantAdmin
+    );
+}
+
+#[tokio::test]
+async fn demoting_an_admin_succeeds_while_another_admin_remains() {
+    let database = sqlite_database().await;
+    let tenants = TenantRepository::new(database.clone());
+    let auth = AuthRepository::new(database);
+    let tenant = tenants
+        .create("acme-demote-second-admin", "Acme Demote Second Admin")
+        .await
+        .unwrap();
+    let admin = auth
+        .create_user(
+            tenant.id,
+            "admin@example.test",
+            "Admin",
+            UserRole::TenantAdmin,
+        )
+        .await
+        .unwrap();
+    let second_admin = auth
+        .create_user(
+            tenant.id,
+            "second-admin@example.test",
+            "Second Admin",
+            UserRole::TenantAdmin,
+        )
+        .await
+        .unwrap();
+
+    let demoted = auth
+        .update_user_role_with_audit(
+            tenant.id,
+            &second_admin.id,
+            UserRole::Operator,
+            AuditActor::user(admin.id.clone()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(demoted.role, UserRole::Operator);
+    assert_eq!(
+        auth.list_users_for_tenant(tenant.id).await.unwrap()[1].role,
+        UserRole::Operator
+    );
+}
+
+#[tokio::test]
 async fn last_tenant_admin_cannot_be_removed() {
     let database = sqlite_database().await;
     let tenants = TenantRepository::new(database.clone());

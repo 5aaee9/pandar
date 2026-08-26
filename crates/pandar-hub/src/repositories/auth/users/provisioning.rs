@@ -1,13 +1,15 @@
 use anyhow::Context;
 use pandar_core::TenantId;
-use sea_orm::TransactionTrait;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::Serialize;
 
-use crate::repositories::{
-    AuditActor, AuditEvent, AuthRepository, RepositoryError, RepositoryResult, User, UserRole,
-    audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
-    auth::users::{
-        count_tenant_admins, delete_user, select_user, select_user_role, update_user_role,
+use crate::{
+    db::ConnectionDialectExt,
+    entities::users,
+    repositories::{
+        AuditActor, AuditEvent, AuthRepository, RepositoryError, RepositoryResult, User, UserRole,
+        audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
+        auth::users::{delete_user, update_user_role},
     },
 };
 
@@ -31,12 +33,15 @@ impl AuthRepository {
         role: UserRole,
         actor: AuditActor,
     ) -> RepositoryResult<User> {
-        let connection = self.database.sea_orm_connection();
-        let tx = connection
-            .begin()
+        let tx = self
+            .database
+            .begin_write_transaction()
             .await
             .context("failed to begin user role transaction")?;
-        let previous_role = select_user_role(&tx, tenant_id, user_id).await?;
+        let previous_role = select_user_locked(&tx, tenant_id, user_id).await?.role;
+        if previous_role == UserRole::TenantAdmin && role != UserRole::TenantAdmin {
+            ensure_other_admin_remains(&tx, tenant_id).await?;
+        }
         let user = update_user_role(&tx, tenant_id, user_id, role).await?;
         insert_audit_event_tx(&tx, &user_role_audit_event(&user, previous_role, actor)).await?;
         tx.commit()
@@ -68,14 +73,14 @@ impl AuthRepository {
         user_id: &str,
         actor: AuditActor,
     ) -> RepositoryResult<User> {
-        let connection = self.database.sea_orm_connection();
-        let tx = connection
-            .begin()
+        let tx = self
+            .database
+            .begin_write_transaction()
             .await
             .context("failed to begin user removal transaction")?;
-        let user = select_user(&tx, tenant_id, user_id).await?;
-        if user.role == UserRole::TenantAdmin && count_tenant_admins(&tx, tenant_id).await? <= 1 {
-            return Err(RepositoryError::LastTenantAdmin);
+        let user = select_user_locked(&tx, tenant_id, user_id).await?;
+        if user.role == UserRole::TenantAdmin {
+            ensure_other_admin_remains(&tx, tenant_id).await?;
         }
         delete_user(&tx, tenant_id, user_id).await?;
         insert_audit_event_tx(&tx, &user_remove_audit_event(&user, actor)).await?;
@@ -99,4 +104,47 @@ fn user_remove_audit_event(user: &User, actor: AuditActor) -> AuditEvent {
             role: user.role.as_str(),
         }),
     )
+}
+
+/// Read one tenant user row under the dialect write lock so concurrent role
+/// updates and removals observe committed state instead of racing.
+async fn select_user_locked<C>(
+    connection: &C,
+    tenant_id: TenantId,
+    user_id: &str,
+) -> RepositoryResult<User>
+where
+    C: sea_orm::ConnectionTrait + ConnectionDialectExt,
+{
+    let select = users::Entity::find_by_id(user_id)
+        .filter(users::Column::TenantId.eq(tenant_id.to_string()));
+    connection
+        .lock_for_update(select)
+        .one(connection)
+        .await
+        .context("failed to lock user")?
+        .map(super::super::user_from_model)
+        .transpose()?
+        .ok_or(RepositoryError::MissingUser)
+}
+
+/// Lock every tenant-admin row before deciding whether the last admin may be
+/// demoted or removed, so concurrent membership changes serialize on the same
+/// rows instead of each counting stale state.
+async fn ensure_other_admin_remains<C>(connection: &C, tenant_id: TenantId) -> RepositoryResult<()>
+where
+    C: sea_orm::ConnectionTrait + ConnectionDialectExt,
+{
+    let select = users::Entity::find()
+        .filter(users::Column::TenantId.eq(tenant_id.to_string()))
+        .filter(users::Column::Role.eq(UserRole::TenantAdmin.as_str()));
+    let admins = connection
+        .lock_for_update(select)
+        .all(connection)
+        .await
+        .context("failed to lock tenant admins")?;
+    if admins.len() <= 1 {
+        return Err(RepositoryError::LastTenantAdmin);
+    }
+    Ok(())
 }
