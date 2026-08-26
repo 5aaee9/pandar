@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 use crate::{
     PluginHttpResult,
     firmware::{StudioFirmwareParse, parse_studio_firmware},
@@ -5,6 +7,8 @@ use crate::{
     read_utf8, result, stable_error_body,
     studio_status::{StudioStatusRequest, parse_status_request},
 };
+
+const H2C_AUTO_NOZZLE_MAPPING_COMMAND: &str = "get_auto_nozzle_mapping";
 
 const UNSUPPORTED: i32 = 0;
 const FIRMWARE: i32 = 1;
@@ -99,20 +103,20 @@ pub extern "C" fn pandar_plugin_dispatch_studio_message(
         StudioFirmwareParse::NotFirmware => {}
     }
 
-    if message.contains("get_auto_nozzle_mapping") {
-        let request = serde_json::from_str::<pandar_core::H2cAutoNozzleMappingEnvelope>(&message)
-            .ok()
-            .filter(|envelope| envelope.print.is_valid());
-        return match request {
-            Some(request) => PluginStudioMessageResult::new(
+    match classify_h2c_auto_nozzle_mapping(&message) {
+        H2cAutoNozzleMappingClassification::Valid(request) => {
+            return PluginStudioMessageResult::new(
                 H2C_AUTO_NOZZLE_MAPPING,
                 VALID,
                 ABI_SUCCESS,
-                serde_json::to_string(&request.print)
+                serde_json::to_string(&request)
                     .expect("H2C auto nozzle mapping request is serializable"),
-            ),
-            None => PluginStudioMessageResult::invalid(H2C_AUTO_NOZZLE_MAPPING),
-        };
+            );
+        }
+        H2cAutoNozzleMappingClassification::Invalid => {
+            return PluginStudioMessageResult::invalid(H2C_AUTO_NOZZLE_MAPPING);
+        }
+        H2cAutoNozzleMappingClassification::NotH2c => {}
     }
 
     if let Some(request) = parse_status_request(&message) {
@@ -136,5 +140,98 @@ pub extern "C" fn pandar_plugin_dispatch_studio_message(
         StudioOperationParse::Unsupported | StudioOperationParse::InvalidNativeCandidate => {
             PluginStudioMessageResult::invalid(UNSUPPORTED)
         }
+    }
+}
+
+enum H2cAutoNozzleMappingClassification {
+    Valid(pandar_core::H2cAutoNozzleMappingRequest),
+    Invalid,
+    NotH2c,
+}
+
+/// Classifies a message by its typed `print.command`, never by substring
+/// matching, so payloads that merely mention the command (for example a gcode
+/// line printed with `M117`) are not misrouted into the H2C parser.
+fn classify_h2c_auto_nozzle_mapping(message: &str) -> H2cAutoNozzleMappingClassification {
+    match serde_json::from_str::<pandar_core::H2cAutoNozzleMappingEnvelope>(message) {
+        Ok(envelope) if envelope.print.command == H2C_AUTO_NOZZLE_MAPPING_COMMAND => {
+            if envelope.print.is_valid() {
+                H2cAutoNozzleMappingClassification::Valid(envelope.print)
+            } else {
+                H2cAutoNozzleMappingClassification::Invalid
+            }
+        }
+        _ => {
+            // The full envelope requires typed payload fields; probe the print
+            // command so malformed mapping requests still report the H2C kind.
+            let intended = serde_json::from_str::<H2cCommandProbe>(message)
+                .ok()
+                .and_then(|probe| probe.print)
+                .is_some_and(|command| command == H2C_AUTO_NOZZLE_MAPPING_COMMAND);
+            if intended {
+                H2cAutoNozzleMappingClassification::Invalid
+            } else {
+                H2cAutoNozzleMappingClassification::NotH2c
+            }
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct H2cCommandProbe {
+    #[serde(default)]
+    print: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dispatch(message: &str) -> PluginStudioMessageResult {
+        pandar_plugin_dispatch_studio_message(message.as_ptr(), message.len())
+    }
+
+    fn free_body(outcome: PluginStudioMessageResult) {
+        crate::pandar_plugin_free_with_capacity(
+            outcome.body_ptr.cast(),
+            outcome.body_len,
+            outcome.body_cap,
+        );
+    }
+
+    #[test]
+    fn gcode_line_mentioning_the_h2c_command_is_an_operation() {
+        let message = r#"{"print":{"command":"gcode_line","param":"M117 get_auto_nozzle_mapping","sequence_id":"42"}}"#;
+        let outcome = dispatch(message);
+        assert_eq!(outcome.kind, OPERATION);
+        assert_eq!(outcome.outcome, VALID);
+        free_body(outcome);
+    }
+
+    #[test]
+    fn valid_h2c_mapping_request_is_dispatched_to_the_h2c_parser() {
+        let message = r#"{"print":{"command":"get_auto_nozzle_mapping","sequence_id":"42","version":1,"group_info":[{"id":0,"ext":1,"dia":0.4,"vol":"E3D High Flow"}]}}"#;
+        let outcome = dispatch(message);
+        assert_eq!(outcome.kind, H2C_AUTO_NOZZLE_MAPPING);
+        assert_eq!(outcome.outcome, VALID);
+        free_body(outcome);
+    }
+
+    #[test]
+    fn malformed_h2c_mapping_request_reports_the_h2c_kind() {
+        let message = r#"{"print":{"command":"get_auto_nozzle_mapping","sequence_id":"abc"}}"#;
+        let outcome = dispatch(message);
+        assert_eq!(outcome.kind, H2C_AUTO_NOZZLE_MAPPING);
+        assert_eq!(outcome.outcome, INVALID);
+        free_body(outcome);
+    }
+
+    #[test]
+    fn status_request_still_dispatches_before_operations() {
+        let message = r#"{"info":{"command":"get_version","sequence_id":"7"}}"#;
+        let outcome = dispatch(message);
+        assert_eq!(outcome.kind, STATUS_GET_VERSION);
+        assert_eq!(outcome.outcome, VALID);
+        free_body(outcome);
     }
 }
