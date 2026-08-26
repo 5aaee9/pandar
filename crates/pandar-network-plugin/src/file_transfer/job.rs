@@ -97,17 +97,15 @@ pub unsafe extern "C" fn ft_job_get_result(
     // SAFETY: see module-level note; out is non-null (checked above).
     let job = unsafe { &*(handle as *const FtJob) };
     let mut state = job.state.lock().expect("job state mutex poisoned");
-    if !state.finished {
-        let (guard, _) = job
-            .finished
-            .wait_timeout_while(
-                state,
-                Duration::from_millis(u64::from(timeout_ms)),
-                |state| state.finished,
-            )
-            .expect("job state mutex poisoned");
-        state = guard;
-    }
+    let (guard, _) = job
+        .finished
+        .wait_timeout_while(
+            state,
+            Duration::from_millis(u64::from(timeout_ms)),
+            |state| !state.finished,
+        )
+        .expect("job state mutex poisoned");
+    state = guard;
     // SAFETY: out is non-null (checked above).
     unsafe {
         *out = if state.finished {
@@ -204,4 +202,89 @@ pub unsafe extern "C" fn ft_job_get_msg(
         };
     }
     if handle.is_null() { FT_EINVAL } else { FT_EIO }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ptr;
+    use std::time::{Duration, Instant};
+
+    use super::*;
+
+    struct SendPtr<T>(*mut T);
+    // SAFETY: FtJob state is mutex/atomic owned and the Studio ABI shares job
+    // handles across threads by design.
+    unsafe impl<T> Send for SendPtr<T> {}
+
+    impl<T> SendPtr<T> {
+        fn get(&self) -> *mut T {
+            self.0
+        }
+    }
+
+    #[test]
+    fn get_result_waits_for_completion_and_reports_the_job_ec() {
+        let mut job: *mut FtJobHandle = ptr::null_mut();
+        let mut tunnel: *mut FtTunnelHandle = ptr::null_mut();
+        // SAFETY: out pointers are valid test-local storage.
+        unsafe {
+            assert_eq!(ft_job_create(ptr::null(), &mut job), FT_OK);
+            assert_eq!(ft_tunnel_create(ptr::null(), &mut tunnel), FT_OK);
+        }
+        let out = Box::into_raw(Box::new(FtJobResult::error(FT_OK)));
+
+        let completer = {
+            let job = SendPtr(job);
+            let tunnel = SendPtr(tunnel);
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(100));
+                // Both handles stay alive until joined below.
+                ft_tunnel_start_job(tunnel.get(), job.get())
+            })
+        };
+
+        let SendPtr(job) = SendPtr(job);
+        // SAFETY: out is valid storage for one FtJobResult for the whole call.
+        let status = unsafe { ft_job_get_result(job, 10_000, out) };
+        assert_eq!(status, FT_OK);
+        // SAFETY: start_job completed before the join above returned.
+        let result_ec = unsafe { (*out).ec };
+        assert_eq!(result_ec, FT_EIO);
+        assert_eq!(completer.join().expect("completer thread"), FT_OK);
+
+        // SAFETY: each handle owns its last reference.
+        unsafe {
+            ft_job_release(job);
+            ft_tunnel_release(tunnel);
+            drop(Box::from_raw(out));
+        }
+    }
+
+    #[test]
+    fn get_result_times_out_when_the_job_never_finishes() {
+        let mut job: *mut FtJobHandle = ptr::null_mut();
+        // SAFETY: out pointer is valid test-local storage.
+        unsafe { assert_eq!(ft_job_create(ptr::null(), &mut job), FT_OK) };
+        let out = Box::into_raw(Box::new(FtJobResult::error(FT_OK)));
+
+        let started = Instant::now();
+        // SAFETY: the job handle stays valid until released below.
+        let status = unsafe { ft_job_get_result(job, 50, out) };
+        let elapsed = started.elapsed();
+
+        assert_eq!(status, FT_OK);
+        // SAFETY: out is valid storage written by the call above.
+        assert_eq!(unsafe { (*out).ec }, FT_ETIMEOUT);
+        assert!(
+            elapsed >= Duration::from_millis(40),
+            "waited only {elapsed:?}"
+        );
+
+        let SendPtr(job) = SendPtr(job);
+        // SAFETY: the job handle owns its last reference.
+        unsafe {
+            ft_job_release(job);
+            drop(Box::from_raw(out));
+        }
+    }
 }
