@@ -24,8 +24,8 @@ use crate::{
             forward_print_reports_with_context, refresh_printer_with_firmware,
         },
     },
-    protocol::agent::v1::AgentEvent,
 };
+use pandar_protocol::agent::v1::AgentEvent;
 
 #[cfg(test)]
 static REFRESH_CHILD_DROP_PAUSES: OnceLock<

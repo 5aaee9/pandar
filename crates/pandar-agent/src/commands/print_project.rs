@@ -5,8 +5,8 @@ use tokio::sync::mpsc;
 use crate::{
     AgentConfig,
     machine::{BambuMachineGateway, MachineJsonPayload, validate_print_project_file_command},
-    protocol::agent::v1::{AgentEvent, PrintProjectFile},
 };
+use pandar_protocol::agent::v1::{AgentEvent, PrintProjectFile};
 
 use super::{
     ArtifactReader,

@@ -3,14 +3,12 @@ use std::time::Duration;
 use pandar_core::{PrinterFirmwareModule, PrinterFirmwareStatus, PrinterUpgradeState};
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{
-    machine::{
-        FirmwareModulesObservation, FirmwareObservationCache, FirmwareReportContext,
-        FirmwareStatusObservation, RuntimeReportContext,
-        firmware_event_pause::{self, FirmwareEventKind},
-    },
-    protocol::agent::v1::{AgentEvent, agent_event},
+use crate::machine::{
+    FirmwareModulesObservation, FirmwareObservationCache, FirmwareReportContext,
+    FirmwareStatusObservation, RuntimeReportContext,
+    firmware_event_pause::{self, FirmwareEventKind},
 };
+use pandar_protocol::agent::v1::{AgentEvent, agent_event};
 
 use super::{endpoint, test_config};
 

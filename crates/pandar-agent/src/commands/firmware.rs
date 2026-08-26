@@ -7,20 +7,20 @@ use crate::{
     machine::{
         FirmwareControlOutcome, FirmwareControlPhase, FirmwareExecuteRequest,
         FirmwareMachineGateway, FirmwarePrepareRequest, FirmwareRefreshRequest,
-        proto_firmware_module, proto_upgrade_state,
-    },
-    protocol::agent::v1::{
-        AgentEvent, ExecuteFirmwareControl, FirmwareAcknowledgement, FirmwareCommandResult,
-        FirmwarePrepared, FirmwarePublished, FirmwareRefreshedModules, PrinterFirmwareStatus,
-        PublishedWithoutAcknowledgement, agent_event, firmware_command, firmware_command_result,
-        hub_command,
     },
 };
+use pandar_protocol::agent::v1::{
+    AgentEvent, ExecuteFirmwareControl, FirmwareAcknowledgement, FirmwareCommandResult,
+    FirmwarePrepared, FirmwarePublished, FirmwareRefreshedModules, PrinterFirmwareStatus,
+    PublishedWithoutAcknowledgement, agent_event, firmware_command, firmware_command_result,
+    hub_command,
+};
+use pandar_protocol::{proto_module as proto_firmware_module, proto_upgrade_state};
 
 use super::responses::firmware_result_event;
 use super::{ack_event, events::event, failure_event, rejected_ack_event};
 
-pub(crate) fn is_firmware_command(command: &crate::protocol::agent::v1::HubCommand) -> bool {
+pub(crate) fn is_firmware_command(command: &pandar_protocol::agent::v1::HubCommand) -> bool {
     matches!(
         command.command,
         Some(

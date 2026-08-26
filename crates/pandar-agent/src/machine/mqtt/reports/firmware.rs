@@ -6,8 +6,8 @@ use tokio::sync::{OwnedMutexGuard, mpsc};
 use crate::{
     AgentConfig,
     machine::{BambuPrinterEndpoint, FirmwareReportContext, FirmwareReportReducer},
-    protocol::agent::v1::AgentEvent,
 };
+use pandar_protocol::agent::v1::AgentEvent;
 
 use super::super::{
     BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, MachineReport,

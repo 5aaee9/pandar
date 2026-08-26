@@ -8,7 +8,7 @@ mod install;
 
 const DEVICE_FEATURE_HIGH_BITS: u64 = 0x8000_0041_0000_0020;
 
-fn feature_event_bits(event: crate::protocol::agent::v1::AgentEvent) -> Option<u64> {
+fn feature_event_bits(event: pandar_protocol::agent::v1::AgentEvent) -> Option<u64> {
     let Some(agent_event::Event::PrinterDeviceFeaturesSnapshot(snapshot)) = event.event else {
         panic!("expected printer device features event, got {event:?}");
     };
@@ -17,7 +17,7 @@ fn feature_event_bits(event: crate::protocol::agent::v1::AgentEvent) -> Option<u
         .and_then(|features| features.bambu_fun_bits)
 }
 
-fn assert_offline_event(event: crate::protocol::agent::v1::AgentEvent) {
+fn assert_offline_event(event: pandar_protocol::agent::v1::AgentEvent) {
     let Some(agent_event::Event::PrinterSnapshot(snapshot)) = event.event else {
         panic!("expected offline printer snapshot, got {event:?}");
     };

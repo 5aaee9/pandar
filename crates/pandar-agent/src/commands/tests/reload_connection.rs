@@ -6,7 +6,7 @@ use tokio::{
 };
 
 use super::*;
-use crate::protocol::agent::v1::ReloadPrinterConnection;
+use pandar_protocol::agent::v1::ReloadPrinterConnection;
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 struct ReloadResult {

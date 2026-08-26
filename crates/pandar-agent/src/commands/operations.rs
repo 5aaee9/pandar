@@ -16,10 +16,10 @@ use crate::{
         PrinterAxis as MachinePrinterAxis, PrinterOperation as MachinePrinterOperation,
         mqtt::PrintErrorAction as MachinePrintErrorAction,
     },
-    protocol::agent::v1::{
-        AgentEvent, Axis, DeviceFeature, PrintErrorAction as ProtoPrintErrorAction,
-        PrinterOperation as ProtoPrinterOperation, printer_operation,
-    },
+};
+use pandar_protocol::agent::v1::{
+    AgentEvent, Axis, DeviceFeature, PrintErrorAction as ProtoPrintErrorAction,
+    PrinterOperation as ProtoPrinterOperation, printer_operation,
 };
 
 const MAX_MOVE_DELTA_MM: f64 = 50.0;

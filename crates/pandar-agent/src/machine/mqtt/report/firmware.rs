@@ -7,10 +7,11 @@ use serde_json::{Map, Value};
 use tokio::sync::mpsc;
 
 use super::MachineReport;
+use crate::AgentConfig;
 use crate::machine::{
     FirmwareObservationCache, FirmwareStatusObservation, FirmwareVersionObservation,
 };
-use crate::{AgentConfig, protocol::agent::v1::AgentEvent};
+use pandar_protocol::agent::v1::AgentEvent;
 
 use super::super::firmware::FirmwareResponseDomain;
 

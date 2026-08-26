@@ -9,8 +9,8 @@ use crate::{
         BambuMachineGateway, BambuPrinterEndpoint, discovery::DiscoveredPrinter,
         mqtt::is_mqtt_report_idle_timeout,
     },
-    protocol::agent::v1::{AgentEvent, LinkPrinter},
 };
+use pandar_protocol::agent::v1::{AgentEvent, LinkPrinter};
 
 use super::responses::{ack_event, failure_event_with_result, success_event_with_result};
 

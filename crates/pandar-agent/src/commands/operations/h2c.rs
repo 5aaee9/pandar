@@ -3,10 +3,8 @@ use pandar_core::{
     H2cAutoNozzleMappingRequest,
 };
 
-use crate::{
-    machine::PrinterOperation as MachinePrinterOperation,
-    protocol::agent::v1::GetAutoNozzleMappingOperation,
-};
+use crate::machine::PrinterOperation as MachinePrinterOperation;
+use pandar_protocol::agent::v1::GetAutoNozzleMappingOperation;
 
 const MAX_HOLDER_CTRL_ACTION: u32 = 2;
 const RACK_NOZZLE_ID_ALL: u32 = 0xff;

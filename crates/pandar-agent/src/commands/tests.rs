@@ -34,28 +34,25 @@ use tokio::{sync::Mutex, sync::mpsc};
 
 use super::handle_non_firmware_command_with_gateway as handle_command_with_gateway;
 use super::*;
-use crate::{
-    machine::{
-        BambuMachineGateway, BambuPrinterEndpoint, FirmwareObservationCache, MachineSnapshot,
-        MaterialRefreshResult, NoopMachineGateway, PrintProjectDispatchResult,
-        PrinterOperation as MachinePrinterOperation, PrinterRefreshResult,
-        diagnostics::PrinterDiagnosticResult,
-        discovery::{DiscoveredPrinter, PrinterDiscoveryResult},
-        file_transfer::FakeMachineFileTransfer,
-        mqtt::FakeMqttTransport,
-        runtime::test_support::TestRuntimeBambuMachineGateway,
-    },
-    protocol::agent::v1::{
-        AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsStartDryingOperation,
-        AmsStopDryingOperation, AmsUnloadFilamentOperation, Axis, AxisMovement, DeviceFeature,
-        DiagnosePrinter, DiscoverPrinters, GcodeLineOperation, HolderNozzleRefreshOperation,
-        HomeOperation, HubCommand, LinkPrinter, MoveAxesOperation, NozzleHolderCtrlOperation,
-        NozzleInfoConfirmOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
-        RefreshPrinterMaterials, RefreshPrinters, SelectExtruderOperation,
-        SetBedTemperatureOperation, SetChamberLightOperation, SetChamberTemperatureOperation,
-        SetFanSpeedOperation, SetHotendTemperatureOperation, SetPrintSpeedOperation,
-        ToggleLightOperation, printer_operation,
-    },
+use crate::machine::{
+    BambuMachineGateway, BambuPrinterEndpoint, FirmwareObservationCache, MachineSnapshot,
+    MaterialRefreshResult, NoopMachineGateway, PrintProjectDispatchResult,
+    PrinterOperation as MachinePrinterOperation, PrinterRefreshResult,
+    diagnostics::PrinterDiagnosticResult,
+    discovery::{DiscoveredPrinter, PrinterDiscoveryResult},
+    file_transfer::FakeMachineFileTransfer,
+    mqtt::FakeMqttTransport,
+    runtime::test_support::TestRuntimeBambuMachineGateway,
+};
+use pandar_protocol::agent::v1::{
+    AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsStartDryingOperation,
+    AmsStopDryingOperation, AmsUnloadFilamentOperation, Axis, AxisMovement, DeviceFeature,
+    DiagnosePrinter, DiscoverPrinters, GcodeLineOperation, HolderNozzleRefreshOperation,
+    HomeOperation, HubCommand, LinkPrinter, MoveAxesOperation, NozzleHolderCtrlOperation,
+    NozzleInfoConfirmOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
+    RefreshPrinterMaterials, RefreshPrinters, SelectExtruderOperation, SetBedTemperatureOperation,
+    SetChamberLightOperation, SetChamberTemperatureOperation, SetFanSpeedOperation,
+    SetHotendTemperatureOperation, SetPrintSpeedOperation, ToggleLightOperation, printer_operation,
 };
 
 fn refresh_command(command_id: String) -> HubCommand {

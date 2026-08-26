@@ -11,10 +11,10 @@ use crate::{
         FirmwareMachineGateway, FirmwareModulesDelivery, FirmwarePrepareRequest,
         FirmwarePreparedObservation, FirmwareRefreshRequest, mqtt::firmware_command_payload,
     },
-    protocol::agent::v1::{
-        ExecuteFirmwareControl, FirmwareCommand, FirmwareStart, agent_event, firmware_command,
-        firmware_command_result, hub_command,
-    },
+};
+use pandar_protocol::agent::v1::{
+    ExecuteFirmwareControl, FirmwareCommand, FirmwareStart, agent_event, firmware_command,
+    firmware_command_result, hub_command,
 };
 
 const URL_SENTINEL: &str =

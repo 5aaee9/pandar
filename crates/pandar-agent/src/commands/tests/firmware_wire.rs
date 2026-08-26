@@ -6,17 +6,15 @@ use std::sync::{
 use pandar_core::{FirmwareAcknowledgement, FirmwareTerminalOutcome};
 
 use super::*;
-use crate::{
-    machine::{
-        FirmwareControlOutcome, FirmwareControlPhase, FirmwareExecuteRequest,
-        FirmwareMachineGateway, FirmwareModulesDelivery, FirmwareModulesObservation,
-        FirmwareObservationCache, FirmwarePrepareRequest, FirmwarePreparedObservation,
-        FirmwareRefreshRequest, firmware_modules_event,
-    },
-    protocol::agent::v1::{
-        ExecuteFirmwareControl, FirmwareCommand, FirmwareUpgradeConfirm, PrepareFirmwareControl,
-        RefreshFirmwareVersion, firmware_command, firmware_command_result, hub_command,
-    },
+use crate::machine::{
+    FirmwareControlOutcome, FirmwareControlPhase, FirmwareExecuteRequest, FirmwareMachineGateway,
+    FirmwareModulesDelivery, FirmwareModulesObservation, FirmwareObservationCache,
+    FirmwarePrepareRequest, FirmwarePreparedObservation, FirmwareRefreshRequest,
+    firmware_modules_event,
+};
+use pandar_protocol::agent::v1::{
+    ExecuteFirmwareControl, FirmwareCommand, FirmwareUpgradeConfirm, PrepareFirmwareControl,
+    RefreshFirmwareVersion, firmware_command, firmware_command_result, hub_command,
 };
 
 #[tokio::test]

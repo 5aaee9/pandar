@@ -5,7 +5,7 @@ use super::{
     AgentConfig, AgentEvent, BambuMachineGateway, ack_event, failure_event,
     success_event_with_result,
 };
-use crate::protocol::agent::v1::{DiagnosePrinter, DiscoverPrinters};
+use pandar_protocol::agent::v1::{DiagnosePrinter, DiscoverPrinters};
 
 pub(super) async fn emit_discover_events<G>(
     config: &AgentConfig,

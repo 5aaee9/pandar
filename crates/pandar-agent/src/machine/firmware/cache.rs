@@ -7,7 +7,8 @@ use anyhow::{Context, anyhow};
 use pandar_core::{PrinterFirmwareModule, PrinterFirmwareStatus};
 use tokio::sync::{Mutex, OwnedMutexGuard, RwLock, mpsc};
 
-use crate::{AgentConfig, machine::BambuPrinterEndpoint, protocol::agent::v1::AgentEvent};
+use crate::{AgentConfig, machine::BambuPrinterEndpoint};
+use pandar_protocol::agent::v1::AgentEvent;
 
 use super::{
     control::expire_prepared,

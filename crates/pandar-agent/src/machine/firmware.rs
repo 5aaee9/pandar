@@ -15,4 +15,3 @@ pub use types::{
     FirmwareReservationState, FirmwareStatusObservation, FirmwareVersionObservation,
     firmware_modules_event, firmware_status_event,
 };
-pub(crate) use types::{proto_module, proto_upgrade_state};

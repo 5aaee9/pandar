@@ -17,10 +17,8 @@ use tokio::{
 use tonic::Status;
 
 use super::*;
-use crate::{
-    machine::{BambuPrinterEndpoint, NoopMachineGateway},
-    protocol::agent::v1::{CloseCameraStream, OpenCameraStream},
-};
+use crate::machine::{BambuPrinterEndpoint, NoopMachineGateway};
+use pandar_protocol::agent::v1::{CloseCameraStream, OpenCameraStream};
 
 #[tokio::test]
 async fn firmware_camera_eof_drops_blocking_producer_before_return() {

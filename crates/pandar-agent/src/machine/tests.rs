@@ -22,7 +22,7 @@ use crate::machine::{
         TestRuntimeBambuMachineGateway, assert_locked_for_a_moment, assert_unlocked_for_a_moment,
     },
 };
-use crate::protocol::agent::v1::{HubCommand, RefreshPrinters, agent_event, hub_command};
+use pandar_protocol::agent::v1::{HubCommand, RefreshPrinters, agent_event, hub_command};
 
 mod axis_controls;
 mod firmware_control;
@@ -306,7 +306,7 @@ fn print_project_file() -> PrintProjectFile {
         size_bytes: 3,
         plate_id: 1,
         studio_submission_id: 38_191,
-        options: Some(crate::protocol::agent::v1::PrintProjectFileOptions {
+        options: Some(pandar_protocol::agent::v1::PrintProjectFileOptions {
             use_ams: true,
             bed_leveling: false,
             flow_cali: false,
@@ -326,7 +326,7 @@ fn print_project_file() -> PrintProjectFile {
             ams_mapping_info: Vec::new(),
             nozzles_info: Vec::new(),
         }),
-        task_metadata: Some(crate::protocol::agent::v1::StudioTaskMetadata {
+        task_metadata: Some(pandar_protocol::agent::v1::StudioTaskMetadata {
             task_name: "plate".to_owned(),
             project_name: String::new(),
             preset_name: String::new(),
@@ -340,6 +340,6 @@ fn print_project_file() -> PrintProjectFile {
             svc_context: String::new(),
             slicer_uid: String::new(),
         }),
-        submission_source: crate::protocol::agent::v1::PrintSubmissionSource::Studio as i32,
+        submission_source: pandar_protocol::agent::v1::PrintSubmissionSource::Studio as i32,
     }
 }

@@ -30,19 +30,16 @@ pub(super) use responses::{
     printer_materials_snapshot_event, rejected_ack_event, success_event_with_result,
 };
 
+use crate::{AgentConfig, machine::BambuMachineGateway};
 #[cfg(test)]
-pub(crate) use crate::protocol::agent::v1::agent_event;
-use crate::{
-    AgentConfig,
-    machine::BambuMachineGateway,
-    protocol::agent::v1::{AgentEvent, hub_command},
-};
+pub(crate) use pandar_protocol::agent::v1::agent_event;
+use pandar_protocol::agent::v1::{AgentEvent, hub_command};
 
 pub async fn handle_non_firmware_command_with_gateway<G>(
     config: &AgentConfig,
     gateway: &G,
     sender: &mpsc::Sender<AgentEvent>,
-    command: crate::protocol::agent::v1::HubCommand,
+    command: pandar_protocol::agent::v1::HubCommand,
 ) -> anyhow::Result<()>
 where
     G: BambuMachineGateway,
@@ -65,7 +62,7 @@ where
                 gateway,
                 &FilesystemArtifactReader::new(config.artifact_root.clone()),
                 sender,
-                crate::protocol::agent::v1::HubCommand {
+                pandar_protocol::agent::v1::HubCommand {
                     command_id,
                     command: other,
                 },
@@ -80,7 +77,7 @@ pub async fn handle_command_with_reader<G, R>(
     gateway: &G,
     artifact_reader: &R,
     sender: &mpsc::Sender<AgentEvent>,
-    command: crate::protocol::agent::v1::HubCommand,
+    command: pandar_protocol::agent::v1::HubCommand,
 ) -> anyhow::Result<()>
 where
     G: BambuMachineGateway,

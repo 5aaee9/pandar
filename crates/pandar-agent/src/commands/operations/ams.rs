@@ -1,6 +1,5 @@
-use crate::{
-    machine::PrinterOperation as MachinePrinterOperation, protocol::agent::v1::printer_operation,
-};
+use crate::machine::PrinterOperation as MachinePrinterOperation;
+use pandar_protocol::agent::v1::printer_operation;
 
 const MIN_AMS_DRYING_TEMPERATURE_CELSIUS: u32 = 45;
 const MAX_AMS_DRYING_TEMPERATURE_CELSIUS: u32 = 85;

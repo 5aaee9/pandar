@@ -10,8 +10,8 @@ use crate::{
         PrinterOperationDispatchResult,
         mqtt::{BambuMqttCommand, BambuMqttTransport, GcodeLineCommand, feature_event},
     },
-    protocol::agent::v1::AgentEvent,
 };
+use pandar_protocol::agent::v1::AgentEvent;
 
 pub(crate) async fn operate_printer_with_feature_selection<T, F>(
     config: &AgentConfig,

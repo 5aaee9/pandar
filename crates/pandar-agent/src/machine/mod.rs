@@ -19,10 +19,7 @@ mod unavailable_transfer;
 
 use std::time::Duration;
 
-use crate::{
-    AgentConfig,
-    protocol::agent::v1::{AgentEvent, PrintProjectFile},
-};
+use crate::AgentConfig;
 use anyhow::bail;
 use async_trait::async_trait;
 pub use device_features::DeviceFeatureCache;
@@ -43,12 +40,12 @@ pub use firmware::{
     FirmwareStatusObservation, FirmwareVersionObservation, firmware_modules_event,
     firmware_status_event,
 };
-pub(crate) use firmware::{proto_module as proto_firmware_module, proto_upgrade_state};
 pub(crate) use mqtt::report::FirmwareReportReducer;
 use mqtt::{BambuMqttTransport, refresh_printer, refresh_printer_materials};
 pub use noop::NoopMachineGateway;
 use operations::dispatch_printer_operation;
 pub use operations::{PrinterAxis, PrinterOperation};
+use pandar_protocol::agent::v1::{AgentEvent, PrintProjectFile};
 use print::dispatch_print_project_file;
 pub(crate) use print::validate_print_project_file_command;
 #[cfg(test)]

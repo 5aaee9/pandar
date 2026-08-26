@@ -19,7 +19,7 @@ use pandar_core::created_at_now;
 use serde_json::Value;
 
 #[cfg(test)]
-pub(crate) use crate::{machine::MachineSnapshot, protocol::agent::v1::AgentEvent};
+pub(crate) use crate::machine::MachineSnapshot;
 pub(crate) use commands::chamber_light_commands_for_nodes;
 #[cfg(test)]
 pub(crate) use commands::next_studio_sequence_id_from;
@@ -43,6 +43,8 @@ pub(crate) use firmware::{
     is_firmware_pre_publish_failure,
 };
 pub use hms::MachineHmsItem;
+#[cfg(test)]
+pub(crate) use pandar_protocol::agent::v1::AgentEvent;
 pub(super) use recovery::dispatch_sequence_zero_recovery;
 pub(crate) use report::{
     MachineReport, MachineReports, PrintTelemetryClass, SnapshotAuthority, SnapshotContent,

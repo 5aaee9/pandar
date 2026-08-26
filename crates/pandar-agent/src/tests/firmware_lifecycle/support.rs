@@ -12,18 +12,16 @@ use tokio::sync::{Notify, mpsc};
 use tonic::{Request, Response, Status};
 
 use super::*;
-use crate::{
-    machine::{
-        BambuPrinterEndpoint,
-        file_transfer::FakeMachineFileTransfer,
-        mqtt::{BambuMqttTransport, PublishedMqttCommand},
-        runtime::test_support::TestRuntimeBambuMachineGateway,
-    },
-    protocol::agent::v1::{
-        AgentCameraEvent, AgentEvent, ExecuteFirmwareControl, FirmwareCommand,
-        FirmwareUpgradeConfirm, HubCameraCommand, HubCommand, PrepareFirmwareControl,
-        RefreshPrinters, agent_control_server::AgentControl, firmware_command, hub_command,
-    },
+use crate::machine::{
+    BambuPrinterEndpoint,
+    file_transfer::FakeMachineFileTransfer,
+    mqtt::{BambuMqttTransport, PublishedMqttCommand},
+    runtime::test_support::TestRuntimeBambuMachineGateway,
+};
+use pandar_protocol::agent::v1::{
+    AgentCameraEvent, AgentEvent, ExecuteFirmwareControl, FirmwareCommand, FirmwareUpgradeConfirm,
+    HubCameraCommand, HubCommand, PrepareFirmwareControl, RefreshPrinters,
+    agent_control_server::AgentControl, firmware_command, hub_command,
 };
 
 pub(super) fn gateway(

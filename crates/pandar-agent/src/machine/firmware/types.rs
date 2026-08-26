@@ -3,16 +3,11 @@ use pandar_core::{
 };
 use tokio::sync::OwnedMutexGuard;
 
-use crate::{
-    AgentConfig,
-    machine::BambuPrinterEndpoint,
-    protocol::agent::v1::{
-        AgentEvent, AmsFirmwareDescriptor, AmsFirmwareDescriptorList, AmsFirmwareSwitchState,
-        PrinterFirmwareModule as ProtoFirmwareModule, PrinterFirmwareModulesSnapshot,
-        PrinterFirmwareStatusSnapshot, PrinterFirmwareVersion, PrinterFirmwareVersionList,
-        PrinterUpgradeState, agent_event,
-    },
+use crate::{AgentConfig, machine::BambuPrinterEndpoint};
+use pandar_protocol::agent::v1::{
+    AgentEvent, PrinterFirmwareModulesSnapshot, PrinterFirmwareStatusSnapshot, agent_event,
 };
+use pandar_protocol::{proto_module, proto_upgrade_state};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FirmwareVersionObservation {
@@ -189,65 +184,7 @@ pub(super) fn firmware_invalidated_event(
         tenant_id: config.tenant_id.clone(),
         event_id: format!("printer-firmware-invalidated-{serial}-{generation}"),
         event: Some(agent_event::Event::PrinterFirmwareInvalidated(
-            crate::protocol::agent::v1::PrinterFirmwareInvalidated { serial, generation },
+            pandar_protocol::agent::v1::PrinterFirmwareInvalidated { serial, generation },
         )),
-    }
-}
-
-pub(crate) fn proto_module(module: PrinterFirmwareModule) -> ProtoFirmwareModule {
-    ProtoFirmwareModule {
-        name: module.name,
-        software_version: module.software_version,
-        software_new_version: module.software_new_version,
-        new_version: module.new_version,
-        visible: module.visible,
-        product_name: module.product_name,
-        serial_number: module.serial_number,
-        hardware_version: module.hardware_version,
-        firmware_flag: module.firmware_flag,
-    }
-}
-
-pub(crate) fn proto_upgrade_state(state: pandar_core::PrinterUpgradeState) -> PrinterUpgradeState {
-    PrinterUpgradeState {
-        status: state.status,
-        progress: state.progress,
-        message: state.message,
-        module: state.module,
-        error_code: state.error_code,
-        new_version_state: state.new_version_state,
-        consistency_request: state.consistency_request,
-        force_upgrade: state.force_upgrade,
-        display_state: state.display_state,
-        ota_new_version_number: state.ota_new_version_number,
-        ams_new_version_number: state.ams_new_version_number,
-        ahb_new_version_number: state.ahb_new_version_number,
-        new_versions: state
-            .new_versions
-            .map(|versions| PrinterFirmwareVersionList {
-                versions: versions
-                    .into_iter()
-                    .map(|version| PrinterFirmwareVersion {
-                        name: version.name,
-                        current_version: version.current_version,
-                        new_version: version.new_version,
-                    })
-                    .collect(),
-            }),
-        ams_firmware: state.ams_firmware.map(|ams| AmsFirmwareSwitchState {
-            firmware: ams.firmware.map(|firmware| AmsFirmwareDescriptorList {
-                firmware: firmware
-                    .into_iter()
-                    .map(|entry| AmsFirmwareDescriptor {
-                        id: entry.id,
-                        name: entry.name,
-                        version: entry.version,
-                    })
-                    .collect(),
-            }),
-            current_firmware_id: ams.current_firmware_id,
-            current_run_firmware_id: ams.current_run_firmware_id,
-            status: ams.status,
-        }),
     }
 }

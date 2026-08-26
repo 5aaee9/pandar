@@ -1,7 +1,5 @@
-use crate::{
-    AgentConfig,
-    protocol::agent::v1::{AgentEvent, agent_event},
-};
+use crate::AgentConfig;
+use pandar_protocol::agent::v1::{AgentEvent, agent_event};
 
 pub(super) fn event(config: &AgentConfig, event_id: &str, event: agent_event::Event) -> AgentEvent {
     AgentEvent {

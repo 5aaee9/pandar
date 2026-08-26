@@ -9,13 +9,11 @@ use tokio_stream::{Stream, wrappers::ReceiverStream};
 use tonic::transport::{Certificate, ClientTlsConfig, Identity, Server, ServerTlsConfig};
 use tonic::{Request, Response, Status};
 
-use crate::{
-    hello_event,
-    protocol::agent::v1::{
-        AgentCameraEvent, AgentEvent, HubCameraCommand, HubCommand,
-        agent_control_client::AgentControlClient,
-        agent_control_server::{AgentControl, AgentControlServer},
-    },
+use crate::hello_event;
+use pandar_protocol::agent::v1::{
+    AgentCameraEvent, AgentEvent, HubCameraCommand, HubCommand,
+    agent_control_client::AgentControlClient,
+    agent_control_server::{AgentControl, AgentControlServer},
 };
 
 #[tokio::test]

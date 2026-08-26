@@ -5,8 +5,8 @@ use super::RuntimeBambuMachineGateway;
 use crate::{
     commands::authoritative_printer_snapshot_event,
     machine::{BambuPrinterEndpoint, mqtt::snapshot_from_endpoint},
-    protocol::agent::v1::AgentEvent,
 };
+use pandar_protocol::agent::v1::AgentEvent;
 
 impl RuntimeBambuMachineGateway {
     pub(super) async fn queue_configured_printer_rows(

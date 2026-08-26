@@ -6,11 +6,9 @@ use tokio::sync::mpsc;
 use tokio::time::timeout;
 
 use super::*;
+use crate::AgentConfig;
 use crate::machine::BambuPrinterEndpoint;
-use crate::{
-    AgentConfig,
-    protocol::agent::v1::{PrintJobReport, PrintSubmissionSource, agent_event},
-};
+use pandar_protocol::agent::v1::{PrintJobReport, PrintSubmissionSource, agent_event};
 
 mod device_features;
 mod firmware_ambiguity;

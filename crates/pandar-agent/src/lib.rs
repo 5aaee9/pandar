@@ -15,7 +15,6 @@ mod camera_control;
 mod command_stream;
 pub mod commands;
 pub mod machine;
-pub mod protocol;
 mod session_supervisor;
 mod startup;
 mod transport_security;
@@ -26,7 +25,7 @@ use backoff::{DEFAULT_REPORT_TIMEOUT, HEARTBEAT_INTERVAL, RunOutcome};
 use command_stream::handle_command_stream_with_gateway;
 use command_stream::run_command_stream_until_cancelled;
 use machine::{FirmwareMachineGateway, runtime::RuntimeBambuMachineGateway};
-use protocol::agent::v1::{
+use pandar_protocol::agent::v1::{
     AgentCapability, AgentEvent, AgentHeartbeat, AgentHello,
     agent_control_client::AgentControlClient, agent_event,
 };

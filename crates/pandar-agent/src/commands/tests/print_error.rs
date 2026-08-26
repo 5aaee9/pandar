@@ -1,7 +1,7 @@
 use super::*;
-use crate::{
-    machine::mqtt::PrintErrorAction as MachinePrintErrorAction,
-    protocol::agent::v1::{HandlePrintErrorOperation, PrintErrorAction as ProtoPrintErrorAction},
+use crate::machine::mqtt::PrintErrorAction as MachinePrintErrorAction;
+use pandar_protocol::agent::v1::{
+    HandlePrintErrorOperation, PrintErrorAction as ProtoPrintErrorAction,
 };
 
 #[tokio::test]

@@ -13,7 +13,7 @@ use crate::machine::{
     file_transfer::{MachineFileTransfer, TransferModeCache},
     mqtt::{BambuMqttTransport, refresh_printer},
 };
-use crate::protocol::agent::v1::PrintProjectFile;
+use pandar_protocol::agent::v1::PrintProjectFile;
 
 mod assertions;
 mod firmware_gateway;

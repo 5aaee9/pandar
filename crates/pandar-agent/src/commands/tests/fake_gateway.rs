@@ -120,7 +120,7 @@ impl BambuMachineGateway for FakeGateway {
     async fn print_project_file(
         &self,
         _serial_number: &str,
-        _command: &crate::protocol::agent::v1::PrintProjectFile,
+        _command: &pandar_protocol::agent::v1::PrintProjectFile,
         _artifact: Vec<u8>,
     ) -> anyhow::Result<PrintProjectDispatchResult> {
         unreachable!("refresh tests do not dispatch print commands")

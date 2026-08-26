@@ -19,8 +19,8 @@ use crate::{
         BambuPrinterEndpoint, DeviceFeatureCache, FirmwareReportContext, MachineSnapshot,
         MaterialRefreshResult,
     },
-    protocol::agent::v1::AgentEvent,
 };
+use pandar_protocol::agent::v1::AgentEvent;
 
 use super::{print_job_report_event, printer_materials_snapshot_event, printer_snapshot_event};
 use crate::machine::mqtt::{

@@ -5,7 +5,8 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use std::time::Duration;
 
-use crate::{AgentConfig, protocol::agent::v1::PrintProjectFile};
+use crate::AgentConfig;
+use pandar_protocol::agent::v1::PrintProjectFile;
 
 #[async_trait]
 pub trait ArtifactReader: Send + Sync {
@@ -53,7 +54,7 @@ impl CommandArtifactReader {
 
     pub async fn read_print_artifact(
         &self,
-        command: &crate::protocol::agent::v1::PrintProjectFile,
+        command: &pandar_protocol::agent::v1::PrintProjectFile,
     ) -> anyhow::Result<Vec<u8>> {
         if command.artifact_download_path.trim().is_empty() {
             return self.local.read_artifact(&command.storage_path).await;

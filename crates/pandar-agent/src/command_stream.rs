@@ -13,8 +13,8 @@ use crate::{
         handle_firmware_command, handle_non_firmware_command_with_gateway, is_firmware_command,
     },
     machine::{BambuMachineGateway, FirmwareMachineGateway},
-    protocol::agent::v1::{AgentEvent, HubCommand, hub_command},
 };
+use pandar_protocol::agent::v1::{AgentEvent, HubCommand, hub_command};
 
 #[cfg(test)]
 pub(super) async fn handle_command_stream_with_gateway<G, S>(

@@ -7,10 +7,10 @@ use anyhow::bail;
 use tokio::sync::{Notify, mpsc, oneshot};
 
 use super::{LinkValidationResult, RuntimeBambuMachineGateway};
-use crate::{
-    machine::{BambuPrinterEndpoint, FirmwareReportContext, mqtt::RumqttcBambuMqttTransport},
-    protocol::agent::v1::AgentEvent,
+use crate::machine::{
+    BambuPrinterEndpoint, FirmwareReportContext, mqtt::RumqttcBambuMqttTransport,
 };
+use pandar_protocol::agent::v1::AgentEvent;
 
 pub(super) struct PartialPrepareReportHookState {
     registered: Notify,

@@ -11,11 +11,11 @@ use crate::{
         BambuMachineGateway,
         camera::{stream_camera_fragmented_mp4, stream_camera_mjpeg},
     },
-    protocol::agent::v1::{
-        AgentCameraChunk, AgentCameraClosed, AgentCameraEvent, AgentCameraHello, CameraStreamMode,
-        HubCameraCommand, agent_camera_event, agent_control_client::AgentControlClient,
-        hub_camera_command,
-    },
+};
+use pandar_protocol::agent::v1::{
+    AgentCameraChunk, AgentCameraClosed, AgentCameraEvent, AgentCameraHello, CameraStreamMode,
+    HubCameraCommand, agent_camera_event, agent_control_client::AgentControlClient,
+    hub_camera_command,
 };
 
 mod close;

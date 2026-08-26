@@ -16,7 +16,7 @@ futures-util.workspace = true
 if-addrs.workspace = true
 md-5.workspace = true
 pandar-core.workspace = true
-prost.workspace = true
+pandar-protocol.workspace = true
 reqwest.workspace = true
 rumqttc.workspace = true
 
@@ -29,15 +29,10 @@ tokio.workspace = true
 tokio-rustls.workspace = true
 tokio-stream.workspace = true
 tonic = { workspace = true, features = ["tls-aws-lc", "tls-native-roots"] }
-tonic-prost.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 x509-parser = { workspace = true, features = ["verify-aws"] }
-
-[build-dependencies]
-protoc-bin-vendored.workspace = true
-tonic-prost-build.workspace = true
 
 [dev-dependencies]
 clap.workspace = true

@@ -15,8 +15,8 @@ use crate::{
         },
         transfer::BambuMachineFileTransfer,
     },
-    protocol::agent::v1::{AgentEvent, PrintProjectFile},
 };
+use pandar_protocol::agent::v1::{AgentEvent, PrintProjectFile};
 
 use super::{
     RuntimeBambuMachineGateway, mqtt_command_for_printer_operation,

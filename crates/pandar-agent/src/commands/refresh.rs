@@ -1,7 +1,8 @@
 use anyhow::Context;
 use tokio::sync::mpsc;
 
-use crate::{AgentConfig, machine::BambuMachineGateway, protocol::agent::v1::AgentEvent};
+use crate::{AgentConfig, machine::BambuMachineGateway};
+use pandar_protocol::agent::v1::AgentEvent;
 
 use super::responses::{
     ack_event, failure_event, printer_materials_snapshot_event, printer_snapshot_event,
@@ -58,7 +59,7 @@ pub(super) async fn emit_refresh_printer_materials_events<G>(
     gateway: &G,
     sender: &mpsc::Sender<AgentEvent>,
     command_id: &str,
-    command: crate::protocol::agent::v1::RefreshPrinterMaterials,
+    command: pandar_protocol::agent::v1::RefreshPrinterMaterials,
 ) -> anyhow::Result<()>
 where
     G: BambuMachineGateway,

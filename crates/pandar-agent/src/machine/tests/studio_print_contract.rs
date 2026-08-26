@@ -6,7 +6,7 @@ use crate::machine::{
     file_transfer::{FakeMachineFileTransfer, FileTransferOperation},
     mqtt::{BAMBU_MQTT_QOS, FakeMqttTransport},
 };
-use crate::protocol::agent::v1::{PrintProjectFile, PrintSubmissionSource, StudioNozzleInfo};
+use pandar_protocol::agent::v1::{PrintProjectFile, PrintSubmissionSource, StudioNozzleInfo};
 
 #[tokio::test]
 async fn print_transfer_policy_is_forwarded_from_each_command() {

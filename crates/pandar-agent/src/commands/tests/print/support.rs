@@ -11,8 +11,8 @@ use crate::{
         PrinterRefreshResult, diagnostics::PrinterDiagnosticResult,
         discovery::PrinterDiscoveryResult,
     },
-    protocol::agent::v1::PrintProjectFile,
 };
+use pandar_protocol::agent::v1::PrintProjectFile;
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct FakeArtifactReader {

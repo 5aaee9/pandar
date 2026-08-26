@@ -5,7 +5,8 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Request;
 
-use crate::{AgentConfig, protocol::agent::v1::agent_control_client::AgentControlClient};
+use crate::AgentConfig;
+use pandar_protocol::agent::v1::agent_control_client::AgentControlClient;
 
 use super::{camera_hello_event, send_camera_closed};
 

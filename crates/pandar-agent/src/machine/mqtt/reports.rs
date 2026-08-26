@@ -14,9 +14,9 @@ pub use protocol::print_job_report_event;
 use crate::{
     AgentConfig,
     machine::{BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult},
-    protocol::agent::v1::{
-        AgentEvent, NozzleTemperature, PrinterMaterialsSnapshot, PrinterSnapshot, agent_event,
-    },
+};
+use pandar_protocol::agent::v1::{
+    AgentEvent, NozzleTemperature, PrinterMaterialsSnapshot, PrinterSnapshot, agent_event,
 };
 
 use super::{MachineReportDiagnostic, MachineReportDiagnosticPayload, PrintReportProgress};
@@ -131,7 +131,7 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
                 .unwrap_or_default(),
             active_nozzle: snapshot.active_nozzle.unwrap_or_default(),
             chamber_light_on: snapshot.chamber_light_on,
-            device_features: crate::protocol::proto_device_features(
+            device_features: pandar_protocol::proto_device_features(
                 snapshot.device_features,
                 snapshot.device_features2,
             ),
@@ -139,10 +139,10 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
             telemetry_authoritative: snapshot.telemetry_authoritative,
             nozzle_system: snapshot
                 .nozzle_system
-                .map(crate::protocol::proto_nozzle_system),
+                .map(pandar_protocol::proto_nozzle_system),
             cooling_system: snapshot
                 .cooling_system
-                .map(crate::protocol::proto_cooling_system),
+                .map(pandar_protocol::proto_cooling_system),
         })),
     }
 }

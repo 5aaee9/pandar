@@ -13,7 +13,7 @@ pub(super) fn resume_operation_command(command_id: String, serial_number: &str) 
         command_id,
         serial_number,
         Some(printer_operation::Operation::Resume(
-            crate::protocol::agent::v1::ResumeOperation {},
+            pandar_protocol::agent::v1::ResumeOperation {},
         )),
     )
 }
@@ -305,7 +305,7 @@ impl BambuMachineGateway for OperationGateway {
     async fn print_project_file(
         &self,
         _serial_number: &str,
-        _command: &crate::protocol::agent::v1::PrintProjectFile,
+        _command: &pandar_protocol::agent::v1::PrintProjectFile,
         _artifact: Vec<u8>,
     ) -> anyhow::Result<PrintProjectDispatchResult> {
         unreachable!("printer operation tests do not dispatch print commands")

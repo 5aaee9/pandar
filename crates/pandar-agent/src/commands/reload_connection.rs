@@ -5,9 +5,9 @@ use tokio::sync::mpsc;
 use crate::{
     AgentConfig,
     machine::{BambuMachineGateway, BambuPrinterEndpoint},
-    protocol::agent::v1::{AgentEvent, ReloadPrinterConnection},
     startup::fetch_saved_printer_connections,
 };
+use pandar_protocol::agent::v1::{AgentEvent, ReloadPrinterConnection};
 
 use super::responses::{ack_event, failure_event, success_event_with_result};
 

@@ -4,12 +4,12 @@ use serde::Deserialize;
 use tokio::sync::mpsc;
 
 use super::{assert_failure_contains, test_config};
-use crate::{
-    commands::{
-        FilesystemArtifactReader, ack_event, handle_command_with_reader,
-        handle_non_firmware_command_with_gateway as handle_command_with_gateway,
-    },
-    protocol::agent::v1::{AgentEvent, HubCommand, PrintProjectFile, agent_event, hub_command},
+use crate::commands::{
+    FilesystemArtifactReader, ack_event, handle_command_with_reader,
+    handle_non_firmware_command_with_gateway as handle_command_with_gateway,
+};
+use pandar_protocol::agent::v1::{
+    AgentEvent, HubCommand, PrintProjectFile, agent_event, hub_command,
 };
 
 mod support;
@@ -280,7 +280,7 @@ fn print_command(command_id: String, serial_number: &str, storage_path: &str) ->
             size_bytes: 3,
             plate_id: 1,
             studio_submission_id: 38_191,
-            options: Some(crate::protocol::agent::v1::PrintProjectFileOptions {
+            options: Some(pandar_protocol::agent::v1::PrintProjectFileOptions {
                 use_ams: true,
                 bed_leveling: false,
                 flow_cali: false,
@@ -300,7 +300,7 @@ fn print_command(command_id: String, serial_number: &str, storage_path: &str) ->
                 ams_mapping_info: Vec::new(),
                 nozzles_info: Vec::new(),
             }),
-            task_metadata: Some(crate::protocol::agent::v1::StudioTaskMetadata {
+            task_metadata: Some(pandar_protocol::agent::v1::StudioTaskMetadata {
                 task_name: "plate".to_owned(),
                 project_name: String::new(),
                 preset_name: String::new(),
@@ -314,7 +314,7 @@ fn print_command(command_id: String, serial_number: &str, storage_path: &str) ->
                 svc_context: String::new(),
                 slicer_uid: String::new(),
             }),
-            submission_source: crate::protocol::agent::v1::PrintSubmissionSource::Studio as i32,
+            submission_source: pandar_protocol::agent::v1::PrintSubmissionSource::Studio as i32,
         })),
     }
 }

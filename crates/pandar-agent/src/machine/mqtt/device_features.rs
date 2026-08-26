@@ -6,9 +6,9 @@ use pandar_core::{BambuDeviceFeatures, created_at_now};
 use crate::{
     AgentConfig,
     machine::{BambuPrinterEndpoint, DeviceFeatureCache},
-    protocol::agent::v1::{
-        AgentEvent, PrinterDeviceFeatures, PrinterDeviceFeaturesSnapshot, agent_event,
-    },
+};
+use pandar_protocol::agent::v1::{
+    AgentEvent, PrinterDeviceFeatures, PrinterDeviceFeaturesSnapshot, agent_event,
 };
 
 use super::{

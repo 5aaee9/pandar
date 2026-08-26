@@ -3,7 +3,7 @@ use serde::Serialize;
 
 use super::{BambuMqttCommandPayload, next_studio_sequence_id};
 use crate::machine::mqtt::commands::payload::{ProjectFilePayload, ProjectFilePayloadPrint};
-use crate::protocol::agent::v1::PrintSubmissionSource;
+use pandar_protocol::agent::v1::PrintSubmissionSource;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectFileCommand {

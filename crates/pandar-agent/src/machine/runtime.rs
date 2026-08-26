@@ -22,8 +22,8 @@ use crate::{
         diagnostics::PrinterEndpointSecrets,
         mqtt::{FirmwareMqttTaskSet, RumqttcBambuMqttTransport, feature_event},
     },
-    protocol::agent::v1::AgentEvent,
 };
+use pandar_protocol::agent::v1::AgentEvent;
 
 use super::operations::mqtt_command_for_printer_operation;
 use super::operations::operate_printer_with_feature_selection;

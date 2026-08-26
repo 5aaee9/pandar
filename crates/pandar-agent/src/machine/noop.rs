@@ -7,7 +7,7 @@ use crate::machine::{
     diagnostics::{DiagnosticCheck, DiagnosticStatus, PrinterDiagnosticResult},
     discovery,
 };
-use crate::protocol::agent::v1::PrintProjectFile;
+use pandar_protocol::agent::v1::PrintProjectFile;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NoopMachineGateway;

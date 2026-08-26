@@ -26,8 +26,8 @@ use crate::{
         BambuPrinterEndpoint, DeviceFeatureCache, FirmwareObservationCache, FirmwareReportContext,
         RuntimeReportContext,
     },
-    protocol::agent::v1::{AgentEvent, agent_event},
 };
+use pandar_protocol::agent::v1::{AgentEvent, agent_event};
 
 use super::{
     MqttForwardingContext, MqttPresenceState, forward_print_reports,
@@ -347,7 +347,7 @@ async fn next_event(receiver: &mut mpsc::Receiver<AgentEvent>) -> AgentEvent {
 
 async fn next_snapshot(
     receiver: &mut mpsc::Receiver<AgentEvent>,
-) -> crate::protocol::agent::v1::PrinterSnapshot {
+) -> pandar_protocol::agent::v1::PrinterSnapshot {
     loop {
         let event = next_event(receiver).await;
         if let Some(agent_event::Event::PrinterSnapshot(snapshot)) = event.event {

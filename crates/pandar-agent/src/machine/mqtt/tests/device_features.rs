@@ -4,7 +4,8 @@ use pandar_core::BambuDeviceFeatures;
 use tokio::{sync::mpsc, time::timeout};
 
 use super::*;
-use crate::{machine::DeviceFeatureCache, protocol::agent::v1::agent_event};
+use crate::machine::DeviceFeatureCache;
+use pandar_protocol::agent::v1::agent_event;
 
 const HIGH_BITS: u64 = 0x8000_0041_0000_0020;
 
@@ -334,7 +335,7 @@ async fn device_features_temperature_report_precedes_separate_offline_transition
     task.abort();
 }
 
-fn assert_offline_snapshot(event: crate::protocol::agent::v1::AgentEvent) {
+fn assert_offline_snapshot(event: pandar_protocol::agent::v1::AgentEvent) {
     let Some(agent_event::Event::PrinterSnapshot(snapshot)) = event.event else {
         panic!("expected offline printer snapshot, got {event:?}");
     };

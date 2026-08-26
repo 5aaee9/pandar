@@ -26,7 +26,9 @@ use crate::{
         discovery::PrinterDiscoveryResult,
         mqtt::{BambuMqttTransport, PublishedMqttCommand},
     },
-    protocol::agent::v1::{AgentEvent, HubCommand, PrintProjectFile, RefreshPrinters, hub_command},
+};
+use pandar_protocol::agent::v1::{
+    AgentEvent, HubCommand, PrintProjectFile, RefreshPrinters, hub_command,
 };
 
 const SESSION_EPOCH: u64 = 901;

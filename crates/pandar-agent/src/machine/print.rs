@@ -1,24 +1,22 @@
 use anyhow::{Context, bail};
 use pandar_core::PrintCalibrationMode;
 
-use crate::{
-    machine::{
-        BambuMqttTransport, BambuPrinterEndpoint, MachineFileTransfer, MachineJsonPayload,
-        PrintProjectDispatchResult, TransferModeCache,
-        brtc::md5_upper,
-        compatibility::{
-            auto_bed_leveling_supported, auto_flow_calibration_supported,
-            flow_calibration_supported, nozzle_offset_calibration_supported,
-        },
-        file_transfer::{PrintUploadPolicy, run_with_transfer_mode},
-        mqtt::{
-            BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, ProjectFileAmsMapping2,
-            ProjectFileAmsMappingInfo, ProjectFileCommand, PublishedMqttCommand,
-        },
+use crate::machine::{
+    BambuMqttTransport, BambuPrinterEndpoint, MachineFileTransfer, MachineJsonPayload,
+    PrintProjectDispatchResult, TransferModeCache,
+    brtc::md5_upper,
+    compatibility::{
+        auto_bed_leveling_supported, auto_flow_calibration_supported, flow_calibration_supported,
+        nozzle_offset_calibration_supported,
     },
-    protocol::agent::v1::{
-        PrintProjectFile, PrintProjectFileOptions, PrintSubmissionSource, StudioTaskMetadata,
+    file_transfer::{PrintUploadPolicy, run_with_transfer_mode},
+    mqtt::{
+        BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, ProjectFileAmsMapping2,
+        ProjectFileAmsMappingInfo, ProjectFileCommand, PublishedMqttCommand,
     },
+};
+use pandar_protocol::agent::v1::{
+    PrintProjectFile, PrintProjectFileOptions, PrintSubmissionSource, StudioTaskMetadata,
 };
 
 const MAX_STUDIO_MAPPING_ENTRIES: usize = 32;

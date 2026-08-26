@@ -12,7 +12,7 @@ use crate::machine::{
     BambuMachineGateway, discovery::DiscoveredPrinter, file_transfer::FakeMachineFileTransfer,
     mqtt::FakeMqttTransport, runtime::test_support::TestRuntimeBambuMachineGateway,
 };
-use crate::protocol::agent::v1::{
+use pandar_protocol::agent::v1::{
     AgentCameraEvent, AgentCapability, AgentEvent, HubCameraCommand, HubCommand, LinkPrinter,
     agent_control_server::{AgentControl, AgentControlServer},
     hub_command,

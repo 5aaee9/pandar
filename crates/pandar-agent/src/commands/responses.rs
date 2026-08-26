@@ -1,9 +1,9 @@
 use crate::{
     AgentConfig,
     machine::{MachineSnapshot, MaterialRefreshResult},
-    protocol::agent::v1::{
-        AgentEvent, CommandAck, CommandResult, FirmwareCommandResult, PrinterSnapshot, agent_event,
-    },
+};
+use pandar_protocol::agent::v1::{
+    AgentEvent, CommandAck, CommandResult, FirmwareCommandResult, PrinterSnapshot, agent_event,
 };
 
 use super::events::event;
@@ -133,7 +133,7 @@ fn printer_snapshot_event_with_connection_authority(
                 .nozzle_temperatures
                 .into_iter()
                 .map(
-                    |temperature| crate::protocol::agent::v1::NozzleTemperature {
+                    |temperature| pandar_protocol::agent::v1::NozzleTemperature {
                         label: temperature.label.unwrap_or_default(),
                         current_celsius: temperature.current_celsius.unwrap_or_default(),
                         target_celsius: temperature.target_celsius.unwrap_or_default(),
@@ -154,7 +154,7 @@ fn printer_snapshot_event_with_connection_authority(
                 .unwrap_or_default(),
             active_nozzle: snapshot.active_nozzle.unwrap_or_default(),
             chamber_light_on: snapshot.chamber_light_on,
-            device_features: crate::protocol::proto_device_features(
+            device_features: pandar_protocol::proto_device_features(
                 snapshot.device_features,
                 snapshot.device_features2,
             ),
@@ -162,10 +162,10 @@ fn printer_snapshot_event_with_connection_authority(
             telemetry_authoritative: snapshot.telemetry_authoritative,
             nozzle_system: snapshot
                 .nozzle_system
-                .map(crate::protocol::proto_nozzle_system),
+                .map(pandar_protocol::proto_nozzle_system),
             cooling_system: snapshot
                 .cooling_system
-                .map(crate::protocol::proto_cooling_system),
+                .map(pandar_protocol::proto_cooling_system),
         }),
     )
 }

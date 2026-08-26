@@ -1,13 +1,11 @@
 use super::*;
 use pandar_core::BambuDeviceFeature;
 
-use crate::{
-    machine::{
-        mqtt::{MachineReport, decode_mqtt_report_payload},
-        operations::{device_feature_dispatch_pause, operate_printer_with_feature_selection},
-    },
-    protocol::agent::v1::{AgentEvent, agent_event},
+use crate::machine::{
+    mqtt::{MachineReport, decode_mqtt_report_payload},
+    operations::{device_feature_dispatch_pause, operate_printer_with_feature_selection},
 };
+use pandar_protocol::agent::v1::{AgentEvent, agent_event};
 
 fn axis_gateway(
     mqtt: FakeMqttTransport,

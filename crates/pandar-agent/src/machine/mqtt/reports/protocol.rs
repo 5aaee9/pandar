@@ -1,8 +1,6 @@
-use crate::{
-    AgentConfig,
-    protocol::agent::v1::{
-        AgentEvent, MachineDiagnostic, PrintJobReport, PrinterHmsItem, agent_event,
-    },
+use crate::AgentConfig;
+use pandar_protocol::agent::v1::{
+    AgentEvent, MachineDiagnostic, PrintJobReport, PrinterHmsItem, agent_event,
 };
 
 use super::super::PrintReportProgress;
