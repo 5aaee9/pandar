@@ -58,7 +58,10 @@ class PrinterEventsRepository(
     }
 
     private suspend fun connectLoop() {
-        var backoffMs = INITIAL_BACKOFF_MS
+        val backoff = ReconnectBackoff(
+            initialMs = INITIAL_BACKOFF_MS,
+            maxMs = MAX_BACKOFF_MS,
+        )
         var refreshedForFailure = false
         while (true) {
             val url = buildWsUrl()
@@ -72,23 +75,28 @@ class PrinterEventsRepository(
                 Outcome.AuthFailure -> {
                     if (!refreshedForFailure && tokenRefresher()) {
                         refreshedForFailure = true
-                        backoffMs = INITIAL_BACKOFF_MS
+                        backoff.reset()
                         continue // reconnect immediately with refreshed token
                     }
                     _needsReauth.value = true
                     _liveState.value = LiveState.DISCONNECTED
-                    delay(backoffMs)
-                    backoffMs = nextBackoff(backoffMs)
+                    delay(backoff.currentMs)
+                    backoff.advanceAfterFailure()
                 }
-                Outcome.Closed -> {
+                Outcome.ClosedWithoutTraffic -> {
                     refreshedForFailure = false
                     _liveState.value = LiveState.DISCONNECTED
-                    delay(backoffMs)
-                    backoffMs = nextBackoff(backoffMs)
+                    delay(backoff.currentMs)
+                    backoff.advanceAfterFailure()
                 }
-                Outcome.Connected -> {
+                Outcome.ClosedAfterTraffic -> {
+                    // The stream delivered at least one frame, so the session
+                    // was healthy; retry promptly instead of compounding the
+                    // cold-start backoff.
                     refreshedForFailure = false
-                    backoffMs = INITIAL_BACKOFF_MS
+                    _liveState.value = LiveState.DISCONNECTED
+                    backoff.reset()
+                    delay(backoff.currentMs)
                 }
             }
         }
@@ -128,7 +136,7 @@ class PrinterEventsRepository(
                         cont.resume(Outcome.AuthFailure)
                     } else {
                         logger.w(t) { "WS connection failed (code=${response?.code})" }
-                        cont.resume(Outcome.Closed)
+                        cont.resume(outcomeAfterClose(receivedFrame))
                     }
                 }
 
@@ -139,7 +147,7 @@ class PrinterEventsRepository(
                         // Upgraded then immediately closed with no frames: probable auth rejection.
                         cont.resume(Outcome.AuthFailure)
                     } else {
-                        cont.resume(Outcome.Closed)
+                        cont.resume(outcomeAfterClose(receivedFrame))
                     }
                 }
             }
@@ -165,9 +173,28 @@ class PrinterEventsRepository(
         return message != null && (message.contains("401") || message.contains("403"))
     }
 
-    private fun nextBackoff(current: Long): Long = min(current * 2, MAX_BACKOFF_MS)
+    private fun outcomeAfterClose(receivedFrame: Boolean): Outcome {
+        return if (receivedFrame) Outcome.ClosedAfterTraffic else Outcome.ClosedWithoutTraffic
+    }
 
-    private enum class Outcome { Connected, Closed, AuthFailure }
+    private enum class Outcome { ClosedAfterTraffic, ClosedWithoutTraffic, AuthFailure }
+
+    /** Exponential reconnect delay that only healthy sessions reset. */
+    internal class ReconnectBackoff(private val initialMs: Long, private val maxMs: Long) {
+        var currentMs: Long = initialMs
+            private set
+
+        fun reset() {
+            currentMs = initialMs
+        }
+
+        /** Returns the delay that just elapsed and schedules the next, longer one. */
+        fun advanceAfterFailure(): Long {
+            val elapsed = currentMs
+            currentMs = min(currentMs * 2, maxMs)
+            return elapsed
+        }
+    }
 
     companion object {
         private const val INITIAL_BACKOFF_MS = 1_000L
