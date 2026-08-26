@@ -16,7 +16,7 @@ use crate::printer_events::PrinterEventHub;
 struct ControlledSink {
     frames: Arc<Mutex<Vec<Message>>>,
     enqueued: Option<oneshot::Sender<()>>,
-    invalidate_on_ready: Option<PrinterEventHub>,
+    invalidate_on_ready: Option<(PrinterEventHub, pandar_core::TenantId)>,
     block_flush: bool,
 }
 
@@ -42,8 +42,8 @@ impl Sink<Message> for ControlledSink {
         mut self: Pin<&mut Self>,
         _context: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        if let Some(hub) = self.invalidate_on_ready.take() {
-            hub.invalidate_epoch();
+        if let Some((hub, tenant)) = self.invalidate_on_ready.take() {
+            hub.invalidate_epoch(tenant);
         }
         Poll::Ready(Ok(()))
     }
@@ -78,10 +78,11 @@ impl Sink<Message> for ControlledSink {
 #[tokio::test]
 async fn invalidation_before_linearized_enqueue_records_no_frame() {
     let hub = PrinterEventHub::new();
-    let mut epoch = hub.subscribe_epoch();
+    let tenant = pandar_core::TenantId::new();
+    let mut epoch = hub.subscribe_epoch(tenant);
     let gate = hub.epoch_gate();
     let (mut sink, frames) = ControlledSink::new(false);
-    sink.invalidate_on_ready = Some(hub.clone());
+    sink.invalidate_on_ready = Some((hub.clone(), tenant));
 
     let outcome = linearized_send(&mut sink, Message::Text("stale".into()), &mut epoch, &gate)
         .await
@@ -94,7 +95,8 @@ async fn invalidation_before_linearized_enqueue_records_no_frame() {
 #[tokio::test]
 async fn enqueue_before_invalidation_is_ordered_but_blocked_flush_is_cancelled() {
     let hub = PrinterEventHub::new();
-    let mut epoch = hub.subscribe_epoch();
+    let tenant = pandar_core::TenantId::new();
+    let mut epoch = hub.subscribe_epoch(tenant);
     let gate = hub.epoch_gate();
     let (enqueued_sender, enqueued_receiver) = oneshot::channel();
     let (mut sink, frames) = ControlledSink::new(true);
@@ -115,7 +117,7 @@ async fn enqueue_before_invalidation_is_ordered_but_blocked_flush_is_cancelled()
         .expect("enqueue signal should stay open");
     assert_eq!(frames.lock().unwrap().len(), 1);
 
-    hub.invalidate_epoch();
+    hub.invalidate_epoch(tenant);
 
     let outcome = tokio::time::timeout(Duration::from_secs(1), send)
         .await

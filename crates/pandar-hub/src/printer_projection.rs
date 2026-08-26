@@ -20,7 +20,7 @@ impl AppState {
         {
             self.metrics()
                 .record_control_plane(ControlPlaneMetric::PublishFailed);
-            self.printer_events().invalidate_epoch();
+            self.printer_events().invalidate_epoch(tenant_id);
             tracing::error!(
                 error = %format!("{err:#}"),
                 "failed to publish printer projection change control message"
@@ -44,7 +44,7 @@ impl AppState {
             Ok(Some(printer)) => printer,
             Ok(None) => return,
             Err(err) => {
-                self.printer_events().invalidate_epoch();
+                self.printer_events().invalidate_epoch(tenant_id);
                 tracing::error!(
                     error = %format!("{err:#}"),
                     "failed to resolve printer serial for projection change"
@@ -110,7 +110,7 @@ impl AppState {
                     .collect(),
             ),
             Err(err) => {
-                self.printer_events().invalidate_epoch();
+                self.printer_events().invalidate_epoch(tenant_id);
                 tracing::error!(
                     error = %format!("{err:#}"),
                     "failed to list tenant printers for projection changes"

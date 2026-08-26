@@ -191,7 +191,10 @@ async fn studio_projection_epoch_change_drops_a_serialized_live_upsert() {
         )
         .await;
     pause.wait_until_reached().await;
-    fixture.state.printer_events().invalidate_epoch();
+    fixture
+        .state
+        .printer_events()
+        .invalidate_epoch(fixture.tenant.id);
     pause.resume();
 
     assert_socket_closed_without_text(&mut ws, "studio epoch change after serialization").await;

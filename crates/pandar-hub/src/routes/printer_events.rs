@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     AppState,
     metrics::TicketMetric,
-    printer_events::PrinterEventEpochGate,
+    printer_events::{PrinterEventEpoch, PrinterEventEpochGate},
     repositories::{PrinterEventTicketConsumeResult, UserRole, generate_secret, hash_secret},
     routes::{ApiError, auth},
 };
@@ -36,7 +36,7 @@ pub(crate) enum LinearizedSendOutcome {
 pub(crate) async fn linearized_send<S>(
     sink: &mut S,
     message: Message,
-    epoch: &mut tokio::sync::watch::Receiver<u64>,
+    epoch: &mut PrinterEventEpoch,
     gate: &PrinterEventEpochGate,
 ) -> Result<LinearizedSendOutcome, S::Error>
 where
@@ -160,7 +160,7 @@ async fn printer_events_default(
     state.printers().list_for_tenant(tenant_id).await?;
     let subscription = state.printer_events().track_subscription(tenant_id).await;
     let receiver = state.printer_events().subscribe(tenant_id).await;
-    let epoch = state.printer_events().subscribe_epoch();
+    let epoch = state.printer_events().subscribe_epoch(tenant_id);
     let epoch_gate = state.printer_events().epoch_gate();
     let (mut parts, _) = request.into_parts();
     let upgrade = WebSocketUpgrade::from_request_parts(&mut parts, &state)
@@ -198,7 +198,7 @@ pub(super) async fn create_printer_event_ticket(
 async fn forward_events(
     mut socket: WebSocket,
     mut receiver: tokio::sync::broadcast::Receiver<crate::printer_events::PrinterEvent>,
-    mut epoch: tokio::sync::watch::Receiver<u64>,
+    mut epoch: PrinterEventEpoch,
     epoch_gate: PrinterEventEpochGate,
     _subscription: crate::metrics::SubscriptionGuard,
 ) {

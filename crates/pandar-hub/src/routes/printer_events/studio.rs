@@ -43,7 +43,7 @@ pub(super) async fn printer_events_studio(
         .printer_events()
         .subscribe_projection_changes(tenant_id)
         .await;
-    let epoch = state.printer_events().subscribe_epoch();
+    let epoch = state.printer_events().subscribe_epoch(tenant_id);
     let epoch_gate = state.printer_events().epoch_gate();
     let subscription = state.printer_events().track_subscription(tenant_id).await;
     let (mut parts, _) = request.into_parts();
@@ -69,7 +69,7 @@ async fn forward_studio_events(
     state: AppState,
     tenant_id: pandar_core::TenantId,
     mut changes: ProjectionSubscription,
-    mut epoch: tokio::sync::watch::Receiver<u64>,
+    mut epoch: crate::printer_events::PrinterEventEpoch,
     epoch_gate: PrinterEventEpochGate,
     _subscription: crate::metrics::SubscriptionGuard,
 ) {
@@ -261,7 +261,7 @@ async fn resolve_and_send_projection_change(
     change: &PrinterProjectionChange,
     published: &mut PublishedRecords,
     socket: &mut WebSocket,
-    epoch: &mut tokio::sync::watch::Receiver<u64>,
+    epoch: &mut crate::printer_events::PrinterEventEpoch,
     epoch_gate: &PrinterEventEpochGate,
 ) -> bool {
     let record = match super::super::plugin::studio_devices::studio_projection_record(

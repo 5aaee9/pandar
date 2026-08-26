@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     sync::{Arc, Mutex as StdMutex, MutexGuard},
 };
 
@@ -8,20 +8,23 @@ use pandar_core::{
     compatibility::normalize_model,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Number;
 use tokio::sync::{Mutex, broadcast, watch};
 
 use crate::{
     metrics::{MetricsState, SubscriptionGuard},
     protocol::agent::v1::AgentCapability,
-    repositories::{MaterialJsonValue, MaterialSnapshot, PrinterHms, PrinterWithLiveStatus},
+    repositories::{MaterialSnapshot, PrinterHms, PrinterWithLiveStatus},
     routes::jobs::JobResponse,
     sessions::SessionRegistry,
 };
 
+mod materials;
 mod projection;
+
 pub use projection::PrinterProjectionChange;
 pub(crate) use projection::ProjectionSubscription;
+
+pub use materials::{PrinterEventMaterialJson, PrinterEventMaterials};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -81,29 +84,6 @@ pub struct PrinterEventPrint {
     pub print_error: Option<u32>,
     pub printer_job_id: Option<String>,
     pub hms: Vec<PrinterHms>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PrinterEventMaterials {
-    pub ams_units: PrinterEventMaterialJson,
-    pub external_spools: PrinterEventMaterialJson,
-    pub active_tray: Option<PrinterEventMaterialJson>,
-    pub filament_switch_installed: Option<bool>,
-    pub cfg: Option<String>,
-    pub aux: Option<String>,
-    pub stat: Option<String>,
-    pub observed_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum PrinterEventMaterialJson {
-    Object(BTreeMap<String, PrinterEventMaterialJson>),
-    Array(Vec<PrinterEventMaterialJson>),
-    String(String),
-    Number(Number),
-    Bool(bool),
-    Null,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -203,21 +183,6 @@ pub fn printer_event_printer(
     }
 }
 
-impl From<MaterialSnapshot> for PrinterEventMaterials {
-    fn from(snapshot: MaterialSnapshot) -> Self {
-        Self {
-            ams_units: PrinterEventMaterialJson::from(snapshot.ams_units).scrubbed(),
-            external_spools: PrinterEventMaterialJson::from(snapshot.external_spools).scrubbed(),
-            active_tray: snapshot.active_tray.map(scrub_material_json),
-            filament_switch_installed: snapshot.filament_switch_installed,
-            observed_at: snapshot.observed_at,
-            cfg: snapshot.cfg,
-            aux: snapshot.aux,
-            stat: snapshot.stat,
-        }
-    }
-}
-
 impl From<CommandRecord> for PrinterEventCommand {
     fn from(command: CommandRecord) -> Self {
         Self {
@@ -236,61 +201,44 @@ impl From<CommandRecord> for PrinterEventCommand {
     }
 }
 
-fn scrub_material_json(value: MaterialJsonValue) -> PrinterEventMaterialJson {
-    PrinterEventMaterialJson::from(value).scrubbed()
-}
-
-impl PrinterEventMaterialJson {
-    fn scrubbed(self) -> Self {
-        match self {
-            Self::Array(values) => Self::Array(values.into_iter().map(Self::scrubbed).collect()),
-            Self::Object(map) => Self::Object(
-                map.into_iter()
-                    .filter_map(|(key, value)| {
-                        (!credential_key(&key)).then(|| (key, value.scrubbed()))
-                    })
-                    .collect(),
-            ),
-            value => value,
-        }
-    }
-}
-
-impl From<MaterialJsonValue> for PrinterEventMaterialJson {
-    fn from(value: MaterialJsonValue) -> Self {
-        match value {
-            MaterialJsonValue::Object(object) => Self::Object(
-                object
-                    .into_iter()
-                    .map(|(key, value)| (key, Self::from(value)))
-                    .collect(),
-            ),
-            MaterialJsonValue::Array(values) => {
-                Self::Array(values.into_iter().map(Self::from).collect())
-            }
-            MaterialJsonValue::String(value) => Self::String(value),
-            MaterialJsonValue::Number(value) => Self::Number(value),
-            MaterialJsonValue::Bool(value) => Self::Bool(value),
-            MaterialJsonValue::Null => Self::Null,
-        }
-    }
-}
-
-fn credential_key(key: &str) -> bool {
-    let key = key.to_ascii_lowercase();
-    ["access_code", "password", "passwd", "token", "auth"]
-        .iter()
-        .any(|needle| key.contains(needle))
-}
-
 #[derive(Debug, Clone)]
 pub struct PrinterEventHub {
     senders: Arc<Mutex<HashMap<String, broadcast::Sender<PrinterEvent>>>>,
     projection: projection::ProjectionEventHub,
     metrics: MetricsState,
-    epoch: watch::Sender<u64>,
+    /// Per-tenant epochs, bumped when one tenant's event flow may have lost
+    /// events; only that tenant's sockets resynchronize.
+    epochs: Arc<StdMutex<HashMap<String, watch::Sender<u64>>>>,
+    /// Process-wide epoch for control-plane-wide failures (subscribe loss,
+    /// receive errors) that may affect every tenant's event flow.
+    global_epoch: watch::Sender<u64>,
     epoch_gate: PrinterEventEpochGate,
     capacity: usize,
+}
+
+/// Watches the per-tenant and process-wide epochs so a WebSocket closes when
+/// either its tenant's event flow or the whole control plane needs a resync.
+#[derive(Debug, Clone)]
+pub(crate) struct PrinterEventEpoch {
+    tenant: watch::Receiver<u64>,
+    global: watch::Receiver<u64>,
+}
+
+impl PrinterEventEpoch {
+    pub async fn changed(&mut self) -> Result<(), watch::error::RecvError> {
+        tokio::select! {
+            biased;
+            changed = self.tenant.changed() => changed,
+            changed = self.global.changed() => changed,
+        }
+    }
+
+    pub fn has_changed(&mut self) -> Result<bool, watch::error::RecvError> {
+        if self.tenant.has_changed()? {
+            return Ok(true);
+        }
+        self.global.has_changed()
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -318,7 +266,8 @@ impl PrinterEventHub {
             senders: Arc::new(Mutex::new(HashMap::new())),
             projection: projection::ProjectionEventHub::new(capacity),
             metrics,
-            epoch: watch::channel(0).0,
+            epochs: Arc::new(StdMutex::new(HashMap::new())),
+            global_epoch: watch::channel(0).0,
             epoch_gate: PrinterEventEpochGate::default(),
             capacity,
         }
@@ -352,21 +301,57 @@ impl PrinterEventHub {
         self.metrics.subscription_started(tenant_id).await
     }
 
-    pub fn subscribe_epoch(&self) -> watch::Receiver<u64> {
-        self.epoch.subscribe()
+    pub(crate) fn subscribe_epoch(&self, tenant_id: TenantId) -> PrinterEventEpoch {
+        let tenant = self.epoch(tenant_id);
+        PrinterEventEpoch {
+            tenant,
+            global: self.global_epoch.subscribe(),
+        }
     }
 
     pub(crate) fn epoch_gate(&self) -> PrinterEventEpochGate {
         self.epoch_gate.clone()
     }
 
-    pub fn invalidate_epoch(&self) {
+    fn epoch(&self, tenant_id: TenantId) -> watch::Receiver<u64> {
+        let mut epochs = self
+            .epochs
+            .lock()
+            .expect("printer event epoch map should not be poisoned");
+        epochs
+            .entry(tenant_id.to_string())
+            .or_insert_with(|| watch::channel(0).0)
+            .subscribe()
+    }
+
+    /// Invalidate one tenant's epoch after a failed publish so only that
+    /// tenant's sockets close and resynchronize.
+    pub fn invalidate_epoch(&self, tenant_id: TenantId) {
         let _gate = self.epoch_gate.lock();
-        self.epoch
+        let epoch = {
+            let mut epochs = self
+                .epochs
+                .lock()
+                .expect("printer event epoch map should not be poisoned");
+            epochs
+                .entry(tenant_id.to_string())
+                .or_insert_with(|| watch::channel(0).0)
+                .clone()
+        };
+        epoch.send_modify(|value| *value = value.wrapping_add(1));
+    }
+
+    /// Invalidate every tenant's epoch after a control-plane-wide failure.
+    pub fn invalidate_all_epochs(&self) {
+        let _gate = self.epoch_gate.lock();
+        self.global_epoch
             .send_modify(|value| *value = value.wrapping_add(1));
     }
 
-    pub async fn publish_local(&self, tenant_id: TenantId, event: PrinterEvent) {
+    /// Deliver one control-plane-replicated event to local subscribers. Only
+    /// the control-plane consumer may call this; producers must go through
+    /// [`AppState::publish_printer_event`] so every replica receives the event.
+    pub(crate) async fn deliver_local(&self, tenant_id: TenantId, event: PrinterEvent) {
         let sender = self.sender(tenant_id).await;
         let _ = sender.send(event);
     }

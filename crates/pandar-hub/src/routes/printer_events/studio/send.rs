@@ -24,7 +24,7 @@ pub(super) enum StudioPrinterEventFrame {
 pub(super) async fn send_studio_frame<S>(
     sink: &mut S,
     frame: &StudioPrinterEventFrame,
-    epoch: &mut tokio::sync::watch::Receiver<u64>,
+    epoch: &mut crate::printer_events::PrinterEventEpoch,
     gate: &PrinterEventEpochGate,
 ) -> bool
 where
@@ -49,7 +49,7 @@ where
 pub(super) async fn send_studio_message<S>(
     sink: &mut S,
     message: Message,
-    epoch: &mut tokio::sync::watch::Receiver<u64>,
+    epoch: &mut crate::printer_events::PrinterEventEpoch,
     gate: &PrinterEventEpochGate,
 ) -> bool
 where

@@ -58,21 +58,29 @@ impl ControlPlaneBackend for ScriptedControlPlaneBackend {
 }
 
 #[tokio::test]
-async fn printer_event_publish_failure_invalidates_process_epoch() {
+async fn printer_event_publish_failure_invalidates_only_that_tenant_epoch() {
     let state = AppState::sqlite_for_tests()
         .await
         .unwrap()
         .with_control_plane_for_tests(ControlPlane::failing_for_tests());
-    let mut epoch = state.printer_events().subscribe_epoch();
+    let affected = pandar_core::TenantId::new();
+    let untouched = pandar_core::TenantId::new();
+    let mut epoch = state.printer_events().subscribe_epoch(affected);
+    let mut other = state.printer_events().subscribe_epoch(untouched);
 
     state
-        .publish_printer_event(pandar_core::TenantId::new(), test_event("publish-failed"))
+        .publish_printer_event(affected, test_event("publish-failed"))
         .await;
 
     tokio::time::timeout(Duration::from_secs(1), epoch.changed())
         .await
-        .expect("publish failure should invalidate epoch")
+        .expect("publish failure should invalidate the target tenant's epoch")
         .expect("epoch sender should stay open");
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(
+        !other.has_changed().unwrap(),
+        "another tenant's epoch must stay valid"
+    );
 }
 
 #[tokio::test]
@@ -91,7 +99,7 @@ async fn control_plane_item_error_invalidates_epoch_and_keeps_stream_open() {
         .await
         .unwrap();
     let mut local = state.printer_events().subscribe(tenant.id).await;
-    let mut epoch = state.printer_events().subscribe_epoch();
+    let mut epoch = state.printer_events().subscribe_epoch(tenant.id);
     let (_task, ready) = spawn_control_plane_ready(state);
     ready.await.unwrap().unwrap();
 
@@ -135,7 +143,7 @@ async fn control_plane_eof_invalidates_epoch_then_resubscribes_after_one_second_
         .await
         .unwrap();
     let mut local = state.printer_events().subscribe(tenant.id).await;
-    let mut epoch = state.printer_events().subscribe_epoch();
+    let mut epoch = state.printer_events().subscribe_epoch(tenant.id);
     let (_task, ready) = spawn_control_plane_ready(state);
     ready.await.unwrap().unwrap();
 
@@ -184,7 +192,7 @@ async fn control_plane_subscribe_failure_invalidates_and_retries_after_one_secon
         .await
         .unwrap();
     let mut local = state.printer_events().subscribe(tenant.id).await;
-    let mut epoch = state.printer_events().subscribe_epoch();
+    let mut epoch = state.printer_events().subscribe_epoch(tenant.id);
     let failed_at = Instant::now();
     let (_task, mut ready) = spawn_control_plane_ready(state);
     tokio::time::timeout(Duration::from_secs(1), epoch.changed())

@@ -27,7 +27,7 @@ async fn printer_events_websocket_closes_immediately_when_process_epoch_changes(
         .insert("Authorization", format!("Bearer {token}").parse().unwrap());
     let (mut ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
 
-    state.printer_events().invalidate_epoch();
+    state.printer_events().invalidate_epoch(tenant.id);
 
     assert_socket_closed_without_text(&mut ws, "epoch change").await;
 }
@@ -39,11 +39,11 @@ async fn epoch_change_after_serialization_closes_without_sending_stale_text() {
     let mut ws = connect_printer_events(http_addr, tenant.id, &token).await;
     state
         .printer_events()
-        .publish_local(tenant.id, test_command_event("serialized"))
+        .deliver_local(tenant.id, test_command_event("serialized"))
         .await;
     pause.wait_until_reached().await;
 
-    state.printer_events().invalidate_epoch();
+    state.printer_events().invalidate_epoch(tenant.id);
     pause.resume();
 
     assert_socket_closed_without_text(&mut ws, "epoch change after serialization").await;
@@ -56,11 +56,11 @@ async fn epoch_change_cancels_a_blocked_websocket_flush() {
     let mut ws = connect_printer_events(http_addr, tenant.id, &token).await;
     state
         .printer_events()
-        .publish_local(tenant.id, test_command_event("blocked"))
+        .deliver_local(tenant.id, test_command_event("blocked"))
         .await;
     pause.wait_until_reached().await;
 
-    state.printer_events().invalidate_epoch();
+    state.printer_events().invalidate_epoch(tenant.id);
 
     assert_socket_closed_without_text(&mut ws, "epoch change during blocked flush").await;
     pause.resume();

@@ -62,7 +62,7 @@ fn spawn_control_plane_inner(
                 }
                 Err(err) => {
                     let err = err.context("failed to subscribe to hub control plane");
-                    state.printer_events().invalidate_epoch();
+                    state.printer_events().invalidate_all_epochs();
                     tracing::error!(error = %format!("{err:#}"), "failed to subscribe to hub control plane");
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;
@@ -80,7 +80,7 @@ fn spawn_control_plane_inner(
                         state
                             .metrics()
                             .record_control_plane(ControlPlaneMetric::ReceiveFailed);
-                        state.printer_events().invalidate_epoch();
+                        state.printer_events().invalidate_all_epochs();
                         tracing::error!(error = %format!("{err:#}"), "failed to receive hub control message");
                     }
                 }
@@ -88,7 +88,7 @@ fn spawn_control_plane_inner(
             state
                 .metrics()
                 .record_control_plane(ControlPlaneMetric::ReceiveFailed);
-            state.printer_events().invalidate_epoch();
+            state.printer_events().invalidate_all_epochs();
             tracing::error!("hub control plane subscription ended");
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
@@ -142,7 +142,7 @@ async fn handle_control_message(state: &AppState, message: HubControlMessage) {
         },
         HubControlMessage::PrinterEvent { tenant_id, event } => {
             match crate::cluster::parse_tenant_id(&tenant_id) {
-                Ok(tenant_id) => state.printer_events().publish_local(tenant_id, event).await,
+                Ok(tenant_id) => state.printer_events().deliver_local(tenant_id, event).await,
                 Err(err) => {
                     tracing::error!(error = %format!("{err:#}"), "failed to parse printer event control message")
                 }
