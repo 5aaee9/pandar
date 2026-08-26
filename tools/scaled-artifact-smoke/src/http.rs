@@ -176,7 +176,7 @@ pub async fn dequeue_print_command(
     fixture: &SmokeFixture,
 ) -> anyhow::Result<(
     pandar_core::CommandId,
-    pandar_hub::protocol::agent::v1::PrintProjectFile,
+    pandar_protocol::agent::v1::PrintProjectFile,
 )> {
     ensure!(
         state.commands().count().await? >= 1,
@@ -188,7 +188,7 @@ pub async fn dequeue_print_command(
         .context("expected queued command")?;
     let command_id = pandar_core::CommandId::parse(&command.command_id)?;
     match command.command.context("expected hub command payload")? {
-        pandar_hub::protocol::agent::v1::hub_command::Command::PrintProjectFile(print) => {
+        pandar_protocol::agent::v1::hub_command::Command::PrintProjectFile(print) => {
             Ok((command_id, print))
         }
         _ => anyhow::bail!("expected PrintProjectFile command"),

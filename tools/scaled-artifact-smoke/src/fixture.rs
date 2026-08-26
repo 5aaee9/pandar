@@ -6,11 +6,11 @@ use pandar_hub::{
     artifacts::{ArtifactStorage, S3ArtifactStorageConfig},
     cluster::{ControlPlane, ControlPlaneConfig},
     db::{Database, DatabaseConfig},
-    protocol::agent::v1::PrintJobReport,
     repositories::{
         ApplyPrintReport, AuditActor, PrinterSnapshotUpsert, TenantTokenScope, UserRole,
     },
 };
+use pandar_protocol::agent::v1::PrintJobReport;
 use tempfile::TempDir;
 
 use crate::{
