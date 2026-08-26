@@ -1,0 +1,19 @@
+# 集群正确性 Bug 修复进度（2026-08-26）
+
+来源：2026-08-26 全库 thermo-nuclear 质量审查报告第一部分「正确性 Bug」（共 5 项）。本页逐项跟踪修复状态；结构性重构建议不在本次范围。
+
+每项修复要求：配回归测试；`cargo fmt` / `cargo clippy` / `cargo nextest run --workspace` 通过。
+
+| #   | Bug                                                                                                                          | 状态                                                                                                                                                                                                                    | 测试                                                                                                                                                                                                                            |
+| --- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `pandar-network-plugin/build.rs` 增量编译依赖表列出不存在头文件、漏掉 7 个真实头文件，编辑实现头文件不触发重编译             | ✅ 已修：改为自动扫描 `src/shim_*.hpp` 发 `rerun-if-changed`，删除手写列表；验证 touch 此前遗漏的 `shim_account_transaction.hpp` 会触发重编译                                                                           | build script 执行 + 重编译行为验证（无单测面）                                                                                                                                                                                  |
+| 2   | `studio_message.rs` 用 `contains("get_auto_nozzle_mapping")` 子串分类 Studio 消息，把含该子串的合法 gcode 操作误判为无效 H2C | ✅ 已修：改为类型化 `print.command` 分类（完整 envelope 解析 + 命令探针），不再做子串匹配；畸形 H2C 请求仍报告 H2C kind                                                                                                 | `gcode_line_mentioning_the_h2c_command_is_an_operation`、`valid_h2c_mapping_request_is_dispatched_to_the_h2c_parser`、`malformed_h2c_mapping_request_reports_the_h2c_kind`、`status_request_still_dispatches_before_operations` |
+| 3   | `grpc/inbound/commands.rs` 命令结果事件直接 `publish_local` 绕过 control plane，多实例部署时其他节点 WebSocket 收不到        | ✅ 已修：改为经 `AppState::publish_printer_event` 发布（control plane 回环投递本节点）；`publish_local` 更名 `deliver_local` 并限定为 control-plane 消费者专用                                                          | `grpc_printer_operation_result_publishes_command_event` 改为启动 control-plane 消费者后断言本地订阅者收到事件                                                                                                                   |
+| 4   | `printer_events.rs` 全局 epoch：任一租户发布失败触发全局失效，关闭所有租户的 WebSocket                                       | ✅ 已修：epoch 改为 per-tenant（`invalidate_epoch(tenant_id)` 只失效该租户）+ 全局 `invalidate_all_epochs()` 仅用于 control-plane 级故障；WS 订阅同时监听两个 epoch，任一变化才关闭                                     | `printer_event_publish_failure_invalidates_only_that_tenant_epoch`（新增跨租户隔离断言）；control-plane 故障 3 项测试改为全局失效路径；39 项 printer_events WS 测试全绿                                                         |
+| 5   | 用户角色变更缺 last-admin 保护（唯一管理员可被降级）；role update/removal 无锁读，PostgreSQL 并发下可双删最后的管理员        | ✅ 已修：两个 mutation 改用方言感知写事务（SQLite immediate）+ `FOR UPDATE` 锁目标用户行与管理员行后再判定；`update_user_role_with_audit` 增加 last-admin 拒绝；删除不再使用的 `count_tenant_admins`/`select_user_role` | `last_tenant_admin_cannot_be_demoted`、`demoting_an_admin_succeeds_while_another_admin_remains`、既有 `last_tenant_admin_cannot_be_removed`                                                                                     |
+
+## 状态图例
+
+- ⬜ 未开始
+- 🔄 进行中
+- ✅ 已修复（含回归测试与全量验证）
