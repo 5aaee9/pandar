@@ -7,6 +7,7 @@ import {
   resolveEffectiveTenants,
   resolveSelectedTenant,
 } from "../../dashboard-data";
+import { adminAccessUnavailable } from "../../membership-policy";
 import { AgentsPageClient } from "./agents-page-client";
 
 const configuredTenantId = process.env.APP_TENANT_ID;
@@ -49,15 +50,12 @@ export default async function AgentsPage({
   const discoveryId = Array.isArray(params.discovery)
     ? params.discovery[0]
     : (params.discovery ?? null);
-  const adminUnavailable =
-    auth.provider !== "none" &&
-    (membership.role !== "tenant_admin" || membership.error !== null);
 
   return (
     <AgentsPageClient
       auth={auth}
       selectedTenant={selectedTenant}
-      adminUnavailable={adminUnavailable}
+      adminUnavailable={adminAccessUnavailable(auth.provider, membership)}
       commandId={commandId}
       discoveryId={discoveryId}
     />

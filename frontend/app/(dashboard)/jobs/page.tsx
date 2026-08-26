@@ -7,6 +7,7 @@ import {
   resolveEffectiveTenants,
   resolveSelectedTenant,
 } from "../../dashboard-data";
+import { canManageJobs } from "../../membership-policy";
 import { JobsPageClient } from "./jobs-page-client";
 
 const configuredTenantId = process.env.APP_TENANT_ID;
@@ -35,14 +36,12 @@ export default async function JobsPage() {
     auth.provider !== "none"
       ? await getMembershipForRequest(selectedTenant.id)
       : { role: null, error: null };
-  const canManageJobs =
-    auth.provider === "none" || membership.role !== "viewer";
 
   return (
     <JobsPageClient
       auth={auth}
       selectedTenant={selectedTenant}
-      canManageJobs={canManageJobs}
+      canManageJobs={canManageJobs(auth.provider, membership)}
     />
   );
 }
