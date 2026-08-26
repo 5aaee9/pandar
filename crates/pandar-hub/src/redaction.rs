@@ -1,7 +1,6 @@
-use std::collections::BTreeMap;
+mod json;
 
-use serde::{Deserialize, Serialize};
-use serde_json::Number;
+use json::{RedactableJson, redact_all_json_strings, redact_json_string, redact_json_value};
 
 pub fn redact_secrets(message: &str) -> String {
     message
@@ -62,137 +61,6 @@ pub fn redact_result_json(result_json: &str) -> String {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(untagged)]
-enum RedactableJson {
-    Object(BTreeMap<String, RedactableJson>),
-    Array(Vec<RedactableJson>),
-    String(String),
-    Number(Number),
-    Bool(bool),
-    Null,
-}
-
-impl RedactableJson {
-    fn to_json_string(&self) -> String {
-        serde_json::to_string(self).expect("redacted JSON is serializable")
-    }
-}
-
-fn redact_json_value(value: &mut RedactableJson) -> bool {
-    match value {
-        RedactableJson::Object(object) => {
-            let mut changed = false;
-            for (key, value) in object {
-                if is_credential_key(key) {
-                    *value = RedactableJson::String("[redacted]".to_owned());
-                    changed = true;
-                } else {
-                    changed |= redact_json_value(value);
-                }
-            }
-            changed
-        }
-        RedactableJson::Array(items) => {
-            let mut changed = false;
-            for item in items {
-                changed |= redact_json_value(item);
-            }
-            changed
-        }
-        _ => false,
-    }
-}
-
-fn redact_json_string(value: &mut RedactableJson, secret: &str) -> bool {
-    match value {
-        RedactableJson::String(value) if value.contains(secret) => {
-            *value = value.replace(secret, "[redacted]");
-            true
-        }
-        RedactableJson::Number(number) => {
-            let matches_secret = number.to_string() == secret;
-            if matches_secret {
-                *value = RedactableJson::String("[redacted]".to_owned());
-            }
-            matches_secret
-        }
-        RedactableJson::Object(object) => {
-            let mut changed = false;
-            let entries = std::mem::take(object);
-            for (key, mut value) in entries {
-                let redacted_key = if key.contains(secret) {
-                    changed = true;
-                    key.replace(secret, "[redacted]")
-                } else {
-                    key
-                };
-                changed |= redact_json_string(&mut value, secret);
-                object.insert(redacted_key, value);
-            }
-            changed
-        }
-        RedactableJson::Array(items) => {
-            let mut changed = false;
-            for item in items {
-                changed |= redact_json_string(item, secret);
-            }
-            changed
-        }
-        _ => false,
-    }
-}
-
-fn redact_all_json_strings(value: &mut RedactableJson) -> bool {
-    match value {
-        RedactableJson::String(value) => {
-            *value = "[redacted]".to_owned();
-            true
-        }
-        value @ RedactableJson::Number(_) => {
-            *value = RedactableJson::String("[redacted]".to_owned());
-            true
-        }
-        RedactableJson::Object(object) => {
-            let mut changed = false;
-            let entries = std::mem::take(object);
-            for (index, (_, mut value)) in entries.into_iter().enumerate() {
-                changed = true;
-                changed |= redact_all_json_strings(&mut value);
-                object.insert(format!("[redacted_{index}]"), value);
-            }
-            changed
-        }
-        RedactableJson::Array(items) => {
-            let mut changed = false;
-            for item in items {
-                changed |= redact_all_json_strings(item);
-            }
-            changed
-        }
-        _ => false,
-    }
-}
-
-fn is_credential_key(key: &str) -> bool {
-    let normalized: String = key
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .flat_map(char::to_lowercase)
-        .collect();
-    [
-        "accesscode",
-        "password",
-        "token",
-        "auth",
-        "credential",
-        "ticket",
-        "bearer",
-    ]
-    .iter()
-    .any(|secret| normalized.contains(secret))
-}
-
 fn redact_line(line: &str) -> String {
     let mut redacted = line.to_owned();
     for key in [
@@ -248,33 +116,51 @@ fn redact_after_marker(line: &str, markers: &[&str]) -> String {
 
 fn redact_key_value(line: &str, key: &str) -> String {
     let lower = line.to_ascii_lowercase();
-    let Some(start) = lower.find(key) else {
-        return line.to_owned();
-    };
-    let value_start = match line[start + key.len()..].chars().next() {
-        Some('=') | Some(':') => start + key.len() + 1,
-        Some('"') => {
-            let rest = &line[start + key.len() + 1..];
-            let Some(offset) = rest.find(':') else {
-                return line.to_owned();
-            };
-            start + key.len() + 1 + offset + 1
+    let mut redacted = String::new();
+    let mut cursor = 0;
+    loop {
+        let Some(offset) = lower[cursor..].find(key) else {
+            redacted.push_str(&line[cursor..]);
+            return redacted;
+        };
+        let start = cursor + offset;
+        let key_end = start + key.len();
+        match key_value_bounds(line, key_end) {
+            None => {
+                redacted.push_str(&line[cursor..key_end]);
+                cursor = key_end;
+            }
+            Some((value_start, value_end)) => {
+                redacted.push_str(&line[cursor..value_start]);
+                redacted.push_str("[redacted]");
+                cursor = value_end;
+            }
         }
-        _ => return line.to_owned(),
+    }
+}
+
+fn key_value_bounds(line: &str, key_end: usize) -> Option<(usize, usize)> {
+    let bounds_start = match line[key_end..].chars().next()? {
+        '=' | ':' => key_end + 1,
+        '"' => {
+            let rest = &line[key_end + 1..];
+            let offset = rest.find(':')?;
+            key_end + 1 + offset + 1
+        }
+        _ => return None,
     };
 
-    let value_start = line[value_start..]
+    let value_start = line[bounds_start..]
         .char_indices()
         .find(|(_, ch)| !ch.is_whitespace() && *ch != '"')
-        .map(|(offset, _)| value_start + offset)
-        .unwrap_or(value_start);
+        .map(|(offset, _)| bounds_start + offset)
+        .unwrap_or(bounds_start);
     let value_end = line[value_start..]
         .char_indices()
         .find(|(_, ch)| matches!(ch, '"' | ',' | '&' | ' ' | '\t' | '\n'))
         .map(|(offset, _)| value_start + offset)
         .unwrap_or(line.len());
-
-    format!("{}[redacted]{}", &line[..value_start], &line[value_end..])
+    Some((value_start, value_end))
 }
 
 #[cfg(test)]
@@ -334,6 +220,27 @@ Caused by:
         assert!(redacted.contains("Not a directory"));
         assert!(!redacted.contains("/tmp/pandar"));
         assert!(!redacted.contains("not-a-directory"));
+    }
+
+    #[test]
+    fn redacts_every_occurrence_of_repeated_keys_in_one_line() {
+        let message = "rejected access_code=FIRST-CODE retried access_code=SECOND-CODE";
+
+        let redacted = redact_secrets(message);
+
+        assert_eq!(redacted.matches("[redacted]").count(), 2, "{redacted}");
+        assert!(!redacted.contains("FIRST-CODE"));
+        assert!(!redacted.contains("SECOND-CODE"));
+    }
+
+    #[test]
+    fn redacts_later_key_occurrence_when_earlier_one_is_not_a_pair() {
+        let message = "the access_code field was invalid access_code=REAL-SECRET";
+
+        let redacted = redact_secrets(message);
+
+        assert!(redacted.contains("access_code field"), "{redacted}");
+        assert!(!redacted.contains("REAL-SECRET"));
     }
 
     #[test]
