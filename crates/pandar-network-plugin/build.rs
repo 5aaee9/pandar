@@ -102,35 +102,18 @@ fn main() {
     }
     println!("cargo:rustc-link-arg-cdylib={}", shim_object.display());
     println!("cargo:rerun-if-changed=src/shim.cpp");
-    for header in [
-        "shim_abi_content.hpp",
-        "shim_abi_operations.hpp",
-        "shim_abi_user.hpp",
-        "shim_account_ffi.hpp",
-        "shim_ams_types.hpp",
-        "shim_connection.hpp",
-        "shim_exports.hpp",
-        "shim_file_transfer_types.hpp",
-        "shim_firmware.hpp",
-        "shim_model_task.hpp",
-        "shim_model_task_types.hpp",
-        "shim_no_auth.hpp",
-        "shim_state.hpp",
-        "shim_status.hpp",
-        "shim_status_delivery.hpp",
-        "shim_status_heartbeat.hpp",
-        "shim_status_payload.hpp",
-        "shim_profile.hpp",
-        "shim_print.hpp",
-        "shim_print_types.hpp",
-        "shim_printer_cache.hpp",
-        "shim_request_snapshot.hpp",
-        "shim_session_sync.hpp",
-        "shim_studio_session.hpp",
-        "shim_tasks.hpp",
-        "shim_types.hpp",
-        "studio_materials.hpp",
-    ] {
+    // Every shim header is part of the compiled C++ surface, so track them all
+    // instead of maintaining a hand-written list that drifts from src/.
+    let src = std::path::Path::new(&manifest_dir).join("src");
+    let mut headers: Vec<String> = std::fs::read_dir(&src)
+        .expect("plugin src directory exists")
+        .filter_map(|entry| {
+            let name = entry.ok()?.file_name().into_string().ok()?;
+            name.starts_with("shim_").then_some(name)
+        })
+        .collect();
+    headers.sort();
+    for header in headers {
         println!("cargo:rerun-if-changed=src/{header}");
     }
 }
