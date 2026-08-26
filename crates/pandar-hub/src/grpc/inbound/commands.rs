@@ -267,8 +267,7 @@ async fn handle_result_for_command(
     .await?;
     if let Some(command) = command {
         state
-            .printer_events()
-            .publish_local(
+            .publish_printer_event(
                 tenant_id,
                 PrinterEvent::CommandResult {
                     command: Box::new(PrinterEventCommand::from(command)),

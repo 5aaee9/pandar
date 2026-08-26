@@ -135,6 +135,9 @@ async fn grpc_print_command_result_persists_dispatch_result_json() {
 #[tokio::test]
 async fn grpc_printer_operation_result_publishes_command_event() {
     let state = fixture_state().await;
+    // Command results fan out through the control plane so every replica's
+    // WebSocket subscribers receive them.
+    let _control_plane = start_control_plane(state.clone()).await;
     let (tenant_id, agent_id) = tenant_agent(&state).await;
     let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
         state.database(),
