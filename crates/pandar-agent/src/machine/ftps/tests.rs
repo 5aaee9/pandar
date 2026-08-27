@@ -65,7 +65,6 @@ async fn ftps_only_print_upload_rejects_emmc_policy_without_network_io() {
         .upload_print(
             "job.gcode.3mf",
             b"abc",
-            TransferProtectionMode::ProtectedData,
             PrintUploadPolicy {
                 try_emmc_print: true,
             },

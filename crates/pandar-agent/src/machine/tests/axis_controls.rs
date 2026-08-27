@@ -20,7 +20,6 @@ fn axis_gateway_for_serial(
     ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint(serial), mqtt, FakeMachineFileTransfer::default())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     )
 }
 

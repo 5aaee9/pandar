@@ -28,7 +28,7 @@ pub(crate) use device_features::DeviceFeatureLease;
 pub(crate) use device_features::transition_pause as device_feature_transition_pause;
 use diagnostics::PrinterDiagnosticResult;
 use discovery::{DiscoveredPrinter, PrinterDiscoveryResult};
-use file_transfer::{MachineFileTransfer, TransferModeCache};
+use file_transfer::MachineFileTransfer;
 #[cfg(test)]
 pub(crate) use firmware::firmware_event_pause;
 pub use firmware::{
@@ -123,7 +123,6 @@ pub trait BambuMachineGateway: Send + Sync {
 pub struct ConfiguredBambuMachineGateway<T, F = BambuMachineFileTransfer> {
     printers: Vec<(BambuPrinterEndpoint, T, F)>,
     report_timeout: Duration,
-    transfer_cache: TransferModeCache,
 }
 
 impl<T> ConfiguredBambuMachineGateway<T> {
@@ -137,7 +136,6 @@ impl<T> ConfiguredBambuMachineGateway<T> {
                 })
                 .collect(),
             report_timeout,
-            transfer_cache: TransferModeCache::default(),
         }
     }
 }
@@ -166,13 +164,7 @@ where
         &self,
         serial_number: &str,
     ) -> anyhow::Result<PrinterDiagnosticResult> {
-        Ok(diagnostics::diagnose_printer(
-            &self.printers,
-            &self.transfer_cache,
-            self.report_timeout,
-            serial_number,
-        )
-        .await)
+        Ok(diagnostics::diagnose_printer(&self.printers, self.report_timeout, serial_number).await)
     }
 
     async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
@@ -225,15 +217,7 @@ where
             bail!("no configured Bambu printer matches serial {serial_number}");
         };
 
-        dispatch_print_project_file(
-            endpoint,
-            transfer,
-            mqtt,
-            &self.transfer_cache,
-            command,
-            &artifact,
-        )
-        .await
+        dispatch_print_project_file(endpoint, transfer, mqtt, command, &artifact).await
     }
 
     async fn operate_printer(
@@ -340,12 +324,10 @@ impl<T, F> ConfiguredBambuMachineGateway<T, F> {
     pub fn with_file_transfer(
         printers: Vec<(BambuPrinterEndpoint, T, F)>,
         report_timeout: Duration,
-        transfer_cache: TransferModeCache,
     ) -> Self {
         Self {
             printers,
             report_timeout,
-            transfer_cache,
         }
     }
 }

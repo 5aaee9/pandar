@@ -7,7 +7,6 @@ async fn configured_operate_printer_ams_load_publishes_change_filament_command()
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -43,7 +42,6 @@ async fn configured_operate_printer_bed_temperature_publishes_reference_gcode() 
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -76,7 +74,6 @@ async fn configured_operate_printer_chamber_temperature_publishes_reference_gcod
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -109,7 +106,6 @@ async fn configured_operate_printer_waiting_chamber_temperature_preserves_refere
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -146,7 +142,6 @@ async fn configured_operate_printer_ams_reread_rfid_publishes_get_rfid_command()
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -179,7 +174,6 @@ async fn configured_operate_printer_ams_reread_rfid_increments_sequence_id() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     for _ in 0..2 {
@@ -211,7 +205,6 @@ async fn configured_operate_printer_ams_unload_publishes_change_filament_unload_
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -255,7 +248,6 @@ async fn configured_operate_printer_unknown_serial_rejects_before_publish() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     let err = gateway

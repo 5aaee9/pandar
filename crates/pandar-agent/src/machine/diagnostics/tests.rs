@@ -7,9 +7,7 @@ use anyhow::anyhow;
 
 use super::*;
 use crate::machine::{
-    file_transfer::{
-        FileTransferRequest, FileUploadResult, PrintUploadPolicy, TransferProtectionMode,
-    },
+    file_transfer::{FileTransferRequest, FileUploadResult, PrintUploadPolicy},
     mqtt::FakeMqttTransport,
 };
 
@@ -35,7 +33,6 @@ fn aggregate_ignores_skipped_and_prefers_problem() {
 async fn absent_configured_printer_skips_network_and_omits_compatibility() {
     let result = diagnose_printer::<FakeMqttTransport, DiagnosticFakeTransfer>(
         &[],
-        &TransferModeCache::default(),
         Duration::from_millis(1),
         "MISSING",
     )
@@ -56,7 +53,6 @@ async fn configured_without_model_reports_unknown_compatibility() {
     let transfer = DiagnosticFakeTransfer::default();
     let result = diagnose_printer(
         &[(endpoint, mqtt, transfer)],
-        &TransferModeCache::default(),
         Duration::from_millis(1),
         "SERIAL1",
     )
@@ -107,7 +103,6 @@ async fn no_ftps_listener_skips_storage_probe() {
 
     let result = diagnose_printer(
         &[(endpoint, mqtt, transfer.clone())],
-        &TransferModeCache::default(),
         Duration::from_millis(1),
         "SERIAL1",
     )
@@ -136,7 +131,6 @@ async fn unsupported_external_storage_skips_probe() {
 
     let result = diagnose_printer(
         &[(endpoint, mqtt, transfer.clone())],
-        &TransferModeCache::default(),
         Duration::from_millis(1),
         "SERIAL1",
     )
@@ -158,7 +152,7 @@ async fn storage_probe_surfaces_upload_failure_and_redacts_access_code() {
     endpoint.access_code = access_code.to_owned();
     let transfer = DiagnosticFakeTransfer::upload_error(anyhow!("disk full {access_code}"));
 
-    let check = storage_writable_check(&endpoint, &transfer, &TransferModeCache::default()).await;
+    let check = storage_writable_check(&endpoint, &transfer).await;
 
     assert_eq!(check.status, DiagnosticStatus::Problem);
     let details = check.details.unwrap();
@@ -171,20 +165,14 @@ async fn storage_probe_delete_failure_is_warning() {
     let endpoint = endpoint(Some("P1S"));
     let transfer = DiagnosticFakeTransfer::delete_error(anyhow!("delete failed"));
 
-    let check = storage_writable_check(&endpoint, &transfer, &TransferModeCache::default()).await;
+    let check = storage_writable_check(&endpoint, &transfer).await;
 
     assert_eq!(check.status, DiagnosticStatus::Warning);
     assert_eq!(
         transfer.recorded(),
         vec![
-            (
-                TransferProtectionMode::ProtectedData,
-                FileTransferRequest::upload(DIAGNOSTIC_PROBE_PATH, 18)
-            ),
-            (
-                TransferProtectionMode::ProtectedData,
-                FileTransferRequest::delete(DIAGNOSTIC_PROBE_PATH)
-            ),
+            FileTransferRequest::upload(DIAGNOSTIC_PROBE_PATH, 18),
+            FileTransferRequest::delete(DIAGNOSTIC_PROBE_PATH),
         ]
     );
 }
@@ -232,7 +220,7 @@ struct DiagnosticFakeTransfer {
 
 #[derive(Debug, Default)]
 struct DiagnosticFakeTransferState {
-    recorded: Vec<(TransferProtectionMode, FileTransferRequest)>,
+    recorded: Vec<FileTransferRequest>,
     upload_error: Option<anyhow::Error>,
     delete_error: Option<anyhow::Error>,
 }
@@ -256,39 +244,26 @@ impl DiagnosticFakeTransfer {
         }
     }
 
-    fn recorded(&self) -> Vec<(TransferProtectionMode, FileTransferRequest)> {
+    fn recorded(&self) -> Vec<FileTransferRequest> {
         self.state.lock().unwrap().recorded.clone()
     }
 }
 
 #[async_trait::async_trait]
 impl MachineFileTransfer for DiagnosticFakeTransfer {
-    async fn list(
-        &self,
-        _path: &str,
-        _mode: TransferProtectionMode,
-    ) -> anyhow::Result<Vec<String>> {
+    async fn list(&self, _path: &str) -> anyhow::Result<Vec<String>> {
         Ok(Vec::new())
     }
 
-    async fn download(
-        &self,
-        _path: &str,
-        _mode: TransferProtectionMode,
-    ) -> anyhow::Result<Vec<u8>> {
+    async fn download(&self, _path: &str) -> anyhow::Result<Vec<u8>> {
         Ok(Vec::new())
     }
 
-    async fn upload(
-        &self,
-        path: &str,
-        bytes: &[u8],
-        mode: TransferProtectionMode,
-    ) -> anyhow::Result<FileUploadResult> {
+    async fn upload(&self, path: &str, bytes: &[u8]) -> anyhow::Result<FileUploadResult> {
         let mut state = self.state.lock().unwrap();
         state
             .recorded
-            .push((mode, FileTransferRequest::upload(path, bytes.len() as u64)));
+            .push(FileTransferRequest::upload(path, bytes.len() as u64));
         if let Some(err) = state.upload_error.take() {
             Err(err)
         } else {
@@ -300,13 +275,13 @@ impl MachineFileTransfer for DiagnosticFakeTransfer {
         &self,
         path: &str,
         bytes: &[u8],
-        mode: TransferProtectionMode,
         policy: PrintUploadPolicy,
     ) -> anyhow::Result<FileUploadResult> {
         let mut state = self.state.lock().unwrap();
-        state.recorded.push((
-            mode,
-            FileTransferRequest::print_upload(path, bytes.len() as u64, policy),
+        state.recorded.push(FileTransferRequest::print_upload(
+            path,
+            bytes.len() as u64,
+            policy,
         ));
         if let Some(err) = state.upload_error.take() {
             Err(err)
@@ -315,11 +290,9 @@ impl MachineFileTransfer for DiagnosticFakeTransfer {
         }
     }
 
-    async fn delete(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<()> {
+    async fn delete(&self, path: &str) -> anyhow::Result<()> {
         let mut state = self.state.lock().unwrap();
-        state
-            .recorded
-            .push((mode, FileTransferRequest::delete(path)));
+        state.recorded.push(FileTransferRequest::delete(path));
         if let Some(err) = state.delete_error.take() {
             Err(err)
         } else {

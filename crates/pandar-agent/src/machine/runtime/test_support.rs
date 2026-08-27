@@ -10,7 +10,7 @@ use crate::machine::{
     PrinterOperationDispatchResult, PrinterRefreshResult,
     diagnostics::{PrinterDiagnosticResult, PrinterEndpointSecrets},
     discovery::{DiscoveredPrinter, PrinterDiscoveryResult},
-    file_transfer::{MachineFileTransfer, TransferModeCache},
+    file_transfer::MachineFileTransfer,
     mqtt::{BambuMqttTransport, refresh_printer},
 };
 use pandar_protocol::agent::v1::PrintProjectFile;
@@ -64,11 +64,7 @@ where
             .collect();
         Self {
             inner: Arc::new(tokio::sync::Mutex::new(
-                ConfiguredBambuMachineGateway::with_file_transfer(
-                    printers,
-                    report_timeout,
-                    TransferModeCache::default(),
-                ),
+                ConfiguredBambuMachineGateway::with_file_transfer(printers, report_timeout),
             )),
             discovered_printers: tokio::sync::Mutex::new(discovered_printers),
             report_tasks: tokio::sync::Mutex::new(HashMap::new()),

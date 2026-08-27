@@ -4,7 +4,7 @@ use anyhow::{Context, ensure};
 use pandar_agent::machine::{
     BambuPrinterEndpoint,
     compatibility::normalize_model,
-    file_transfer::{MachineFileTransfer, TransferProtectionMode},
+    file_transfer::MachineFileTransfer,
     ftps::FtpsMachineFileTransfer,
     mqtt::{RumqttcBambuMqttTransport, read_firmware_version},
 };
@@ -95,7 +95,7 @@ async fn validate_target(target: ValidationTarget) -> anyhow::Result<ValidationE
     );
 
     let entries = FtpsMachineFileTransfer::new(endpoint)
-        .list("/", TransferProtectionMode::ProtectedData)
+        .list("/")
         .await
         .with_context(|| format!("list {actual_model} FTPS root with PROT P"))?;
 

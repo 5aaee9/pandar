@@ -9,10 +9,7 @@ use tokio::sync::{Mutex, Notify, mpsc};
 use super::*;
 use crate::AgentConfig;
 use crate::machine::{
-    file_transfer::{
-        FakeMachineFileTransfer, FileTransferRequest, PrintUploadPolicy,
-        TransferProtectionMode::ProtectedData,
-    },
+    file_transfer::{FakeMachineFileTransfer, FileTransferRequest, PrintUploadPolicy},
     mqtt::{
         BAMBU_MQTT_QOS, BAMBU_MQTT_RETAIN, BambuMqttTransport, FakeMqttTransport, PrintErrorAction,
         PublishedMqttCommand,

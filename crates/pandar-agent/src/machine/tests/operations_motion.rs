@@ -7,7 +7,6 @@ async fn configured_operate_printer_print_speed_mode_4_publishes_to_request_topi
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -34,7 +33,6 @@ async fn configured_operate_printer_legacy_fan_speed_uses_studio_pwm_gcode() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -68,7 +66,6 @@ async fn configured_operate_printer_airduct_fan_speed_uses_studio_set_fan() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -109,7 +106,6 @@ async fn configured_operate_printer_gcode_line_preserves_exact_param() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
     let param = "M106 P1 S127 \r\n; keep  \n\n";
 
@@ -142,7 +138,6 @@ async fn configured_operate_printer_home_preserves_axis_specific_request() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -175,7 +170,6 @@ async fn configured_operate_printer_move_axes_publishes_relative_gcode_line() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -215,7 +209,6 @@ async fn configured_operate_printer_hotend_publishes_wait_gcode_line() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -249,7 +242,6 @@ async fn configured_operate_printer_targeted_hotend_publishes_reference_command(
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway

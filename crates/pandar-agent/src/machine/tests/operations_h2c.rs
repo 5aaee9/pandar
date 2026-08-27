@@ -28,7 +28,6 @@ fn gateway_with_reports(
             FakeMachineFileTransfer::default(),
         )],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     )
 }
 
@@ -115,7 +114,6 @@ async fn rack_operations_publish_studio_shaped_commands() {
                 FakeMachineFileTransfer::default(),
             )],
             Duration::from_secs(1),
-            TransferModeCache::default(),
         );
 
         gateway.operate_printer("SERIAL1", operation).await.unwrap();

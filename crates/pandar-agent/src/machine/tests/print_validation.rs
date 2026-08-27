@@ -9,7 +9,6 @@ async fn configured_print_project_file_rejects_unknown_flow_cali_before_upload()
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint, mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
     let mut command = print_project_file();
     command.options.as_mut().unwrap().flow_cali = true;
@@ -34,7 +33,6 @@ async fn configured_print_project_file_accepts_supported_flow_calibration_models
         let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
             vec![(printer, mqtt.clone(), transfer.clone())],
             Duration::from_secs(1),
-            TransferModeCache::default(),
         );
         let mut command = print_project_file();
         command.options.as_mut().unwrap().flow_cali = true;
@@ -59,7 +57,6 @@ async fn configured_print_project_file_accepts_n6_auto_flow_calibration() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(printer, mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
     let mut command = print_project_file();
     command.options.as_mut().unwrap().flow_cali = false;
@@ -82,7 +79,6 @@ async fn configured_print_project_file_rejects_p1_flow_cali_before_upload() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(printer, mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
     let mut command = print_project_file();
     command.options.as_mut().unwrap().flow_cali = true;
@@ -105,7 +101,6 @@ async fn configured_print_project_file_rejects_a1_auto_flow_before_upload() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
     let mut command = print_project_file();
     command.options.as_mut().unwrap().auto_flow_cali = Some(2);
@@ -129,7 +124,6 @@ async fn configured_print_project_file_accepts_auto_bed_for_n7() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(printer, mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
     let mut command = print_project_file();
     command.options.as_mut().unwrap().auto_bed_leveling = Some(2);
@@ -153,7 +147,6 @@ async fn configured_print_project_file_rejects_auto_bed_for_unsupported_models_b
         let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
             vec![(printer, mqtt.clone(), transfer.clone())],
             Duration::from_secs(1),
-            TransferModeCache::default(),
         );
         let mut command = print_project_file();
         command.options.as_mut().unwrap().auto_bed_leveling = Some(2);
@@ -191,7 +184,6 @@ async fn configured_print_project_file_rejects_nozzle_offset_for_unsupported_mod
             let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
                 vec![(printer, mqtt.clone(), transfer.clone())],
                 Duration::from_secs(1),
-                TransferModeCache::default(),
             );
             let mut command = print_project_file();
             command.options.as_mut().unwrap().auto_offset_cali = Some(mode);
@@ -222,7 +214,6 @@ async fn configured_print_project_file_accepts_bed_and_nozzle_modes_for_n6_and_h
         let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
             vec![(printer, mqtt.clone(), transfer.clone())],
             Duration::from_secs(1),
-            TransferModeCache::default(),
         );
         let mut command = print_project_file();
         command.options.as_mut().unwrap().auto_bed_leveling = Some(2);
@@ -247,7 +238,6 @@ async fn configured_print_project_file_allows_disabled_calibrations_for_unknown_
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(printer, mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -266,7 +256,6 @@ async fn configured_print_project_file_rejects_missing_options_before_upload() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
     let mut command = print_project_file();
     command.options = None;

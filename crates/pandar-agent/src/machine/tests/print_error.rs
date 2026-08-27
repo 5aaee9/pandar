@@ -11,7 +11,6 @@ async fn native_print_error_dispatch_preserves_transport_and_result_correlation(
             transfer,
         )],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     let result = gateway

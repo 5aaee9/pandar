@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use super::{ConfiguredBambuMachineGateway, TransferModeCache, endpoint, print_project_file};
+use super::{ConfiguredBambuMachineGateway, endpoint, print_project_file};
 use crate::machine::{
     BambuMachineGateway,
     file_transfer::{FakeMachineFileTransfer, FileTransferOperation},
@@ -16,7 +16,6 @@ async fn print_transfer_policy_is_forwarded_from_each_command() {
         let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
             vec![(endpoint("SERIAL1"), mqtt.clone(), transfer.clone())],
             Duration::from_secs(1),
-            TransferModeCache::default(),
         );
         let mut command = print_project_file();
         command.options.as_mut().unwrap().try_emmc_print = try_emmc_print;
@@ -28,7 +27,7 @@ async fn print_transfer_policy_is_forwarded_from_each_command() {
 
         let recorded = transfer.recorded_requests();
         assert_eq!(
-            recorded[0].1.operation,
+            recorded[0].operation,
             FileTransferOperation::PrintUpload {
                 size_bytes: 3,
                 try_emmc_print,
@@ -152,7 +151,6 @@ async fn studio_print_accepts_each_pinned_concrete_bed_type() {
         let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
             vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
             Duration::from_secs(1),
-            TransferModeCache::default(),
         );
         let mut command = print_project_file();
         command.options.as_mut().unwrap().bed_type = bed_type.to_owned();
@@ -176,7 +174,6 @@ async fn web_print_uses_only_web_fields_and_omits_studio_manual_mode() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
     let mut command = print_project_file();
     command.submission_source = PrintSubmissionSource::Web as i32;
@@ -199,7 +196,7 @@ async fn web_print_uses_only_web_fields_and_omits_studio_manual_mode() {
     assert_eq!(print["extrude_cali_flag"], 0);
     assert!(print.get("extrude_cali_manual_mode").is_none());
     assert_eq!(
-        transfer.recorded_requests()[0].1.operation,
+        transfer.recorded_requests()[0].operation,
         FileTransferOperation::PrintUpload {
             size_bytes: 3,
             try_emmc_print: true,
@@ -213,7 +210,6 @@ async fn assert_rejected_before_side_effect(command: PrintProjectFile, expected_
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     let error = gateway

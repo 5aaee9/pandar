@@ -7,7 +7,6 @@ async fn configured_operate_printer_publishes_pause_to_request_topic() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -34,7 +33,6 @@ async fn configured_operate_printer_select_extruder_publishes_reference_command(
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -61,7 +59,6 @@ async fn configured_operate_printer_toggle_light_sends_bambu_studio_light_nodes(
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -105,7 +102,6 @@ async fn configured_operate_printer_toggle_light_matches_bambu_studio_light_node
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -146,7 +142,6 @@ async fn configured_operate_printer_set_chamber_light_uses_requested_state() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -190,7 +185,6 @@ async fn configured_operate_printer_light_returns_primary_success_when_light2_fa
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     let result = gateway
@@ -223,7 +217,6 @@ async fn configured_operate_printer_returns_matching_mqtt_sequence_result() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     let result = gateway

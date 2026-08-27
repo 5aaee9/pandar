@@ -3,13 +3,13 @@ use pandar_core::PrintCalibrationMode;
 
 use crate::machine::{
     BambuMqttTransport, BambuPrinterEndpoint, MachineFileTransfer, MachineJsonPayload,
-    PrintProjectDispatchResult, TransferModeCache,
+    PrintProjectDispatchResult,
     brtc::md5_upper,
     compatibility::{
         auto_bed_leveling_supported, auto_flow_calibration_supported, flow_calibration_supported,
         nozzle_offset_calibration_supported,
     },
-    file_transfer::{PrintUploadPolicy, run_with_transfer_mode},
+    file_transfer::PrintUploadPolicy,
     mqtt::{
         BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, ProjectFileAmsMapping2,
         ProjectFileAmsMappingInfo, ProjectFileCommand, PublishedMqttCommand,
@@ -172,7 +172,6 @@ pub async fn dispatch_print_project_file<F, T>(
     endpoint: &BambuPrinterEndpoint,
     transfer: &F,
     mqtt: &T,
-    cache: &TransferModeCache,
     command: &PrintProjectFile,
     artifact: &[u8],
 ) -> anyhow::Result<PrintProjectDispatchResult>
@@ -221,16 +220,15 @@ where
     let print_upload_policy = PrintUploadPolicy {
         try_emmc_print: options.try_emmc_print,
     };
-    let uploaded = run_with_transfer_mode(endpoint, cache, |mode| {
-        let remote_path = remote_path.clone();
-        async move {
-            transfer
-                .upload_print(&remote_path, artifact, mode, print_upload_policy)
-                .await
-        }
-    })
-    .await
-    .with_context(|| format!("upload print artifact to {}", endpoint.serial))?;
+    let uploaded = transfer
+        .upload_print(&remote_path, artifact, print_upload_policy)
+        .await
+        .with_context(|| {
+            format!(
+                "upload print artifact to {} at {}",
+                endpoint.serial, endpoint.host
+            )
+        })?;
 
     let topics = BambuMqttTopics::for_serial(&endpoint.serial);
     let md5 = md5_upper(artifact);

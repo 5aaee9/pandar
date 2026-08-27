@@ -7,9 +7,7 @@ use tokio::net::TcpStream;
 use crate::machine::{
     BambuPrinterEndpoint,
     compatibility::{Capability, DiagnosticCompatibility, compatibility_for_model},
-    file_transfer::{
-        BAMBU_FILE_TRANSFER_PORT, MachineFileTransfer, TransferModeCache, run_with_transfer_mode,
-    },
+    file_transfer::{BAMBU_FILE_TRANSFER_PORT, MachineFileTransfer},
     mqtt::{
         BAMBU_MQTT_PORT, BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport,
         PublishedMqttCommand,
@@ -78,7 +76,6 @@ impl PrinterDiagnosticResult {
 
 pub async fn diagnose_printer<T, F>(
     printers: &[(BambuPrinterEndpoint, T, F)],
-    transfer_cache: &TransferModeCache,
     report_timeout: Duration,
     serial_number: &str,
 ) -> PrinterDiagnosticResult
@@ -158,7 +155,7 @@ where
             None,
         ));
     } else {
-        checks.push(storage_writable_check(endpoint, transfer, transfer_cache).await);
+        checks.push(storage_writable_check(endpoint, transfer).await);
     }
 
     checks.push(check(
@@ -278,16 +275,15 @@ where
 pub(super) async fn storage_writable_check<F>(
     endpoint: &BambuPrinterEndpoint,
     transfer: &F,
-    transfer_cache: &TransferModeCache,
 ) -> DiagnosticCheck
 where
     F: MachineFileTransfer + Send + Sync,
 {
     let bytes = b"pandar diagnostic\n";
-    let upload = run_with_transfer_mode(endpoint, transfer_cache, |mode| async move {
-        transfer.upload(DIAGNOSTIC_PROBE_PATH, bytes, mode).await
-    })
-    .await;
+    let upload = transfer
+        .upload(DIAGNOSTIC_PROBE_PATH, bytes)
+        .await
+        .context("protected data transfer failed");
 
     if let Err(err) = upload {
         let details = redact_access_code(&format!("{err:#}"), &endpoint.access_code);
@@ -304,10 +300,10 @@ where
         );
     }
 
-    match run_with_transfer_mode(endpoint, transfer_cache, |mode| async move {
-        transfer.delete(DIAGNOSTIC_PROBE_PATH, mode).await
-    })
-    .await
+    match transfer
+        .delete(DIAGNOSTIC_PROBE_PATH)
+        .await
+        .context("protected data transfer failed")
     {
         Ok(()) => check(
             "storage_writable",

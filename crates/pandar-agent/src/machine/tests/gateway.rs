@@ -125,7 +125,6 @@ async fn configured_print_project_file_uploads_and_publishes_project_file() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint.clone(), mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     gateway
@@ -135,15 +134,12 @@ async fn configured_print_project_file_uploads_and_publishes_project_file() {
 
     assert_eq!(
         transfer.recorded_requests(),
-        vec![(
-            ProtectedData,
-            FileTransferRequest::print_upload(
-                "plate.gcode.3mf",
-                3,
-                PrintUploadPolicy {
-                    try_emmc_print: false,
-                },
-            )
+        vec![FileTransferRequest::print_upload(
+            "plate.gcode.3mf",
+            3,
+            PrintUploadPolicy {
+                try_emmc_print: false,
+            },
         )]
     );
     let published = mqtt.published_commands().await;
@@ -170,11 +166,10 @@ fn print_project_remote_name_matches_studio_suffix_policy() {
 #[tokio::test]
 async fn configured_print_project_file_does_not_publish_when_upload_fails() {
     let mqtt = FakeMqttTransport::default();
-    let transfer = FakeMachineFileTransfer::with_protected_failure();
+    let transfer = FakeMachineFileTransfer::with_failure();
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     let err = gateway
@@ -185,7 +180,7 @@ async fn configured_print_project_file_does_not_publish_when_upload_fails() {
 
     assert!(message.contains("upload print artifact to SERIAL1"));
     assert!(message.contains("192.0.2.10"));
-    assert!(message.contains("fake protected data failure"));
+    assert!(message.contains("fake protected data transfer failure"));
     let redacted = gateway.redact_error(&message);
     assert!(!redacted.contains("192.0.2.10"));
     assert!(redacted.contains("[REDACTED_PRINTER_HOST]"));
@@ -199,7 +194,6 @@ async fn configured_print_project_file_unknown_serial_rejects_before_upload() {
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
-        TransferModeCache::default(),
     );
 
     let err = gateway

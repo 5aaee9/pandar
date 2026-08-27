@@ -18,7 +18,7 @@ use crate::machine::{
     compatibility::ftps_tls_1_2_cap,
     file_transfer::{
         BAMBU_FILE_TRANSFER_CHUNK_SIZE, BAMBU_FILE_TRANSFER_PORT, BAMBU_FILE_TRANSFER_USERNAME,
-        FileUploadResult, MachineFileTransfer, PrintUploadPolicy, TransferProtectionMode,
+        FileUploadResult, MachineFileTransfer, PrintUploadPolicy,
     },
     mqtt::BambuLanCertificateVerifier,
 };
@@ -42,7 +42,6 @@ impl FtpsMachineFileTransfer {
 
     async fn with_session<T, Fut>(
         &self,
-        mode: TransferProtectionMode,
         operation: impl FnOnce(AsyncRustlsFtpStream) -> Fut,
     ) -> anyhow::Result<T>
     where
@@ -70,9 +69,9 @@ impl FtpsMachineFileTransfer {
                     .await
                     .with_context(|| format!("login to Bambu FTPS at {host} as bblp"))?;
 
-                apply_transfer_mode(&mut stream, mode)
+                protect_data_channel(&mut stream)
                     .await
-                    .with_context(|| format!("set Bambu FTPS transfer mode {mode:?} for {host}"))?;
+                    .with_context(|| format!("protect Bambu FTPS data channel for {host}"))?;
 
                 operation(stream).await
             },
@@ -127,16 +126,12 @@ fn bambu_lan_ftps_connector(profile: FtpsProfile, expected_serial: &str) -> Asyn
     tokio_rustls::TlsConnector::from(bambu_lan_ftps_tls_config(profile, expected_serial)).into()
 }
 
-async fn apply_transfer_mode(
-    stream: &mut AsyncRustlsFtpStream,
-    mode: TransferProtectionMode,
-) -> anyhow::Result<()> {
+async fn protect_data_channel(stream: &mut AsyncRustlsFtpStream) -> anyhow::Result<()> {
     stream
         .custom_command("PBSZ 0", &[Status::CommandOk])
         .await
         .context("send PBSZ 0")?;
 
-    let TransferProtectionMode::ProtectedData = mode;
     stream
         .custom_command("PROT P", &[Status::CommandOk])
         .await
@@ -235,9 +230,9 @@ async fn suppaftp_api_compile_proof(
 
 #[async_trait]
 impl MachineFileTransfer for FtpsMachineFileTransfer {
-    async fn list(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<Vec<String>> {
+    async fn list(&self, path: &str) -> anyhow::Result<Vec<String>> {
         let path = path.to_string();
-        self.with_session(mode, |mut stream| async move {
+        self.with_session(|mut stream| async move {
             stream
                 .nlst(Some(&path))
                 .await
@@ -246,9 +241,9 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
         .await
     }
 
-    async fn download(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<Vec<u8>> {
+    async fn download(&self, path: &str) -> anyhow::Result<Vec<u8>> {
         let path = path.to_string();
-        self.with_session(mode, |mut stream| async move {
+        self.with_session(|mut stream| async move {
             stream
                 .retr(&path, |mut data| {
                     Box::pin(async move {
@@ -265,17 +260,12 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
         .await
     }
 
-    async fn upload(
-        &self,
-        path: &str,
-        bytes: &[u8],
-        mode: TransferProtectionMode,
-    ) -> anyhow::Result<FileUploadResult> {
+    async fn upload(&self, path: &str, bytes: &[u8]) -> anyhow::Result<FileUploadResult> {
         let path = path.to_string();
         let bytes = bytes.to_vec();
         let expected = bytes.len();
 
-        self.with_session(mode, |mut stream| async move {
+        self.with_session(|mut stream| async move {
             upload_in_bambu_chunks(&mut stream, &path, &bytes).await?;
             let actual = stream
                 .size(&path)
@@ -291,18 +281,17 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
         &self,
         path: &str,
         bytes: &[u8],
-        mode: TransferProtectionMode,
         policy: PrintUploadPolicy,
     ) -> anyhow::Result<FileUploadResult> {
         if policy.try_emmc_print {
             bail!("FTPS-only transfer cannot honor try_emmc_print");
         }
-        self.upload(path, bytes, mode).await
+        self.upload(path, bytes).await
     }
 
-    async fn delete(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<()> {
+    async fn delete(&self, path: &str) -> anyhow::Result<()> {
         let path = path.to_string();
-        self.with_session(mode, |mut stream| async move {
+        self.with_session(|mut stream| async move {
             stream
                 .rm(&path)
                 .await

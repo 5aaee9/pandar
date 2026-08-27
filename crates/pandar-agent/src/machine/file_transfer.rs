@@ -1,46 +1,8 @@
-use std::{
-    collections::HashMap,
-    future::Future,
-    sync::{Arc, Mutex},
-};
-
-use anyhow::{Context, anyhow};
 use async_trait::async_trait;
-
-use crate::machine::BambuPrinterEndpoint;
 
 pub const BAMBU_FILE_TRANSFER_PORT: u16 = 990;
 pub const BAMBU_FILE_TRANSFER_USERNAME: &str = "bblp";
 pub const BAMBU_FILE_TRANSFER_CHUNK_SIZE: usize = 64 * 1024;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TransferProtectionMode {
-    ProtectedData,
-}
-
-impl TransferProtectionMode {
-    fn failure_context(self) -> &'static str {
-        "protected data transfer failed"
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct TransferModeCache {
-    modes: Arc<Mutex<HashMap<String, TransferProtectionMode>>>,
-}
-
-impl TransferModeCache {
-    pub fn get(&self, endpoint_key: &str) -> Option<TransferProtectionMode> {
-        self.modes.lock().unwrap().get(endpoint_key).copied()
-    }
-
-    pub fn store_success(&self, endpoint_key: &str, mode: TransferProtectionMode) {
-        self.modes
-            .lock()
-            .unwrap()
-            .insert(endpoint_key.to_string(), mode);
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileTransferOperation {
@@ -132,112 +94,52 @@ impl FileUploadResult {
 
 #[async_trait]
 pub trait MachineFileTransfer: Send + Sync {
-    async fn list(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<Vec<String>>;
-    async fn download(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<Vec<u8>>;
-    async fn upload(
-        &self,
-        path: &str,
-        bytes: &[u8],
-        mode: TransferProtectionMode,
-    ) -> anyhow::Result<FileUploadResult>;
+    async fn list(&self, path: &str) -> anyhow::Result<Vec<String>>;
+    async fn download(&self, path: &str) -> anyhow::Result<Vec<u8>>;
+    async fn upload(&self, path: &str, bytes: &[u8]) -> anyhow::Result<FileUploadResult>;
     async fn upload_print(
         &self,
         path: &str,
         bytes: &[u8],
-        mode: TransferProtectionMode,
         policy: PrintUploadPolicy,
     ) -> anyhow::Result<FileUploadResult>;
-    async fn delete(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<()>;
-}
-
-pub fn transfer_attempt_order(
-    _endpoint: &BambuPrinterEndpoint,
-    _cache: &TransferModeCache,
-) -> Vec<TransferProtectionMode> {
-    vec![TransferProtectionMode::ProtectedData]
-}
-
-pub async fn run_with_transfer_mode<F, Fut, T>(
-    endpoint: &BambuPrinterEndpoint,
-    cache: &TransferModeCache,
-    mut operation: F,
-) -> anyhow::Result<T>
-where
-    F: FnMut(TransferProtectionMode) -> Fut,
-    Fut: Future<Output = anyhow::Result<T>>,
-{
-    let modes = transfer_attempt_order(endpoint, cache);
-    let mut failures = Vec::new();
-
-    for mode in modes {
-        match operation(mode)
-            .await
-            .with_context(|| mode.failure_context())
-        {
-            Ok(result) => {
-                cache.store_success(&endpoint.host, mode);
-                return Ok(result);
-            }
-            Err(err) => failures.push(err),
-        }
-    }
-
-    let message = failures
-        .iter()
-        .map(|err| format!("{err:#}"))
-        .collect::<Vec<_>>()
-        .join("; ");
-    Err(anyhow!(
-        "all transfer modes failed for {}: {message}",
-        endpoint.host
-    ))
+    async fn delete(&self, path: &str) -> anyhow::Result<()>;
 }
 
 #[cfg(test)]
 #[derive(Debug, Clone, Default)]
 pub struct FakeMachineFileTransfer {
-    state: Arc<Mutex<FakeMachineFileTransferState>>,
+    state: std::sync::Arc<std::sync::Mutex<FakeMachineFileTransferState>>,
 }
 
 #[cfg(test)]
 #[derive(Debug, Default)]
 struct FakeMachineFileTransferState {
-    recorded: Vec<(TransferProtectionMode, FileTransferRequest)>,
-    fail_protected: bool,
+    recorded: Vec<FileTransferRequest>,
+    fail: bool,
 }
 
 #[cfg(test)]
 impl FakeMachineFileTransfer {
-    pub fn with_protected_failure() -> Self {
+    pub fn with_failure() -> Self {
         let state = FakeMachineFileTransferState {
-            fail_protected: true,
+            fail: true,
             ..Default::default()
         };
         Self {
-            state: Arc::new(Mutex::new(state)),
+            state: std::sync::Arc::new(std::sync::Mutex::new(state)),
         }
     }
 
-    pub(crate) fn recorded_requests(&self) -> Vec<(TransferProtectionMode, FileTransferRequest)> {
+    pub(crate) fn recorded_requests(&self) -> Vec<FileTransferRequest> {
         self.state.lock().unwrap().recorded.clone()
     }
 
-    fn recorded_modes(&self) -> Vec<TransferProtectionMode> {
-        self.recorded_requests()
-            .iter()
-            .map(|(mode, _)| *mode)
-            .collect()
-    }
-
-    fn record(
-        &self,
-        mode: TransferProtectionMode,
-        request: FileTransferRequest,
-    ) -> anyhow::Result<()> {
+    fn record(&self, request: FileTransferRequest) -> anyhow::Result<()> {
         let mut state = self.state.lock().unwrap();
-        state.recorded.push((mode, request));
-        if state.fail_protected {
-            Err(anyhow!("fake protected data failure"))
+        state.recorded.push(request);
+        if state.fail {
+            Err(anyhow::anyhow!("fake protected data transfer failure"))
         } else {
             Ok(())
         }
@@ -247,23 +149,18 @@ impl FakeMachineFileTransfer {
 #[cfg(test)]
 #[async_trait]
 impl MachineFileTransfer for FakeMachineFileTransfer {
-    async fn list(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<Vec<String>> {
-        self.record(mode, FileTransferRequest::list(path))?;
+    async fn list(&self, path: &str) -> anyhow::Result<Vec<String>> {
+        self.record(FileTransferRequest::list(path))?;
         Ok(vec!["ok".to_string()])
     }
 
-    async fn download(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<Vec<u8>> {
-        self.record(mode, FileTransferRequest::download(path))?;
+    async fn download(&self, path: &str) -> anyhow::Result<Vec<u8>> {
+        self.record(FileTransferRequest::download(path))?;
         Ok(Vec::new())
     }
 
-    async fn upload(
-        &self,
-        path: &str,
-        bytes: &[u8],
-        mode: TransferProtectionMode,
-    ) -> anyhow::Result<FileUploadResult> {
-        self.record(mode, FileTransferRequest::upload(path, bytes.len() as u64))?;
+    async fn upload(&self, path: &str, bytes: &[u8]) -> anyhow::Result<FileUploadResult> {
+        self.record(FileTransferRequest::upload(path, bytes.len() as u64))?;
         Ok(FileUploadResult::ftp(path))
     }
 
@@ -271,18 +168,18 @@ impl MachineFileTransfer for FakeMachineFileTransfer {
         &self,
         path: &str,
         bytes: &[u8],
-        mode: TransferProtectionMode,
         policy: PrintUploadPolicy,
     ) -> anyhow::Result<FileUploadResult> {
-        self.record(
-            mode,
-            FileTransferRequest::print_upload(path, bytes.len() as u64, policy),
-        )?;
+        self.record(FileTransferRequest::print_upload(
+            path,
+            bytes.len() as u64,
+            policy,
+        ))?;
         Ok(FileUploadResult::ftp(path))
     }
 
-    async fn delete(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<()> {
-        self.record(mode, FileTransferRequest::delete(path))
+    async fn delete(&self, path: &str) -> anyhow::Result<()> {
+        self.record(FileTransferRequest::delete(path))
     }
 }
 
