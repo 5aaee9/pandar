@@ -26,8 +26,6 @@ fn assert_source_tree(path: &Path) {
 fn firmware_requests_cannot_bypass_snapshot_generation_claim() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let catalog = source(&root, "shim_abi_content.hpp");
-    let version = source(&root, "shim_status.hpp");
-    let send = source(&root, "shim_firmware.hpp");
     assert_call_block(
         &catalog,
         "PANDAR_ABI int bambu_network_get_printer_firmware",
@@ -35,35 +33,56 @@ fn firmware_requests_cannot_bypass_snapshot_generation_claim() {
         "firmware_catalog_from_snapshot",
         "pandar_plugin_firmware_catalog(",
     );
-    assert_call_block(
-        &version,
-        "bool emit_printer_version(",
-        "bool emit_cloud_printer_connected_status",
-        "firmware_version_from_snapshot",
-        "pandar_plugin_firmware_refresh_version(",
+
+    let dispatch = source(&root, "dispatch/message.rs");
+    let version = block(
+        &dispatch,
+        "fn emit_printer_version",
+        "fn dispatch_firmware_message",
     );
-    assert_call_block(
-        &send,
-        "FirmwareSendAttempt begin_firmware_send(",
-        "int finish_firmware_send(",
-        "firmware_send_from_snapshot",
-        "pandar_plugin_firmware_send(",
+    assert!(
+        version.contains("refresh_version_json("),
+        "firmware version refresh bypassed the session snapshot claim"
     );
+    let send = block(
+        &dispatch,
+        "fn dispatch_firmware_message",
+        "fn printer_operation_status",
+    );
+    assert!(
+        send.contains("firmware_session.send("),
+        "firmware send bypassed the session snapshot claim"
+    );
+    for fenced in [version, send] {
+        assert!(
+            !fenced.contains("(bridge.firmware_generation)(agent)"),
+            "firmware request re-read the current generation instead of the fenced one"
+        );
+    }
 
     let helper = source(&root, "shim_firmware_request.hpp");
     assert_eq!(
         helper
             .matches("const PrinterRequestSnapshot& snapshot")
             .count(),
-        3
+        1
     );
-    assert_eq!(helper.matches("snapshot.firmware_generation").count(), 3);
-    assert_eq!(helper.matches("snapshot.printer_id").count(), 6);
+    assert_eq!(helper.matches("snapshot.firmware_generation").count(), 1);
+    assert_eq!(helper.matches("snapshot.printer_id").count(), 2);
     assert!(!helper.contains("->firmware_generation"));
 }
 
 fn source(root: &Path, name: &str) -> String {
     std::fs::read_to_string(root.join(name)).expect("UTF-8 shim source")
+}
+
+fn block<'a>(source: &'a str, start: &str, end: &str) -> &'a str {
+    let start = source.find(start).expect("source block start");
+    let end = source[start..]
+        .find(end)
+        .map(|offset| start + offset)
+        .expect("source block end");
+    &source[start..end]
 }
 
 fn assert_call_block(source: &str, start: &str, end: &str, helper: &str, raw_call: &str) {

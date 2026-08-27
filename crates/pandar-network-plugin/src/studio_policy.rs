@@ -224,6 +224,13 @@ pub extern "C" fn pandar_plugin_studio_request_admitted(
     printer_authorized: bool,
     account_transition_pending: bool,
 ) -> PluginHttpResult {
+    studio_request_admitted(printer_authorized, account_transition_pending)
+}
+
+pub(crate) fn studio_request_admitted(
+    printer_authorized: bool,
+    account_transition_pending: bool,
+) -> PluginHttpResult {
     if account_transition_pending {
         return result(
             ABI_INVALID_RESULT,
@@ -302,6 +309,24 @@ pub extern "C" fn pandar_plugin_studio_printer_operation_result(
     upstream_body_len: usize,
     snapshot_current: bool,
 ) -> PluginHttpResult {
+    // SAFETY: the shim passes a borrowed body valid for this call.
+    let body = unsafe {
+        std::str::from_utf8(std::slice::from_raw_parts(
+            upstream_body_ptr,
+            upstream_body_len,
+        ))
+        .unwrap_or_default()
+        .to_owned()
+    };
+    studio_printer_operation_result(upstream_status, upstream_http_code, body, snapshot_current)
+}
+
+pub(crate) fn studio_printer_operation_result(
+    upstream_status: i32,
+    upstream_http_code: u32,
+    upstream_body: String,
+    snapshot_current: bool,
+) -> PluginHttpResult {
     if !snapshot_current {
         return result(
             ABI_INVALID_RESULT,
@@ -316,8 +341,8 @@ pub extern "C" fn pandar_plugin_studio_printer_operation_result(
             ABI_INVALID_RESULT
         },
         upstream_http_code,
-        upstream_body_ptr,
-        upstream_body_len,
+        upstream_body.as_ptr(),
+        upstream_body.len(),
     )
 }
 

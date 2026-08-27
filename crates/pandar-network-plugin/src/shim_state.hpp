@@ -3,6 +3,7 @@
 #include "shim_connection.hpp"
 #include "shim_account_ffi.hpp"
 #include "shim_account_callbacks.hpp"
+#include "shim_dispatch.hpp"
 
 namespace pandar::network_plugin {
 
@@ -66,6 +67,7 @@ void sync_printer_refresh_session(Agent* agent);
 void invalidate_firmware_account_session(Agent* agent);
 bool try_no_auth_session(Agent* agent, bool initial_attempt);
 FirmwareObservationTicket begin_firmware_observation(Agent* agent);
+
 struct PrinterRefreshAdapterState {
     Agent* agent;
     FirmwareObservationTicket observation;
@@ -150,10 +152,27 @@ std::function<void()> finish_account_printer_transition(
     const LocalLostDelivery& transition
 ) {
     std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-    auto offline = take_printer_offline_transitions(agent);
+    std::vector<IssuedOfflineDelivery> offline;
+    pandar_plugin_connection_take_offline(
+        agent->printer_refresh_session,
+        &offline,
+        collect_offline_device
+    );
+    std::vector<std::uint64_t> tickets;
+    tickets.reserve(offline.size());
+    for (const auto& issued : offline) {
+        tickets.push_back(issued.ticket);
+    }
     return [agent, account_epoch = transition.account_epoch,
-            offline = std::move(offline)]() mutable {
-        dispatch_printer_offline_transitions(agent, offline);
+            tickets = std::move(tickets)]() mutable {
+        pandar_plugin_dispatch_refresh_drain(
+            &kDispatchBridge,
+            agent,
+            agent->printer_refresh_session,
+            {},
+            tickets.data(),
+            tickets.size()
+        );
         std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
         pandar_plugin_studio_finish_account_transition(
             agent->printer_refresh_session, account_epoch

@@ -22,9 +22,7 @@ PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http
     const auto result_http_code = lifecycle.http.http_code;
     auto body = body_from_result(lifecycle.http);
     request.unlock();
-    dispatch_connection_transition(a, lifecycle.connection);
-    dispatch_printer_offline_transitions(a, std::move(adapter_state.offline));
-    dispatch_pending_stream_error(a);
+    dispatch_refresh_deliveries(a, lifecycle.connection, adapter_state.offline);
     if (lifecycle.snapshot_current == 0 && status == 0) {
         trace_plugin_event(a, "get_user_print_info discarded after login change");
     }

@@ -56,9 +56,9 @@ impl DeliveryState {
     }
 }
 
-pub(super) struct IssuedOffline {
-    pub(super) dev_id: String,
-    pub(super) ticket: u64,
+pub(crate) struct IssuedOffline {
+    pub(crate) dev_id: String,
+    pub(crate) ticket: u64,
 }
 
 impl ConnectionState {
@@ -143,7 +143,7 @@ impl ConnectionState {
 }
 
 impl ConnectionSession {
-    pub(super) fn take_transition(&self) -> PluginConnectionResult {
+    pub(crate) fn take_transition(&self) -> PluginConnectionResult {
         let mut state = self.state.lock().expect("connection state");
         let transition = state.pending_transition.take();
         let auth_changed = state.pending_auth_transition;
@@ -167,7 +167,7 @@ impl ConnectionSession {
         result
     }
 
-    pub(super) fn take_offline(&self) -> Vec<IssuedOffline> {
+    pub(crate) fn take_offline(&self) -> Vec<IssuedOffline> {
         let mut state = self.state.lock().expect("connection state");
         std::mem::take(&mut state.pending_offline)
             .into_iter()

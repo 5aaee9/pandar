@@ -198,19 +198,6 @@ const PandarShimBridge kShimBridge = {
     shim_invoke_firmware_status,
 };
 
-PluginConnectionResult take_connection_transition(Agent* agent) {
-    if (!agent) return {};
-    std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-    return pandar_plugin_connection_take_transition(agent->printer_refresh_session);
-}
-
-void dispatch_connection_transition(Agent* agent, const PluginConnectionResult& result) {
-    if (!agent || (!result.changed && !result.auth_changed)) return;
-    pandar_plugin_shim_dispatch_connection_transition(
-        &kShimBridge, agent, agent->printer_refresh_session, result
-    );
-}
-
 bool connection_printer_eligible_under_refresh(
     const Agent* agent,
     const std::string& dev_id
@@ -243,35 +230,6 @@ extern "C" void collect_offline_device(
         std::string(reinterpret_cast<const char*>(ptr), len),
         ticket,
     });
-}
-
-std::vector<IssuedOfflineDelivery> take_printer_offline_transitions(Agent* agent) {
-    std::vector<IssuedOfflineDelivery> issued;
-    if (!agent) return issued;
-    {
-        std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-        pandar_plugin_connection_take_offline(
-            agent->printer_refresh_session,
-            &issued,
-            collect_offline_device
-        );
-    }
-    return issued;
-}
-
-void dispatch_printer_offline_transitions(
-    Agent* agent,
-    const std::vector<IssuedOfflineDelivery>& issued
-) {
-    if (!agent) return;
-    std::vector<std::uint64_t> tickets;
-    tickets.reserve(issued.size());
-    for (const auto& offline : issued) {
-        tickets.push_back(offline.ticket);
-    }
-    pandar_plugin_shim_dispatch_offline_deliveries(
-        &kShimBridge, agent, agent->printer_refresh_session, tickets.data(), tickets.size()
-    );
 }
 
 } // namespace pandar::network_plugin

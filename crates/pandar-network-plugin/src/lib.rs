@@ -4,6 +4,7 @@ mod account;
 mod camera;
 mod cancellation;
 mod connection;
+mod dispatch;
 pub mod file_transfer;
 pub mod firmware;
 mod gcode;
@@ -236,30 +237,42 @@ pub extern "C" fn pandar_plugin_submit_printer_operation(
     operation_json_ptr: *const u8,
     operation_json_len: usize,
 ) -> PluginHttpResult {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
+    let (Some(hub_url), Some(token), Some(printer_id), Some(operation_json)) = (
+        read_utf8(hub_url_ptr, hub_url_len),
+        read_utf8(token_ptr, token_len),
+        read_utf8(printer_id_ptr, printer_id_len),
+        read_utf8(operation_json_ptr, operation_json_len),
+    ) else {
+        return invalid_input("bad_request");
+    };
+    submit_printer_operation_upstream(&hub_url, &token, &printer_id, &operation_json)
+}
+
+pub(crate) fn submit_printer_operation_upstream(
+    hub_url: &str,
+    token: &str,
+    printer_id: &str,
+    operation_json: &str,
+) -> PluginHttpResult {
+    let Some(hub_url) = normalize_hub_url(hub_url.to_owned()) else {
         return invalid_input("invalid_hub_url");
     };
-    let Some(token) = read_utf8(token_ptr, token_len).filter(|token| !token.trim().is_empty())
-    else {
+    if token.trim().is_empty() {
         return invalid_input("invalid_auth_token");
-    };
-    let Some(printer_id) = read_utf8(printer_id_ptr, printer_id_len)
-        .filter(|printer_id| !printer_id.trim().is_empty())
-    else {
+    }
+    if printer_id.trim().is_empty() {
         return invalid_input("invalid_printer_id");
-    };
-    let Some(operation) = read_utf8(operation_json_ptr, operation_json_len)
-        .and_then(|body| PrinterOperation::from_json(&body))
-    else {
+    }
+    let Some(operation) = PrinterOperation::from_json(operation_json) else {
         return invalid_input("invalid_printer_operation");
     };
-    let Some(url) = plugin_printer_operation_url(&hub_url, &printer_id) else {
+    let Some(url) = plugin_printer_operation_url(&hub_url, printer_id) else {
         return invalid_input("invalid_printer_id");
     };
 
     post_json(
         url.as_str(),
-        Some(&token),
+        Some(token),
         operation,
         RequestKind::PrinterOperation,
     )

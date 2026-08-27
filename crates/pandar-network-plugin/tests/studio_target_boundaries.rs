@@ -25,7 +25,7 @@ fn printer_transport_credentials_do_not_cross_the_plugin_abi() {
         include_str!("../src/shim_connection.hpp"),
         include_str!("../src/shim_state.hpp"),
         include_str!("../src/shim_printer_cache.hpp"),
-        include_str!("../src/shim_status_payload.hpp"),
+        include_str!("../src/shim_dispatch.hpp"),
     ]
     .join("\n");
     for forbidden in ["printer_connections", "host_ptr", "access_ptr"] {
@@ -68,9 +68,12 @@ fn rust_owns_file_transfer_errors_and_firmware_identity_admission() {
             && policy.contains("pandar_plugin_studio_file_transfer_unavailable")
     );
     assert!(!firmware.contains("normalized_dev_id.empty() || printer_id.empty()"));
+    let dispatch = include_str!("../src/dispatch.rs");
+    let dispatch_message = include_str!("../src/dispatch/message.rs");
+    let joined = [dispatch, dispatch_message].join("\n");
     assert!(
-        firmware.contains("pandar_plugin_studio_request_admitted(")
-            && firmware.contains("firmware_send_from_snapshot(")
+        joined.contains("studio_request_admitted(")
+            && joined.contains("firmware_session.send(")
             && firmware_request.contains("snapshot.firmware_generation")
             && firmware_ffi
                 .contains("studio_dev_id.trim().is_empty() || printer_id.trim().is_empty()")

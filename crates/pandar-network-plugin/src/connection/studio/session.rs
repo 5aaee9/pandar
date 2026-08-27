@@ -30,7 +30,7 @@ impl ConnectionSession {
         })
     }
 
-    pub(super) fn studio_status_target_available(
+    pub(crate) fn studio_status_target_available(
         &self,
         tunnel: i32,
         dev_id: String,
@@ -55,7 +55,7 @@ impl ConnectionSession {
         }
     }
 
-    pub(super) fn studio_request_snapshot(
+    pub(crate) fn studio_request_snapshot(
         &self,
         dev_id: String,
     ) -> (PluginStudioRequestState, StudioRequestSnapshot) {
@@ -80,7 +80,7 @@ impl ConnectionSession {
         )
     }
 
-    pub(super) fn studio_request_snapshot_current(
+    pub(crate) fn studio_request_snapshot_current(
         &self,
         account_epoch: u64,
         cache_generation: u64,
@@ -234,7 +234,7 @@ impl ConnectionSession {
         }
     }
 
-    pub(super) fn studio_heartbeat_plan(
+    pub(crate) fn studio_heartbeat_plan(
         &self,
     ) -> (PluginStudioHeartbeatPlan, Vec<HeartbeatTarget>) {
         self.state
@@ -244,7 +244,7 @@ impl ConnectionSession {
             .heartbeat_plan()
     }
 
-    pub(super) fn studio_prepare_connected(
+    pub(crate) fn studio_prepare_connected(
         &self,
         dev_id: String,
         now_ms: u64,
@@ -255,7 +255,7 @@ impl ConnectionSession {
             .prepare_connected(normalize_studio_dev_id(dev_id), now_ms)
     }
 
-    pub(in crate::connection) fn studio_prepare_message(
+    pub(crate) fn studio_prepare_message(
         &self,
         tunnel: i32,
         dev_id: String,
@@ -275,7 +275,7 @@ impl ConnectionSession {
             )
     }
 
-    pub(super) fn studio_connect_local(
+    pub(crate) fn studio_connect_local(
         &self,
         dev_id: String,
     ) -> (PluginStudioDeliveryResult, Option<StudioPayload>) {
@@ -316,14 +316,14 @@ impl ConnectionSession {
         }
     }
 
-    pub(super) fn studio_complete_delivery(&self, ticket: u64, delivered: bool) -> bool {
+    pub(crate) fn studio_complete_delivery(&self, ticket: u64, delivered: bool) -> bool {
         self.state
             .lock()
             .expect("connection state")
             .complete_delivery(ticket, delivered)
     }
 
-    pub(in crate::connection) fn studio_claim_delivery(&self, ticket: u64) -> bool {
+    pub(crate) fn studio_claim_delivery(&self, ticket: u64) -> bool {
         self.state
             .lock()
             .expect("connection state")

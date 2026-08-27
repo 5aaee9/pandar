@@ -98,11 +98,11 @@ struct ListenerMask {
 }
 
 #[derive(Clone)]
-pub(super) struct StudioPayload {
-    pub(super) dev_id: String,
-    pub(super) body: String,
-    pub(super) printer_id: String,
-    pub(super) model: String,
+pub(crate) struct StudioPayload {
+    pub(crate) dev_id: String,
+    pub(crate) body: String,
+    pub(crate) printer_id: String,
+    pub(crate) model: String,
 }
 
 pub(crate) struct StudioRequestSnapshot {
@@ -111,13 +111,13 @@ pub(crate) struct StudioRequestSnapshot {
     pub(crate) printer_id: String,
 }
 
-pub(super) struct HeartbeatTarget {
+pub(crate) struct HeartbeatTarget {
     pub(super) tunnel: i32,
     pub(super) dev_id: String,
     pub(super) generation: u64,
 }
 
-pub(super) struct StudioWork {
+pub(crate) struct StudioWork {
     pub(super) kind: i32,
     pub(super) state: i32,
     pub(super) ticket: u64,

@@ -317,7 +317,7 @@ impl ConnectionSession {
         ))
     }
 
-    pub(super) fn take_stream_error(&self) -> PluginHttpResult {
+    pub(crate) fn take_stream_error(&self) -> PluginHttpResult {
         let mut state = self.state.lock().expect("connection state");
         if !state.stream_error_pending {
             return result(0, 0, String::new());

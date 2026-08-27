@@ -21,6 +21,65 @@ const INVALID: i32 = 1;
 const ABI_SUCCESS: i32 = 0;
 const ABI_INVALID_RESULT: i32 = -19;
 
+/// Typed routing decision for one inbound Studio message.
+///
+/// `classify_studio_message` owns the message-kind policy; [`crate::dispatch`]
+/// owns what each route does.
+pub(crate) enum StudioMessageRoute {
+    Firmware,
+    GetVersion { sequence_id: String },
+    PushAll { sequence_id: String },
+    H2cAutoNozzleMapping { request_json: String },
+    Operation { operation_json: String },
+    Invalid { kind: i32 },
+}
+
+pub(crate) fn classify_studio_message(message: &str) -> StudioMessageRoute {
+    match parse_studio_firmware(message) {
+        StudioFirmwareParse::Firmware(_) => return StudioMessageRoute::Firmware,
+        StudioFirmwareParse::InvalidFirmware => {
+            return StudioMessageRoute::Invalid { kind: FIRMWARE };
+        }
+        StudioFirmwareParse::NotFirmware => {}
+    }
+
+    match classify_h2c_auto_nozzle_mapping(message) {
+        H2cAutoNozzleMappingClassification::Valid(request) => {
+            return StudioMessageRoute::H2cAutoNozzleMapping {
+                request_json: serde_json::to_string(&request)
+                    .expect("H2C auto nozzle mapping request is serializable"),
+            };
+        }
+        H2cAutoNozzleMappingClassification::Invalid => {
+            return StudioMessageRoute::Invalid {
+                kind: H2C_AUTO_NOZZLE_MAPPING,
+            };
+        }
+        H2cAutoNozzleMappingClassification::NotH2c => {}
+    }
+
+    if let Some(request) = parse_status_request(message) {
+        return match request {
+            StudioStatusRequest::GetVersion { sequence_id } => {
+                StudioMessageRoute::GetVersion { sequence_id }
+            }
+            StudioStatusRequest::PushAll { sequence_id } => {
+                StudioMessageRoute::PushAll { sequence_id }
+            }
+        };
+    }
+
+    match operation_json_from_gcode(message) {
+        StudioOperationParse::Operation(operation) => StudioMessageRoute::Operation {
+            operation_json: serde_json::to_string(&operation)
+                .expect("printer operation is serializable"),
+        },
+        StudioOperationParse::Unsupported | StudioOperationParse::InvalidNativeCandidate => {
+            StudioMessageRoute::Invalid { kind: UNSUPPORTED }
+        }
+    }
+}
+
 #[repr(C)]
 pub struct PluginStudioMessageResult {
     pub kind: i32,
@@ -92,53 +151,27 @@ pub extern "C" fn pandar_plugin_dispatch_studio_message(
     let Some(message) = read_utf8(message_ptr, message_len) else {
         return PluginStudioMessageResult::invalid(UNSUPPORTED);
     };
-
-    match parse_studio_firmware(&message) {
-        StudioFirmwareParse::Firmware(_) => {
-            return PluginStudioMessageResult::new(FIRMWARE, VALID, ABI_SUCCESS, String::new());
+    match classify_studio_message(&message) {
+        StudioMessageRoute::Firmware => {
+            PluginStudioMessageResult::new(FIRMWARE, VALID, ABI_SUCCESS, String::new())
         }
-        StudioFirmwareParse::InvalidFirmware => {
-            return PluginStudioMessageResult::invalid(FIRMWARE);
+        StudioMessageRoute::Invalid { kind } => PluginStudioMessageResult::invalid(kind),
+        StudioMessageRoute::GetVersion { sequence_id } => {
+            PluginStudioMessageResult::new(STATUS_GET_VERSION, VALID, ABI_SUCCESS, sequence_id)
         }
-        StudioFirmwareParse::NotFirmware => {}
-    }
-
-    match classify_h2c_auto_nozzle_mapping(&message) {
-        H2cAutoNozzleMappingClassification::Valid(request) => {
-            return PluginStudioMessageResult::new(
+        StudioMessageRoute::PushAll { sequence_id } => {
+            PluginStudioMessageResult::new(STATUS_PUSH_ALL, VALID, ABI_SUCCESS, sequence_id)
+        }
+        StudioMessageRoute::H2cAutoNozzleMapping { request_json } => {
+            PluginStudioMessageResult::new(
                 H2C_AUTO_NOZZLE_MAPPING,
                 VALID,
                 ABI_SUCCESS,
-                serde_json::to_string(&request)
-                    .expect("H2C auto nozzle mapping request is serializable"),
-            );
+                request_json,
+            )
         }
-        H2cAutoNozzleMappingClassification::Invalid => {
-            return PluginStudioMessageResult::invalid(H2C_AUTO_NOZZLE_MAPPING);
-        }
-        H2cAutoNozzleMappingClassification::NotH2c => {}
-    }
-
-    if let Some(request) = parse_status_request(&message) {
-        return match request {
-            StudioStatusRequest::GetVersion { sequence_id } => {
-                PluginStudioMessageResult::new(STATUS_GET_VERSION, VALID, ABI_SUCCESS, sequence_id)
-            }
-            StudioStatusRequest::PushAll { sequence_id } => {
-                PluginStudioMessageResult::new(STATUS_PUSH_ALL, VALID, ABI_SUCCESS, sequence_id)
-            }
-        };
-    }
-
-    match operation_json_from_gcode(&message) {
-        StudioOperationParse::Operation(operation) => PluginStudioMessageResult::new(
-            OPERATION,
-            VALID,
-            ABI_SUCCESS,
-            serde_json::to_string(&operation).expect("printer operation is serializable"),
-        ),
-        StudioOperationParse::Unsupported | StudioOperationParse::InvalidNativeCandidate => {
-            PluginStudioMessageResult::invalid(UNSUPPORTED)
+        StudioMessageRoute::Operation { operation_json } => {
+            PluginStudioMessageResult::new(OPERATION, VALID, ABI_SUCCESS, operation_json)
         }
     }
 }

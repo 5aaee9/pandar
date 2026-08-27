@@ -5,53 +5,6 @@
 
 using namespace pandar::network_plugin;
 
-namespace pandar::network_plugin {
-
-int dispatch_studio_message(
-    Agent* agent,
-    const std::string& dev_id,
-    const std::string& message,
-    MessageTunnel tunnel,
-    std::uint64_t local_generation
-) {
-    auto classified = pandar_plugin_dispatch_studio_message(
-        reinterpret_cast<const uint8_t*>(message.data()), message.size()
-    );
-    const auto kind = classified.kind;
-    const auto outcome = classified.outcome;
-    const auto abi_status = classified.abi_status;
-    auto body = body_from_studio_message(classified);
-    if (outcome != 0) {
-        return abi_status;
-    }
-    if (kind == kStudioMessageFirmware) {
-        auto firmware = begin_firmware_send(
-            agent, dev_id, message, tunnel, local_generation
-        );
-        return firmware.handled
-            ? finish_firmware_send(agent, firmware)
-            : BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
-    }
-    if (kind == kStudioMessageGetVersion || kind == kStudioMessagePushAll) {
-        auto delivery = pandar_plugin_studio_status_delivery_result(handle_studio_status(
-            agent, kind, dev_id, body, tunnel, local_generation
-        ));
-        body_from_result(delivery);
-        return delivery.status;
-    }
-    if (kind == kStudioMessageH2cAutoNozzleMapping) {
-        return submit_h2c_auto_nozzle_mapping(
-            agent, dev_id, body, tunnel, local_generation
-        ) ? BBL::BAMBU_NETWORK_SUCCESS : BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
-    }
-    if (kind == kStudioMessageOperation) {
-        return submit_printer_operation_json(agent, dev_id, body);
-    }
-    return abi_status;
-}
-
-} // namespace pandar::network_plugin
-
 PANDAR_ABI void bambu_network_enable_multi_machine(void* agent, bool) {
     studio_disposition(as_agent(agent), StudioDisposition::EnableMultiMachine);
 }
@@ -68,9 +21,7 @@ PANDAR_ABI int bambu_network_connect_printer(void* agent, std::string dev_id, st
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     if (dev_id.empty()) return BBL::BAMBU_NETWORK_ERR_CONNECT_FAILED;
-    return emit_local_connect(a, studio_dev_id(dev_id))
-        ? BBL::BAMBU_NETWORK_SUCCESS
-        : BBL::BAMBU_NETWORK_ERR_CONNECT_FAILED;
+    return dispatch_connect_printer_local(a, studio_dev_id(dev_id));
 }
 
 PANDAR_ABI int bambu_network_disconnect_printer(void* agent) {

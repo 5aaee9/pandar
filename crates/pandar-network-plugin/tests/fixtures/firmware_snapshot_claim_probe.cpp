@@ -98,12 +98,22 @@ int main(int argc, char** argv) {
     auto catalog_result = firmware_catalog_from_snapshot(
         catalog, session, studio_dev_id, snapshot
     );
-    auto refresh_result = firmware_version_from_snapshot(
-        refresh, session, studio_dev_id, sequence_id, snapshot
+    auto refresh_result = refresh(
+        session,
+        bytes(studio_dev_id), studio_dev_id.size(),
+        bytes(snapshot.printer_id), snapshot.printer_id.size(),
+        bytes(sequence_id), sequence_id.size(),
+        snapshot.firmware_generation
     );
     std::uint64_t callback_token = 99;
-    auto send_result = firmware_send_from_snapshot(
-        send, session, studio_dev_id, message, 0, &callback_token, snapshot
+    auto send_result = send(
+        session,
+        bytes(studio_dev_id), studio_dev_id.size(),
+        bytes(snapshot.printer_id), snapshot.printer_id.size(),
+        bytes(message), message.size(),
+        0,
+        &callback_token,
+        snapshot.firmware_generation
     );
 
     const bool exact = catalog_result.status == 1 &&

@@ -135,11 +135,14 @@ fn printer_refresh_cache_admission_and_delivery_share_serialization_boundary() {
         );
     }
 
-    let status = include_str!("../src/shim_status_delivery.hpp");
+    let status = [
+        include_str!("../src/dispatch.rs"),
+        include_str!("../src/dispatch/message.rs"),
+    ]
+    .join("\n");
     assert!(
-        status.contains("pandar_plugin_studio_claim_delivery(")
-            && status.contains("pandar_plugin_studio_complete_delivery("),
-        "C++ callback adapter bypasses Rust's two-phase final claim"
+        status.contains("studio_claim_delivery(") && status.contains("studio_complete_delivery("),
+        "Rust message dispatch bypasses the session's two-phase final claim"
     );
 
     let request_snapshot = include_str!("../src/shim_request_snapshot.hpp");
@@ -201,24 +204,34 @@ fn agent_state_callbacks_share_final_claim_serialization() {
         "Rust dispatch must own claim-before-invoke, kind selection, and completion"
     );
 
-    let connected = include_str!("../src/shim_status.hpp")
-        .split_once("bool emit_cloud_printer_connected_signal")
+    let dispatch_message_source = [
+        include_str!("../src/dispatch.rs"),
+        include_str!("../src/dispatch/message.rs"),
+    ]
+    .join("\n");
+    let connected = dispatch_message_source
+        .split_once("fn emit_cloud_printer_connected")
         .expect("cloud connected signal")
         .1
-        .split_once("bool emit_printer_status")
+        .split_once("fn emit_printer_status")
         .expect("cloud connected signal end")
         .0;
     assert!(
-        connected.contains("gate(agent->callback_mutex)"),
+        connected.contains("CallbackGate::lock(bridge, agent)"),
         "cloud Connected can overtake a disconnected delivery"
     );
 
-    let local_connected = include_str!("../src/shim_status_delivery.hpp")
-        .split_once("bool emit_local_connect")
+    let dispatch_pending_source = [
+        include_str!("../src/dispatch.rs"),
+        include_str!("../src/dispatch/pending.rs"),
+    ]
+    .join("\n");
+    let local_connected = dispatch_pending_source
+        .split_once("fn pandar_plugin_dispatch_connect_local")
         .expect("local connected signal")
         .1;
     assert!(
-        local_connected.contains("gate(agent->callback_mutex)"),
+        local_connected.contains("CallbackGate::lock(bridge, agent)"),
         "local Connected can overtake a Lost delivery"
     );
 
@@ -230,12 +243,12 @@ fn agent_state_callbacks_share_final_claim_serialization() {
         .expect("account Lost final claim end")
         .0;
     assert!(
-        account_lost.contains("dispatch_printer_offline_transitions")
+        account_lost.contains("pandar_plugin_dispatch_refresh_drain")
             && account_lost.contains("pandar_plugin_studio_finish_account_transition"),
         "account Lost work bypasses the Rust-owned offline dispatcher"
     );
     assert!(
-        account_lost.find("dispatch_printer_offline_transitions")
+        account_lost.find("pandar_plugin_dispatch_refresh_drain")
             < account_lost.find("pandar_plugin_studio_finish_account_transition"),
         "account transition admission reopened before Lost delivery completed"
     );
@@ -243,7 +256,7 @@ fn agent_state_callbacks_share_final_claim_serialization() {
 
 #[test]
 fn cpp_shim_contains_no_status_json_or_camera_policy() {
-    let status_payload = include_str!("../src/shim_status_payload.hpp");
+    let dispatch_adapter = include_str!("../src/shim_dispatch.hpp");
     let content = include_str!("../src/shim_abi_content.hpp");
 
     for forbidden in [
@@ -257,12 +270,12 @@ fn cpp_shim_contains_no_status_json_or_camera_policy() {
         r#"\"support_mqtt_alive\""#,
     ] {
         assert!(
-            !status_payload.contains(forbidden),
-            "C++ status payload still owns typed JSON field {forbidden}"
+            !dispatch_adapter.contains(forbidden),
+            "C++ status path still owns typed JSON field {forbidden}"
         );
     }
 
-    let camera_sources = [status_payload, content].join("\n");
+    let camera_sources = [dispatch_adapter, content].join("\n");
     for forbidden in ["camera_url_for(", "bambu:///", "rtsps://", "rtsp://"] {
         assert!(
             !camera_sources.contains(forbidden),
