@@ -110,6 +110,58 @@ async fn job_repository_print_command_transitions_update_command_and_job_togethe
 }
 
 #[tokio::test]
+async fn failed_print_transition_persists_result_with_job_cause() {
+    let (database, tenants, agents, _, commands, jobs) = repositories().await;
+    let tenant = tenants
+        .create("failed-result", "Failed Result")
+        .await
+        .unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id =
+        crate::repositories::test_helpers::insert_printer_fixture(&database, tenant.id, agent.id)
+            .await
+            .unwrap();
+    let created = jobs
+        .create_print_job(create_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            "artifact-failed-result",
+        ))
+        .await
+        .unwrap();
+    jobs.mark_print_sent(created.job.command_id, tenant.id, agent.id)
+        .await
+        .unwrap();
+    let result_json = r#"{"phase":"data_connection","cause":"redacted cause"}"#;
+
+    jobs.mark_print_failed_with_result(
+        created.job.command_id,
+        tenant.id,
+        agent.id,
+        "redacted cause".to_owned(),
+        Some(result_json.to_owned()),
+    )
+    .await
+    .unwrap();
+
+    let command = commands
+        .get_for_tenant(tenant.id, created.job.command_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(command.result_json.as_deref(), Some(result_json));
+    let job = jobs
+        .get_for_tenant(tenant.id, created.job.id)
+        .await
+        .unwrap()
+        .unwrap()
+        .job;
+    assert_eq!(job.status, JobStatus::Failed);
+    assert_eq!(job.error.as_deref(), Some("redacted cause"));
+}
+
+#[tokio::test]
 async fn invalid_persisted_job_status_is_reported() {
     let (database, tenants, agents, _, _, jobs) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();

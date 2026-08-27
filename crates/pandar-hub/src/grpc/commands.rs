@@ -1,4 +1,4 @@
-use pandar_core::{AgentId, CommandId, CommandRecord, TenantId};
+use pandar_core::{AgentId, CommandId, CommandRecord, PrintTransferFailure, TenantId};
 use tonic::Status;
 
 mod agent_capabilities;
@@ -101,56 +101,57 @@ pub async fn handle_result_and_job(
         .map_err(repository_status)?;
     let success = result.success;
     let error = redact_command_error(&command.kind, &result.error, link_printer_access_code);
-    let result_json = result.result_json;
+    let result_json = if !success && command.kind == "print_project_file" {
+        print_transfer_failure_result_json(result.result_json, &error)?
+    } else {
+        optional_result_json(&command.kind, result.result_json, link_printer_access_code)
+    };
     if success {
         if command.kind == "print_project_file" {
             state
                 .jobs()
-                .mark_print_succeeded_with_result(
-                    command_id,
-                    tenant_id,
-                    agent_id,
-                    optional_result_json(&command.kind, result_json, link_printer_access_code),
-                )
+                .mark_print_succeeded_with_result(command_id, tenant_id, agent_id, result_json)
                 .await
                 .map_err(repository_status)?;
             Ok(None)
         } else {
             let command = state
                 .commands()
-                .mark_succeeded_with_result(
-                    command_id,
-                    tenant_id,
-                    agent_id,
-                    optional_result_json(&command.kind, result_json, link_printer_access_code),
-                )
+                .mark_succeeded_with_result(command_id, tenant_id, agent_id, result_json)
                 .await
                 .map_err(repository_status)?;
             Ok(Some(command))
         }
+    } else if command.kind == "print_project_file" {
+        state
+            .jobs()
+            .mark_print_failed_with_result(command_id, tenant_id, agent_id, error, result_json)
+            .await
+            .map_err(repository_status)?;
+        Ok(None)
     } else {
-        if command.kind == "print_project_file" {
-            state
-                .jobs()
-                .mark_print_failed(command_id, tenant_id, agent_id, error)
-                .await
-                .map_err(repository_status)?;
-            Ok(None)
-        } else {
-            let command = state
-                .commands()
-                .mark_failed_with_result(
-                    command_id,
-                    tenant_id,
-                    agent_id,
-                    error,
-                    optional_result_json(&command.kind, result_json, link_printer_access_code),
-                )
-                .await
-                .map_err(repository_status)?;
-            Ok(Some(command))
-        }
+        let command = state
+            .commands()
+            .mark_failed_with_result(command_id, tenant_id, agent_id, error, result_json)
+            .await
+            .map_err(repository_status)?;
+        Ok(Some(command))
     }
+}
+
+fn print_transfer_failure_result_json(
+    result_json: String,
+    cause: &str,
+) -> Result<Option<String>, Status> {
+    if result_json.is_empty() {
+        return Ok(None);
+    }
+    let mut failure = serde_json::from_str::<PrintTransferFailure>(&result_json)
+        .map_err(|_| Status::invalid_argument("invalid print transfer failure result"))?;
+    failure.cause = cause.to_owned();
+    Ok(Some(serde_json::to_string(&failure).expect(
+        "validated print transfer failure is serializable",
+    )))
 }
 
 fn redact_command_error(kind: &str, error: &str, link_printer_access_code: Option<&str>) -> String {

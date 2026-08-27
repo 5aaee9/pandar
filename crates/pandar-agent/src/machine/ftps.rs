@@ -2,7 +2,12 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
-use rustls::{ClientConfig, version};
+use pandar_core::PrintTransferPhase;
+use rustls::{
+    ClientConfig,
+    client::{Resumption, Tls12Resumption, danger::ServerCertVerifier},
+    version,
+};
 use suppaftp::{
     Status,
     tokio::{AsyncRustlsConnector, AsyncRustlsFtpStream},
@@ -62,21 +67,25 @@ impl FtpsMachineFileTransfer {
                     host.as_str(),
                 )
                 .await
+                .context(PrintTransferPhase::Connect)
                 .with_context(|| format!("connect implicit FTPS to {host}:990"))?;
 
                 stream
                     .login(BAMBU_FILE_TRANSFER_USERNAME, access_code.as_str())
                     .await
+                    .context(PrintTransferPhase::Login)
                     .with_context(|| format!("login to Bambu FTPS at {host} as bblp"))?;
 
                 protect_data_channel(&mut stream)
                     .await
+                    .context(PrintTransferPhase::Protection)
                     .with_context(|| format!("protect Bambu FTPS data channel for {host}"))?;
 
                 operation(stream).await
             },
         )
         .await
+        .context(PrintTransferPhase::Timeout)
         .with_context(|| format!("Bambu FTPS operation timed out for {timeout_host}"))?
     }
 }
@@ -100,6 +109,16 @@ pub(crate) fn bambu_lan_ftps_tls_config(
     profile: FtpsProfile,
     expected_serial: &str,
 ) -> Arc<ClientConfig> {
+    ftps_tls_config(
+        profile,
+        Arc::new(BambuLanCertificateVerifier::new(expected_serial)),
+    )
+}
+
+fn ftps_tls_config(
+    profile: FtpsProfile,
+    verifier: Arc<dyn ServerCertVerifier>,
+) -> Arc<ClientConfig> {
     let provider = rustls::crypto::aws_lc_rs::default_provider().into();
     let builder = ClientConfig::builder_with_provider(provider);
     let builder = if profile.cap_tls_1_2 {
@@ -113,10 +132,12 @@ pub(crate) fn bambu_lan_ftps_tls_config(
     };
     let mut config = builder
         .dangerous()
-        .with_custom_certificate_verifier(Arc::new(BambuLanCertificateVerifier::new(
-            expected_serial,
-        )))
+        .with_custom_certificate_verifier(verifier)
         .with_no_client_auth();
+    if profile.cap_tls_1_2 {
+        config.resumption =
+            Resumption::in_memory_sessions(256).tls12_resumption(Tls12Resumption::SessionIdOnly);
+    }
     config.alpn_protocols = Vec::new();
     Arc::new(config)
 }
@@ -153,18 +174,21 @@ async fn upload_in_bambu_chunks(
     let mut data = stream
         .put_with_stream(path)
         .await
+        .context(PrintTransferPhase::DataConnection)
         .with_context(|| format!("start Bambu FTPS upload for {path}"))?;
 
     for chunk in bytes.chunks(BAMBU_FILE_TRANSFER_CHUNK_SIZE) {
         data.write_all(chunk)
             .await
             .map_err(suppaftp::FtpError::ConnectionError)
+            .context(PrintTransferPhase::Write)
             .with_context(|| format!("write Bambu FTPS upload chunk for {path}"))?;
     }
 
     stream
         .finalize_put_stream(data)
         .await
+        .context(PrintTransferPhase::Finalize)
         .with_context(|| format!("finalize Bambu FTPS upload for {path}"))?;
 
     Ok(())
@@ -270,8 +294,10 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
             let actual = stream
                 .size(&path)
                 .await
+                .context(PrintTransferPhase::Verify)
                 .with_context(|| format!("verify Bambu FTPS file size for {path}"))?;
-            verify_uploaded_size(expected, Some(actual), &path)?;
+            verify_uploaded_size(expected, Some(actual), &path)
+                .context(PrintTransferPhase::Verify)?;
             Ok(FileUploadResult::ftp(path))
         })
         .await

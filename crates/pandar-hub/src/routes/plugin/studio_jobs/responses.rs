@@ -1,4 +1,6 @@
-use pandar_core::{Job, JobStatus, PrintStatus, Printer, StudioPrintMetadata};
+use pandar_core::{
+    Job, JobStatus, PrintStatus, PrintTransferFailure, Printer, StudioPrintMetadata,
+};
 use serde::Serialize;
 
 use crate::repositories::JobWithArtifact;
@@ -102,14 +104,17 @@ pub(crate) struct StudioTaskDetailResponse {
     studio_submission_id: i32,
     job_status: String,
     print_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    failure: Option<PrintTransferFailure>,
 }
 
-impl From<&Job> for StudioTaskDetailResponse {
-    fn from(value: &Job) -> Self {
+impl StudioTaskDetailResponse {
+    pub(super) fn from_job(value: &Job, failure: Option<PrintTransferFailure>) -> Self {
         Self {
             studio_submission_id: value.studio_submission_id.get(),
             job_status: value.status.to_string(),
             print_status: value.print.status.to_string(),
+            failure,
         }
     }
 }

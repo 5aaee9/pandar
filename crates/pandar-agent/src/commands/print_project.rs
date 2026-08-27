@@ -1,4 +1,5 @@
 use anyhow::Context;
+use pandar_core::{PrintTransferFailure, PrintTransferPhase};
 use serde::Serialize;
 use tokio::sync::mpsc;
 
@@ -11,7 +12,10 @@ use pandar_protocol::agent::v1::{AgentEvent, PrintProjectFile};
 use super::{
     ArtifactReader,
     artifacts::{CommandArtifactReader, LegacyCommandArtifactReader, PrintCommandArtifactReader},
-    responses::{ack_event, failure_event, rejected_ack_event, success_event_with_result},
+    responses::{
+        ack_event, failure_event, failure_event_with_result, rejected_ack_event,
+        success_event_with_result,
+    },
 };
 
 pub(super) async fn emit_print_project_file_events<G>(
@@ -132,8 +136,19 @@ where
         }
         Err(err) => {
             let error = gateway.redact_error(&format!("{err:#}"));
+            let event = match err.downcast_ref::<PrintTransferPhase>() {
+                Some(phase) => {
+                    let result_json = serde_json::to_string(&PrintTransferFailure {
+                        phase: *phase,
+                        cause: error.clone(),
+                    })
+                    .expect("print transfer failure is serializable");
+                    failure_event_with_result(config, command_id, error, result_json)
+                }
+                None => failure_event(config, command_id, error),
+            };
             sender
-                .send(failure_event(config, command_id, error))
+                .send(event)
                 .await
                 .context("queue print-project-file command failure")?;
         }

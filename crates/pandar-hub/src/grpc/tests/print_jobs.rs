@@ -12,6 +12,7 @@ use crate::{
 };
 use pandar_protocol::agent::v1::hub_command;
 
+mod print_failures;
 mod support;
 use support::*;
 

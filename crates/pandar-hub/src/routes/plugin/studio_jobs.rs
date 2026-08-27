@@ -5,7 +5,7 @@ use axum::{
     extract::{Multipart, Path, Query, State},
     http::{HeaderMap, StatusCode},
 };
-use pandar_core::{StudioSubmissionId, TenantId};
+use pandar_core::{Job, JobStatus, PrintTransferFailure, StudioSubmissionId, TenantId};
 use serde::Deserialize;
 
 use crate::{
@@ -92,7 +92,8 @@ pub(crate) async fn get_job(
 ) -> Result<Json<StudioTaskDetailResponse>, ApiError> {
     let (tenant_id, id) = authorized_id(&state, &headers, &id).await?;
     let job = load_job(&state, tenant_id, id).await?;
-    Ok(Json(StudioTaskDetailResponse::from(&job.job)))
+    let failure = load_print_transfer_failure(&state, tenant_id, &job.job).await?;
+    Ok(Json(StudioTaskDetailResponse::from_job(&job.job, failure)))
 }
 
 pub(crate) async fn get_plate(
@@ -172,7 +173,7 @@ pub(crate) async fn cancel_job(
             }
             other => other.into(),
         })?;
-    Ok(Json(StudioTaskDetailResponse::from(&job.job)))
+    Ok(Json(StudioTaskDetailResponse::from_job(&job.job, None)))
 }
 
 async fn repository_query(
@@ -228,6 +229,36 @@ fn parse_id(value: &str) -> Result<StudioSubmissionId, ApiError> {
         .map_err(|_| ApiError::bad_request("invalid_studio_submission_id"))?;
     StudioSubmissionId::try_from(value)
         .map_err(|_| ApiError::bad_request("invalid_studio_submission_id"))
+}
+
+async fn load_print_transfer_failure(
+    state: &AppState,
+    tenant_id: TenantId,
+    job: &Job,
+) -> Result<Option<PrintTransferFailure>, ApiError> {
+    if job.status != JobStatus::Failed {
+        return Ok(None);
+    }
+    let command = state
+        .commands()
+        .get_for_tenant(tenant_id, job.command_id)
+        .await?
+        .ok_or(RepositoryError::MissingCommand)?;
+    let Some(result_json) = command.result_json else {
+        return Ok(None);
+    };
+    let mut failure =
+        serde_json::from_str::<PrintTransferFailure>(&result_json).map_err(|err| {
+            RepositoryError::Database(
+                anyhow::Error::new(err).context("invalid persisted print transfer failure"),
+            )
+        })?;
+    failure.cause = job.error.clone().ok_or_else(|| {
+        RepositoryError::Database(anyhow::anyhow!(
+            "failed print transfer is missing its persisted cause"
+        ))
+    })?;
+    Ok(Some(failure))
 }
 
 async fn load_job(

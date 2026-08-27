@@ -1,3 +1,4 @@
+use pandar_core::PrintTransferFailure;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +23,7 @@ struct JobState {
     studio_submission_id: i32,
     job_status: HubJobStatus,
     print_status: HubPrintStatus,
+    failure: Option<PrintTransferFailure>,
 }
 
 #[derive(Deserialize)]
@@ -136,7 +138,12 @@ async fn run(print: AdmittedPrint, callbacks: PluginStudioCallbacks) -> Result<(
                 callbacks.update(4, 0, "");
                 return finish(&client, &print, callbacks, submission_id).await;
             }
-            HubJobStatus::Failed => return Err(PrintFailure::simple("job_failed")),
+            HubJobStatus::Failed => {
+                return Err(match &state.failure {
+                    Some(failure) => PrintFailure::job_failed(failure),
+                    None => PrintFailure::simple("job_failed"),
+                });
+            }
             HubJobStatus::Cancelled => return Err(PrintFailure::simple("invalid_response")),
         }
         if attempt + 1 < MAX_JOB_POLLS {

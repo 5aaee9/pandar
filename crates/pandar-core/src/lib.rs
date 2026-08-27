@@ -12,6 +12,7 @@ pub mod h2c;
 pub mod ids;
 pub mod job;
 pub mod print_error;
+pub mod print_transfer;
 pub mod printer;
 pub mod studio_print;
 pub mod tenant;
@@ -43,6 +44,7 @@ pub use job::{
     PrintCalibrationMode, PrintStatus,
 };
 pub use print_error::PrintErrorAction;
+pub use print_transfer::{PrintTransferFailure, PrintTransferPhase};
 pub use printer::{Printer, PrinterNozzleTemperature, PrinterParts};
 pub use studio_print::{
     StudioAmsMappingEntry, StudioAmsMappingInfo, StudioFiniteF64, StudioNozzleInfo,

@@ -12,6 +12,7 @@ use pandar_protocol::agent::v1::{
     AgentEvent, HubCommand, PrintProjectFile, agent_event, hub_command,
 };
 
+mod failure;
 mod support;
 mod validation;
 

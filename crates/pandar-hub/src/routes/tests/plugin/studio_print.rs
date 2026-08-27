@@ -1,5 +1,6 @@
 use super::*;
 
+mod failure;
 mod model_task;
 
 #[derive(Debug, Deserialize)]

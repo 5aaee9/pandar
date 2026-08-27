@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use pandar_core::{
-    PrintCalibrationMode, StudioAmsMappingEntry, StudioAmsMappingInfo, StudioNozzleInfo,
+    PrintCalibrationMode, PrintTransferFailure, StudioAmsMappingEntry, StudioAmsMappingInfo,
+    StudioNozzleInfo,
 };
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -71,6 +72,13 @@ struct SimpleFailure<'a> {
     error: &'a str,
 }
 
+#[derive(Serialize)]
+struct TransferFailure<'a> {
+    error: &'static str,
+    #[serde(flatten)]
+    failure: &'a PrintTransferFailure,
+}
+
 impl PrintFailure {
     pub(super) fn invalid(field: &'static str) -> Self {
         Self::field("invalid_print_param", field)
@@ -93,6 +101,17 @@ impl PrintFailure {
             code: -18,
             body: serde_json::to_string(&SimpleFailure { error: "cancelled" })
                 .expect("cancellation body is serializable"),
+        }
+    }
+
+    pub(super) fn job_failed(failure: &PrintTransferFailure) -> Self {
+        Self {
+            code: -19,
+            body: serde_json::to_string(&TransferFailure {
+                error: "job_failed",
+                failure,
+            })
+            .expect("print transfer failure body is serializable"),
         }
     }
 

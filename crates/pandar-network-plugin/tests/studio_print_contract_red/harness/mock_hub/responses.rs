@@ -152,9 +152,20 @@ pub(super) fn response_for(
             );
         }
         let poll = job_polls.fetch_add(1, Ordering::SeqCst);
-        let (state, print_status) = if case == "downstream_failure" {
-            ("failed", "pending")
-        } else if poll == 0 {
+        if case == "downstream_failure" {
+            return (
+                "HTTP/1.1 200 OK",
+                r#"{"studio_submission_id":38191,"job_status":"failed","print_status":"pending","failure":{"phase":"data_connection","cause":"start protected upload: 522 SSL connection failed: session reuse required"}}"#.to_owned(),
+            );
+        }
+        if case == "generic_downstream_failure" {
+            return (
+                "HTTP/1.1 200 OK",
+                r#"{"studio_submission_id":38191,"job_status":"failed","print_status":"pending"}"#
+                    .to_owned(),
+            );
+        }
+        let (state, print_status) = if poll == 0 {
             ("acknowledged", "pending")
         } else if case == "physical_abort_after_publish" {
             ("succeeded", "cancelled")

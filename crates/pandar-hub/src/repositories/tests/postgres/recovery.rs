@@ -47,14 +47,26 @@ async fn postgres_job_recovery_when_configured() {
     jobs.mark_print_sent(source.job.command_id, tenant.id, agent.id)
         .await
         .unwrap();
-    jobs.mark_print_failed(
+    let failure_json = r#"{"phase":"data_connection","cause":"agent offline"}"#;
+    jobs.mark_print_failed_with_result(
         source.job.command_id,
         tenant.id,
         agent.id,
         "agent offline".to_owned(),
+        Some(failure_json.to_owned()),
     )
     .await
     .unwrap();
+    assert_eq!(
+        commands
+            .get_for_tenant(tenant.id, source.job.command_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .result_json
+            .as_deref(),
+        Some(failure_json)
+    );
 
     let retried = jobs
         .retry_dispatch_with_audit(

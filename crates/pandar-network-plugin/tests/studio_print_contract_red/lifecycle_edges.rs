@@ -78,7 +78,7 @@ fn acknowledged_cancel_too_late_is_not_reported_as_cancelled() {
 }
 
 #[test]
-fn downstream_agent_failure_never_emits_finished() {
+fn typed_transfer_failure_reaches_studio_without_finished() {
     let evidence = run_probe("print", "downstream_failure");
     assert_eq!(evidence.output["rc"], serde_json::json!(-19));
     assert_eq!(evidence.output["stages"], serde_json::json!([0, 1, 2, 7]));
@@ -87,6 +87,24 @@ fn downstream_agent_failure_never_emits_finished() {
             .as_array()
             .unwrap()
             .contains(&serde_json::json!(6))
+    );
+    assert_eq!(
+        evidence.output["bodies"].as_array().unwrap().last(),
+        Some(&serde_json::json!(
+            r#"{"error":"job_failed","phase":"data_connection","cause":"start protected upload: 522 SSL connection failed: session reuse required"}"#
+        ))
+    );
+}
+
+#[test]
+fn generic_downstream_failure_keeps_legacy_job_failed_body() {
+    let evidence = run_probe("print", "generic_downstream_failure");
+
+    assert_eq!(evidence.output["rc"], serde_json::json!(-19));
+    assert_eq!(evidence.output["stages"], serde_json::json!([0, 1, 2, 7]));
+    assert_eq!(
+        evidence.output["bodies"].as_array().unwrap().last(),
+        Some(&serde_json::json!(r#"{"error":"job_failed"}"#))
     );
 }
 
