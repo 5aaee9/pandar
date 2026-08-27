@@ -1,4 +1,5 @@
 use anyhow::Context;
+use pandar_core::print_error::plate_mismatch;
 use pandar_core::{AgentId, AgentStatus, CommandRecord, CommandStatus, TenantId};
 use sea_orm::{ColumnTrait, DatabaseTransaction, EntityTrait, QueryFilter};
 
@@ -12,7 +13,6 @@ use crate::{
         RepositoryError, RepositoryResult, begin_current_agent_transaction,
         commands::{CommandRepository, ownership},
     },
-    routes::printer_operations::plate_mismatch::supports,
 };
 
 #[derive(Debug, Clone)]
@@ -166,7 +166,7 @@ fn validate_printer(
         || printer.print_error_session_id.as_deref() != Some(&input.expected_session_id)
         || !active_native_state
         || inactive_coarse_state
-        || !supports(&printer.serial_number, print_error, input.action)
+        || !plate_mismatch::supports(&printer.serial_number, print_error, input.action)
     {
         return Err(RepositoryError::PrinterControlUnavailable);
     }

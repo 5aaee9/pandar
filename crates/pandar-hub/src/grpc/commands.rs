@@ -8,7 +8,6 @@ pub use conversion::{
     CommandConversionOptions, hub_command_from_record, hub_command_from_record_with_options,
     live_printer_operation_hub_command,
 };
-pub use device_features::RequiredDeviceFeature;
 #[cfg(test)]
 pub(crate) use device_features::pause as required_feature_dispatch_pause;
 pub(super) use device_features::{

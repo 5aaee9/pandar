@@ -5,6 +5,8 @@ mod operations;
 
 use operations::proto_printer_operation;
 
+use super::device_features::required_feature_proto_value;
+
 use crate::repositories::{
     DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, PrinterOperationKind,
     PrinterOperationPayload, RefreshPrinterMaterialsPayload, ReloadPrinterConnectionPayload,
@@ -139,7 +141,8 @@ pub fn hub_command_from_record_with_options(
                 .operation
                 .required_device_features()
                 .iter()
-                .map(|feature| feature.proto_value())
+                .copied()
+                .map(required_feature_proto_value)
                 .collect();
             hub_command::Command::PrinterOperation(PrinterOperation {
                 serial_number: payload.serial_number,

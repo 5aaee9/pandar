@@ -1,7 +1,7 @@
+use pandar_core::RequiredDeviceFeature;
 use serde::Serialize;
 
 use super::{PrintErrorAction, PrinterAxis, PrinterOperationKind};
-use crate::grpc::commands::RequiredDeviceFeature;
 use crate::repositories::audit::{AuditMetadata, audit_metadata};
 
 pub fn operation_audit_metadata(

@@ -1,5 +1,7 @@
+use pandar_core::RequiredDeviceFeature;
+
 use super::{PrinterOperationRequest, invalid_printer_control, request_field::RequestField};
-use crate::{grpc::commands::RequiredDeviceFeature, routes::ApiError};
+use crate::routes::ApiError;
 
 pub(super) fn from_request(
     request: &PrinterOperationRequest,

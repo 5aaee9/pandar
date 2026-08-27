@@ -5,10 +5,10 @@ mod plugin;
 
 use super::{device_features, invalid_printer_control, request_field::RequestField};
 use crate::{
-    grpc::commands::RequiredDeviceFeature,
     repositories::{PrintErrorAction, PrinterAxis, PrinterAxisMovement, PrinterOperationKind},
     routes::ApiError,
 };
+use pandar_core::RequiredDeviceFeature;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

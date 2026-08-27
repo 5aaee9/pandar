@@ -1,5 +1,7 @@
+pub use pandar_core::PrintErrorAction;
 use pandar_core::{
-    AgentId, CommandId, CommandRecord, CommandStatus, H2cAutoNozzleMappingRequest, TenantId,
+    AgentId, CommandId, CommandRecord, CommandStatus, H2cAutoNozzleMappingRequest,
+    RequiredDeviceFeature, TenantId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -9,10 +11,7 @@ mod validate;
 pub use audit::operation_audit_metadata;
 pub use validate::validate_printer_operation;
 
-use crate::{
-    grpc::commands::RequiredDeviceFeature,
-    repositories::{CommandRepository, RepositoryResult},
-};
+use crate::repositories::{CommandRepository, RepositoryResult};
 
 use super::transitions::CommandTransition;
 
@@ -29,14 +28,6 @@ pub enum PrinterAxis {
     X,
     Y,
     Z,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PrintErrorAction {
-    Resume,
-    Ignore,
-    Stop,
 }
 
 impl PrinterAxis {

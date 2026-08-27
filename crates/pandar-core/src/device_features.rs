@@ -2,7 +2,6 @@ use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 use thiserror::Error;
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct BambuDeviceFeatures(u64);
 
@@ -94,6 +93,30 @@ pub enum BambuDeviceFeature {
 impl BambuDeviceFeature {
     pub const fn bit(self) -> u32 {
         self as u32
+    }
+}
+
+/// Device capability a printer operation requires before it may dispatch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RequiredDeviceFeature {
+    BambuMqttHoming,
+    BambuMqttAxisControl,
+}
+
+impl RequiredDeviceFeature {
+    pub const fn bambu_feature(self) -> BambuDeviceFeature {
+        match self {
+            Self::BambuMqttHoming => BambuDeviceFeature::MqttHoming,
+            Self::BambuMqttAxisControl => BambuDeviceFeature::MqttAxisControl,
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::BambuMqttHoming => "bambu_mqtt_homing",
+            Self::BambuMqttAxisControl => "bambu_mqtt_axis_control",
+        }
     }
 }
 

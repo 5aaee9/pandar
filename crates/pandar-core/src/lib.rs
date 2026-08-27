@@ -11,6 +11,7 @@ pub mod firmware;
 pub mod h2c;
 pub mod ids;
 pub mod job;
+pub mod print_error;
 pub mod printer;
 pub mod studio_print;
 pub mod tenant;
@@ -21,7 +22,9 @@ pub use command::{CommandRecord, CommandRecordParts, CommandStatus};
 pub use cooling::{
     PrinterCoolingFan, PrinterCoolingFanKind, PrinterCoolingMode, PrinterCoolingSystem,
 };
-pub use device_features::{BambuDeviceFeature, BambuDeviceFeatures, BambuDeviceFeaturesParseError};
+pub use device_features::{
+    BambuDeviceFeature, BambuDeviceFeatures, BambuDeviceFeaturesParseError, RequiredDeviceFeature,
+};
 pub use firmware::{
     AmsFirmwareDescriptor, AmsFirmwareSwitchState, FirmwareAcknowledgement, FirmwareCatalogEntry,
     FirmwareCatalogTarget, FirmwareCommand, FirmwareControlMetadata, FirmwareTerminalOutcome,
@@ -39,6 +42,7 @@ pub use job::{
     Job, JobArtifact, JobArtifactParts, JobFilamentUsage, JobParts, JobPrintState, JobStatus,
     PrintCalibrationMode, PrintStatus,
 };
+pub use print_error::PrintErrorAction;
 pub use printer::{Printer, PrinterNozzleTemperature, PrinterParts};
 pub use studio_print::{
     StudioAmsMappingEntry, StudioAmsMappingInfo, StudioFiniteF64, StudioNozzleInfo,

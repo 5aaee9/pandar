@@ -1,5 +1,4 @@
-use pandar_core::{AgentId, BambuDeviceFeature, CommandRecord, CommandStatus, TenantId};
-use serde::{Deserialize, Serialize};
+use pandar_core::{AgentId, CommandRecord, CommandStatus, RequiredDeviceFeature, TenantId};
 use tokio::sync::mpsc;
 use tonic::Status;
 
@@ -10,33 +9,11 @@ use super::{
 use crate::{AppState, repositories::PrinterOperationPayload, sessions::SessionToken};
 use pandar_protocol::agent::v1::{AgentCapability, DeviceFeature, HubCommand};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RequiredDeviceFeature {
-    BambuMqttHoming,
-    BambuMqttAxisControl,
-}
-
-impl RequiredDeviceFeature {
-    pub(crate) const fn bambu_feature(self) -> BambuDeviceFeature {
-        match self {
-            Self::BambuMqttHoming => BambuDeviceFeature::MqttHoming,
-            Self::BambuMqttAxisControl => BambuDeviceFeature::MqttAxisControl,
-        }
-    }
-
-    pub(crate) const fn proto_value(self) -> i32 {
-        match self {
-            Self::BambuMqttHoming => DeviceFeature::BambuMqttHoming as i32,
-            Self::BambuMqttAxisControl => DeviceFeature::BambuMqttAxisControl as i32,
-        }
-    }
-
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::BambuMqttHoming => "bambu_mqtt_homing",
-            Self::BambuMqttAxisControl => "bambu_mqtt_axis_control",
-        }
+/// Maps a required feature to its agent wire value.
+pub(crate) const fn required_feature_proto_value(feature: RequiredDeviceFeature) -> i32 {
+    match feature {
+        RequiredDeviceFeature::BambuMqttHoming => DeviceFeature::BambuMqttHoming as i32,
+        RequiredDeviceFeature::BambuMqttAxisControl => DeviceFeature::BambuMqttAxisControl as i32,
     }
 }
 
