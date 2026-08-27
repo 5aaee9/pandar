@@ -346,11 +346,11 @@ async fn stream_read_error_aborts_and_joins_blocked_normal_worker() {
 }
 
 #[tokio::test]
-async fn firmware_handler_error_stops_stream_and_is_not_discarded() {
+async fn firmware_protocol_rejection_is_acked_and_keeps_stream_alive() {
     let transport = BlockingMqttTransport::default();
     let gateway = gateway(transport);
     let generation = seed_firmware_generation(&gateway).await;
-    let (events, _event_receiver) = mpsc::channel(16);
+    let (events, mut event_receiver) = mpsc::channel(16);
     let (commands, command_receiver) = mpsc::channel(2);
     let task = tokio::spawn({
         let gateway = Arc::clone(&gateway);
@@ -370,13 +370,54 @@ async fn firmware_handler_error_stops_stream_and_is_not_discarded() {
         .await
         .unwrap();
 
+    match event_receiver.recv().await.unwrap().event {
+        Some(agent_event::Event::CommandAck(ack)) => {
+            assert!(!ack.accepted);
+            assert!(ack.error.contains("outer command id"));
+        }
+        other => panic!("expected rejected ack, got {other:?}"),
+    }
+
+    drop(commands);
+    let outcome = tokio::time::timeout(Duration::from_millis(250), task)
+        .await
+        .expect("protocol rejection must not stop stream reading")
+        .unwrap()
+        .unwrap();
+    assert_eq!(outcome, RunOutcome::ConnectedThenEnded);
+}
+
+#[tokio::test]
+async fn firmware_runtime_error_stops_stream_and_is_not_discarded() {
+    let gateway = gateway(BlockingMqttTransport::default());
+    let (events, event_receiver) = mpsc::channel(1);
+    drop(event_receiver);
+    let (commands, command_receiver) = mpsc::channel(2);
+    let task = tokio::spawn({
+        let gateway = Arc::clone(&gateway);
+        async move {
+            handle_command_stream_with_gateway(
+                &test_config(),
+                gateway,
+                &events,
+                ReceiverStream::new(command_receiver),
+                73,
+            )
+            .await
+        }
+    });
+    commands
+        .send(Ok(execute_command("runtime-id")))
+        .await
+        .unwrap();
+
     let error = tokio::time::timeout(Duration::from_millis(250), task)
         .await
-        .expect("firmware handler errors must stop stream reading")
+        .expect("firmware runtime errors must stop stream reading")
         .unwrap()
         .unwrap_err();
 
-    assert!(format!("{error:#}").contains("outer command id"));
+    assert!(format!("{error:#}").contains("run firmware command task"));
     drop(commands);
 }
 

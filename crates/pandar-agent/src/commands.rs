@@ -1,3 +1,4 @@
+use anyhow::Context;
 use tokio::sync::mpsc;
 
 mod artifacts;
@@ -34,6 +35,26 @@ use crate::{AgentConfig, machine::BambuMachineGateway};
 #[cfg(test)]
 pub(crate) use pandar_protocol::agent::v1::agent_event;
 use pandar_protocol::agent::v1::{AgentEvent, hub_command};
+
+/// Admission outcome for an inbound hub command. Illegal command input is a
+/// protocol rejection: acknowledge it and keep the reverse stream alive. Only
+/// queue or runtime failures may tear the stream down.
+pub(crate) enum CommandAdmission<T> {
+    Valid(T),
+    ProtocolReject(String),
+}
+
+pub(crate) async fn reject_protocol_command(
+    config: &AgentConfig,
+    sender: &mpsc::Sender<AgentEvent>,
+    command_id: &str,
+    reason: String,
+) -> anyhow::Result<()> {
+    sender
+        .send(rejected_ack_event(config, command_id, reason))
+        .await
+        .context("queue command protocol-rejection ack")
+}
 
 pub async fn handle_non_firmware_command_with_gateway<G>(
     config: &AgentConfig,
@@ -150,7 +171,16 @@ where
             | hub_command::Command::PrepareFirmwareControl(_)
             | hub_command::Command::ExecuteFirmwareControl(_),
         ) => anyhow::bail!("firmware command was misrouted to non-firmware worker"),
-        None => Ok(()),
+        None => {
+            reject_protocol_command(
+                config,
+                sender,
+                &command.command_id,
+                "hub command is missing its command payload".to_owned(),
+            )
+            .await?;
+            Ok(())
+        }
     }
 }
 

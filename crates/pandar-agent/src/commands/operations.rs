@@ -7,7 +7,8 @@ mod h2c;
 
 use super::{
     BambuMachineGateway, ack_event, failure_event, failure_event_with_result,
-    printer_materials_snapshot_event, rejected_ack_event, success_event_with_result,
+    printer_materials_snapshot_event, reject_protocol_command, rejected_ack_event,
+    success_event_with_result,
 };
 use crate::{
     AgentConfig,
@@ -42,10 +43,7 @@ where
     let operation = match parse_printer_operation(&command) {
         Ok(operation) => operation,
         Err(err) => {
-            sender
-                .send(rejected_ack_event(config, command_id, format!("{err:#}")))
-                .await
-                .context("queue printer-operation rejected ack")?;
+            reject_protocol_command(config, sender, command_id, format!("{err:#}")).await?;
             return Ok(());
         }
     };

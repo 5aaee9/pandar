@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use pandar_core::{FirmwareCommand as CoreFirmwareCommand, FirmwareTerminalOutcome};
 use tokio::sync::mpsc;
 
@@ -18,7 +18,10 @@ use pandar_protocol::agent::v1::{
 use pandar_protocol::{proto_module as proto_firmware_module, proto_upgrade_state};
 
 use super::responses::firmware_result_event;
-use super::{ack_event, events::event, failure_event, rejected_ack_event};
+use super::{
+    CommandAdmission, ack_event, events::event, failure_event, reject_protocol_command,
+    rejected_ack_event,
+};
 
 pub(crate) fn is_firmware_command(command: &pandar_protocol::agent::v1::HubCommand) -> bool {
     matches!(
@@ -87,7 +90,13 @@ pub(crate) async fn handle_firmware_command<G: FirmwareMachineGateway + ?Sized>(
             }
         }
         hub_command::Command::PrepareFirmwareControl(prepare) => {
-            require_matching_id(&outer_command_id, &prepare.command_id)?;
+            match require_matching_id(&outer_command_id, &prepare.command_id) {
+                CommandAdmission::Valid(()) => {}
+                CommandAdmission::ProtocolReject(reason) => {
+                    reject_protocol_command(config, sender, &outer_command_id, reason).await?;
+                    return Ok(());
+                }
+            }
             match gateway
                 .prepare_firmware_control(FirmwarePrepareRequest {
                     command_id: prepare.command_id.clone(),
@@ -123,8 +132,20 @@ pub(crate) async fn handle_firmware_command<G: FirmwareMachineGateway + ?Sized>(
             }
         }
         hub_command::Command::ExecuteFirmwareControl(execute) => {
-            require_matching_id(&outer_command_id, &execute.command_id)?;
-            let request = execute_request(execute, session_epoch)?;
+            match require_matching_id(&outer_command_id, &execute.command_id) {
+                CommandAdmission::Valid(()) => {}
+                CommandAdmission::ProtocolReject(reason) => {
+                    reject_protocol_command(config, sender, &outer_command_id, reason).await?;
+                    return Ok(());
+                }
+            }
+            let request = match execute_request(execute, session_epoch) {
+                CommandAdmission::Valid(request) => request,
+                CommandAdmission::ProtocolReject(reason) => {
+                    reject_protocol_command(config, sender, &outer_command_id, reason).await?;
+                    return Ok(());
+                }
+            };
             sender.send(ack_event(config, &outer_command_id)).await?;
             let serial = request.serial.clone();
             let generation = request.expected_generation;
@@ -222,56 +243,60 @@ async fn forward_firmware_phase(
     Ok(())
 }
 
-fn require_matching_id(outer: &str, inner: &str) -> anyhow::Result<()> {
+fn require_matching_id(outer: &str, inner: &str) -> CommandAdmission<()> {
     if outer != inner {
-        bail!("firmware outer command id does not match inner command id");
+        return CommandAdmission::ProtocolReject(
+            "firmware outer command id does not match inner command id".to_owned(),
+        );
     }
-    Ok(())
+    CommandAdmission::Valid(())
 }
 
 fn execute_request(
     execute: ExecuteFirmwareControl,
     session_epoch: u64,
-) -> anyhow::Result<FirmwareExecuteRequest> {
-    let command = execute
-        .command
-        .ok_or_else(|| anyhow!("execute firmware control is missing command"))?;
-    let command = match command
-        .command
-        .ok_or_else(|| anyhow!("execute firmware control is missing command variant"))?
-    {
-        firmware_command::Command::UpgradeConfirm(_) => CoreFirmwareCommand::UpgradeConfirm {
+) -> CommandAdmission<FirmwareExecuteRequest> {
+    let Some(command) = execute.command else {
+        return missing_command("execute firmware control is missing command");
+    };
+    let command = match command.command {
+        Some(firmware_command::Command::UpgradeConfirm(_)) => CoreFirmwareCommand::UpgradeConfirm {
             sequence_id: command.sequence_id,
             src_id: command.src_id,
         },
-        firmware_command::Command::ConsistencyConfirm(_) => {
+        Some(firmware_command::Command::ConsistencyConfirm(_)) => {
             CoreFirmwareCommand::ConsistencyConfirm {
                 sequence_id: command.sequence_id,
                 src_id: command.src_id,
             }
         }
-        firmware_command::Command::Start(start) => CoreFirmwareCommand::Start {
+        Some(firmware_command::Command::Start(start)) => CoreFirmwareCommand::Start {
             sequence_id: command.sequence_id,
             src_id: command.src_id,
             url: start.url,
             module: start.module,
             version: start.version,
         },
-        firmware_command::Command::SwitchAmsFirmware(switch) => {
+        Some(firmware_command::Command::SwitchAmsFirmware(switch)) => {
             CoreFirmwareCommand::SwitchAmsFirmware {
                 sequence_id: command.sequence_id,
                 src_id: command.src_id,
                 id: switch.id,
             }
         }
+        None => return missing_command("execute firmware control is missing command variant"),
     };
-    Ok(FirmwareExecuteRequest {
+    CommandAdmission::Valid(FirmwareExecuteRequest {
         command_id: execute.command_id,
         serial: execute.serial,
         expected_generation: execute.expected_generation,
         session_epoch,
         command,
     })
+}
+
+fn missing_command(reason: &'static str) -> CommandAdmission<FirmwareExecuteRequest> {
+    CommandAdmission::ProtocolReject(reason.to_owned())
 }
 
 fn proto_control_result(

@@ -57,6 +57,65 @@ async fn firmware_command_misroute_is_an_internal_worker_error() {
 }
 
 #[tokio::test]
+async fn execute_firmware_control_missing_command_is_a_protocol_rejection() {
+    let gateway = RecordingFirmwareGateway::default();
+    let (sender, mut receiver) = mpsc::channel(4);
+
+    handle_firmware_command(
+        &test_config(),
+        &gateway,
+        &sender,
+        "execute".into(),
+        hub_command::Command::ExecuteFirmwareControl(ExecuteFirmwareControl {
+            command_id: "execute".into(),
+            serial: "SERIAL".into(),
+            expected_generation: 7,
+            command: None,
+        }),
+        81,
+    )
+    .await
+    .unwrap();
+
+    assert!(gateway.calls().await.is_empty());
+    match receiver.recv().await.unwrap().event {
+        Some(agent_event::Event::CommandAck(ack)) => {
+            assert!(!ack.accepted);
+            assert!(ack.error.contains("missing command"));
+        }
+        other => panic!("expected rejected ack, got {other:?}"),
+    }
+    assert!(receiver.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn hub_command_without_payload_is_a_protocol_rejection() {
+    let (sender, mut receiver) = mpsc::channel(4);
+
+    handle_command_with_reader(
+        &test_config(),
+        &NoopMachineGateway,
+        &crate::commands::FilesystemArtifactReader::new(std::path::PathBuf::new()),
+        &sender,
+        HubCommand {
+            command_id: "empty".into(),
+            command: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    match receiver.recv().await.unwrap().event {
+        Some(agent_event::Event::CommandAck(ack)) => {
+            assert!(!ack.accepted);
+            assert!(ack.error.contains("missing its command payload"));
+        }
+        other => panic!("expected rejected ack, got {other:?}"),
+    }
+    assert!(receiver.try_recv().is_err());
+}
+
+#[tokio::test]
 async fn live_firmware_dispatcher_routes_refresh_prepare_and_execute_to_gateway() {
     let gateway = RecordingFirmwareGateway::default();
     let (sender, _receiver) = mpsc::channel(16);
@@ -210,7 +269,7 @@ async fn firmware_id_mismatch_is_rejected_before_gateway_dispatch() {
         let gateway = RecordingFirmwareGateway::default();
         let (sender, mut receiver) = mpsc::channel(4);
 
-        let error = handle_firmware_command(
+        handle_firmware_command(
             &test_config(),
             &gateway,
             &sender,
@@ -219,10 +278,16 @@ async fn firmware_id_mismatch_is_rejected_before_gateway_dispatch() {
             82,
         )
         .await
-        .unwrap_err();
+        .unwrap();
 
-        assert!(format!("{error:#}").contains("outer command id"));
         assert!(gateway.calls().await.is_empty());
+        match receiver.recv().await.unwrap().event {
+            Some(agent_event::Event::CommandAck(ack)) => {
+                assert!(!ack.accepted);
+                assert!(ack.error.contains("outer command id"));
+            }
+            other => panic!("expected rejected ack, got {other:?}"),
+        }
         assert!(receiver.try_recv().is_err());
     }
 }
