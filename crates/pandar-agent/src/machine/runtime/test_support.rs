@@ -1,5 +1,6 @@
 use std::{collections::VecDeque, sync::Arc};
 
+use anyhow::Context;
 use async_trait::async_trait;
 use tokio::sync::Notify;
 
@@ -41,7 +42,7 @@ pub(crate) struct TestRuntimeBambuMachineGateway<T, F> {
 
 impl<T, F> TestRuntimeBambuMachineGateway<T, F>
 where
-    T: BambuMqttTransport + Send + Sync,
+    T: BambuMqttTransport + Clone + Send + Sync,
     F: MachineFileTransfer + Clone + Send + Sync,
 {
     pub(crate) fn new(
@@ -84,6 +85,16 @@ where
 
     pub(crate) async fn set_discovered_printers(&self, printers: Vec<DiscoveredPrinter>) {
         *self.discovered_printers.lock().await = printers;
+    }
+
+    pub(crate) async fn replace_printer_for_test(
+        &self,
+        endpoint: BambuPrinterEndpoint,
+        transport: T,
+    ) {
+        let mut inner = self.inner.lock().await;
+        self.device_features.invalidate(&endpoint.serial).await;
+        inner.replace_printer(endpoint, transport, self.transfer.clone());
     }
 
     pub(crate) async fn push_command_transport(&self, transport: T) {
@@ -131,51 +142,22 @@ where
             task.abort();
             let _ = task.await;
         }
+        let failures = super::prepare_session_device_features(
+            &self.inner,
+            &self.device_features,
+            config,
+            sender,
+            self.report_timeout,
+        )
+        .await?;
+        for (serial, error) in failures {
+            tracing::warn!(
+                serial = %serial,
+                error = %format!("{error:#}"),
+                "printer device feature probe failed"
+            );
+        }
         let endpoints = self.inner.lock().await.endpoints();
-        for endpoint in &endpoints {
-            self.device_features.invalidate(&endpoint.serial).await;
-            sender
-                .send(crate::machine::mqtt::feature_event(
-                    config,
-                    endpoint.serial.clone(),
-                    None,
-                ))
-                .await
-                .with_context(|| {
-                    format!(
-                        "queue printer {} device feature invalidation",
-                        endpoint.serial
-                    )
-                })?;
-        }
-        for endpoint in &endpoints {
-            let observation = self
-                .inner
-                .lock()
-                .await
-                .probe_device_features(&endpoint.serial, &self.device_features)
-                .await;
-            match observation {
-                Ok(value) => sender
-                    .send(crate::machine::mqtt::feature_event(
-                        config,
-                        endpoint.serial.clone(),
-                        Some(value),
-                    ))
-                    .await
-                    .with_context(|| {
-                        format!(
-                            "queue printer {} device feature observation",
-                            endpoint.serial
-                        )
-                    })?,
-                Err(error) => tracing::warn!(
-                    serial = %endpoint.serial,
-                    error = %format!("{error:#}"),
-                    "printer device feature probe failed"
-                ),
-            }
-        }
         self.pause_before_report_task_replacement().await;
         let mut tasks = self.report_tasks.lock().await;
         for endpoint in endpoints {

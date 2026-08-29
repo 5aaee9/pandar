@@ -3,7 +3,7 @@ use crate::{
     machine::{MachineSnapshot, MaterialRefreshResult},
 };
 use pandar_protocol::agent::v1::{
-    AgentEvent, CommandAck, CommandResult, FirmwareCommandResult, PrinterSnapshot, agent_event,
+    AgentEvent, CommandAck, CommandResult, FirmwareCommandResult, agent_event,
 };
 
 use super::events::event;
@@ -122,51 +122,7 @@ fn printer_snapshot_event_with_connection_authority(
     event(
         config,
         "printer-snapshot",
-        agent_event::Event::PrinterSnapshot(PrinterSnapshot {
-            serial: snapshot.serial,
-            host: snapshot.host.unwrap_or_default(),
-            access_code: snapshot.access_code.unwrap_or_default(),
-            name: snapshot.name,
-            state: snapshot.state.unwrap_or_default(),
-            model: snapshot.model.unwrap_or_default(),
-            nozzle_temperatures: snapshot
-                .nozzle_temperatures
-                .into_iter()
-                .map(
-                    |temperature| pandar_protocol::agent::v1::NozzleTemperature {
-                        label: temperature.label.unwrap_or_default(),
-                        current_celsius: temperature.current_celsius.unwrap_or_default(),
-                        target_celsius: temperature.target_celsius.unwrap_or_default(),
-                        diameter_mm: temperature.diameter_mm.unwrap_or_default(),
-                        nozzle_type: temperature.nozzle_type.unwrap_or_default(),
-                        snow: temperature.snow,
-                        hnow: temperature.hnow,
-                    },
-                )
-                .collect(),
-            bed_temperature_celsius: snapshot.bed_temperature_celsius.unwrap_or_default(),
-            bed_target_temperature_celsius: snapshot
-                .bed_target_temperature_celsius
-                .unwrap_or_default(),
-            chamber_temperature_celsius: snapshot.chamber_temperature_celsius.unwrap_or_default(),
-            chamber_target_temperature_celsius: snapshot
-                .chamber_target_temperature_celsius
-                .unwrap_or_default(),
-            active_nozzle: snapshot.active_nozzle.unwrap_or_default(),
-            chamber_light_on: snapshot.chamber_light_on,
-            device_features: pandar_protocol::proto_device_features(
-                snapshot.device_features,
-                snapshot.device_features2,
-            ),
-            connection_authoritative,
-            telemetry_authoritative: snapshot.telemetry_authoritative,
-            nozzle_system: snapshot
-                .nozzle_system
-                .map(pandar_protocol::proto_nozzle_system),
-            cooling_system: snapshot
-                .cooling_system
-                .map(pandar_protocol::proto_cooling_system),
-        }),
+        agent_event::Event::PrinterSnapshot(snapshot.into_proto(connection_authoritative)),
     )
 }
 

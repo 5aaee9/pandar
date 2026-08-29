@@ -4,7 +4,6 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Context;
 #[cfg(test)]
 use tokio::time::sleep;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -20,7 +19,7 @@ use crate::{
         BambuMachineGateway, BambuPrinterEndpoint, ConfiguredBambuMachineGateway,
         DeviceFeatureCache, FirmwareObservationCache, FirmwareReportContext,
         diagnostics::PrinterEndpointSecrets,
-        mqtt::{FirmwareMqttTaskSet, RumqttcBambuMqttTransport, feature_event},
+        mqtt::{FirmwareMqttTaskSet, RumqttcBambuMqttTransport},
     },
 };
 use pandar_protocol::agent::v1::AgentEvent;
@@ -45,6 +44,7 @@ pub(crate) use firmware::{
     RuntimeReportContext, forward_print_reports_with_firmware_retry,
     refresh_runtime_printers_with_firmware,
 };
+use session::prepare_session_device_features;
 
 #[cfg(test)]
 type LinkValidationResult = anyhow::Result<(PrinterRefreshResult, FirmwareVersionObservation)>;
@@ -127,48 +127,21 @@ impl RuntimeBambuMachineGateway {
             .await?;
         self.queue_configured_printer_rows(&endpoints, sender)
             .await?;
-        for endpoint in &endpoints {
-            self.device_features.invalidate(&endpoint.serial).await;
-            sender
-                .send(feature_event(&self.config, endpoint.serial.clone(), None))
-                .await
-                .with_context(|| {
-                    format!(
-                        "queue printer {} device feature invalidation",
-                        endpoint.serial
-                    )
-                })?;
-        }
-        for endpoint in &endpoints {
-            let observation = self
-                .inner
-                .lock()
-                .await
-                .probe_device_features(&endpoint.serial, &self.device_features)
-                .await;
-            match observation {
-                Ok(value) => sender
-                    .send(feature_event(
-                        &self.config,
-                        endpoint.serial.clone(),
-                        Some(value),
-                    ))
-                    .await
-                    .with_context(|| {
-                        format!(
-                            "queue printer {} device feature observation",
-                            endpoint.serial
-                        )
-                    })?,
-                Err(error) => {
-                    let error = self.redact_error(&format!("{error:#}"));
-                    tracing::warn!(
-                        serial = %endpoint.serial,
-                        error = %error,
-                        "printer device feature probe failed"
-                    );
-                }
-            }
+        let failures = prepare_session_device_features(
+            &self.inner,
+            &self.device_features,
+            &self.config,
+            sender,
+            self.report_timeout,
+        )
+        .await?;
+        for (serial, error) in failures {
+            let error = self.redact_error(&format!("{error:#}"));
+            tracing::warn!(
+                serial = %serial,
+                error = %error,
+                "printer device feature probe failed"
+            );
         }
         self.start_initial_report_forwarders(sender).await?;
         Ok(())
@@ -361,7 +334,11 @@ pub(crate) async fn forward_print_reports_with_retry<T>(
                 );
                 cache.invalidate(&endpoint.serial).await;
                 if sender
-                    .send(feature_event(&config, endpoint.serial.clone(), None))
+                    .send(crate::machine::mqtt::feature_event(
+                        &config,
+                        endpoint.serial.clone(),
+                        None,
+                    ))
                     .await
                     .is_err()
                 {

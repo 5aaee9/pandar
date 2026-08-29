@@ -46,6 +46,19 @@ pub(crate) async fn probe_device_features<T>(
 where
     T: BambuMqttTransport + ?Sized,
 {
+    let value = observe_device_features(transport, endpoint, report_timeout).await?;
+    cache.update(&endpoint.serial, value).await;
+    Ok(value)
+}
+
+pub(crate) async fn observe_device_features<T>(
+    transport: &T,
+    endpoint: &BambuPrinterEndpoint,
+    report_timeout: Duration,
+) -> anyhow::Result<BambuDeviceFeatures>
+where
+    T: BambuMqttTransport + ?Sized,
+{
     let reports = MachineReports::new(transport);
     let topics = BambuMqttTopics::for_serial(&endpoint.serial);
     reports
@@ -98,7 +111,6 @@ where
         let Some(value) = interpreted.features.primary else {
             continue;
         };
-        cache.update(&endpoint.serial, value).await;
         return Ok(value);
     }
 }

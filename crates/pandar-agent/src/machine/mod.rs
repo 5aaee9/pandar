@@ -17,7 +17,7 @@ mod transfer;
 mod types;
 mod unavailable_transfer;
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use crate::AgentConfig;
 use anyhow::bail;
@@ -122,11 +122,16 @@ pub trait BambuMachineGateway: Send + Sync {
 #[derive(Debug)]
 pub struct ConfiguredBambuMachineGateway<T, F = BambuMachineFileTransfer> {
     printers: Vec<(BambuPrinterEndpoint, T, F)>,
+    printer_revisions: HashMap<String, u64>,
     report_timeout: Duration,
 }
 
 impl<T> ConfiguredBambuMachineGateway<T> {
     pub fn new(printers: Vec<(BambuPrinterEndpoint, T)>, report_timeout: Duration) -> Self {
+        let printer_revisions = printers
+            .iter()
+            .map(|(endpoint, _)| (endpoint.serial.clone(), 0))
+            .collect();
         Self {
             printers: printers
                 .into_iter()
@@ -135,6 +140,7 @@ impl<T> ConfiguredBambuMachineGateway<T> {
                     (endpoint, mqtt, transfer)
                 })
                 .collect(),
+            printer_revisions,
             report_timeout,
         }
     }
@@ -277,6 +283,31 @@ impl<T, F> ConfiguredBambuMachineGateway<T, F> {
             .map(|(endpoint, transport, _)| (endpoint.clone(), transport.clone()))
     }
 
+    pub(crate) fn device_feature_probe_targets(&self) -> Vec<(BambuPrinterEndpoint, T, u64)>
+    where
+        T: Clone,
+    {
+        self.printers
+            .iter()
+            .map(|(endpoint, transport, _)| {
+                (
+                    endpoint.clone(),
+                    transport.clone(),
+                    self.printer_revisions[&endpoint.serial],
+                )
+            })
+            .collect()
+    }
+
+    pub(crate) fn device_feature_probe_is_current(
+        &self,
+        endpoint: &BambuPrinterEndpoint,
+        revision: u64,
+    ) -> bool {
+        self.endpoint(&endpoint.serial).as_ref() == Some(endpoint)
+            && self.printer_revisions.get(&endpoint.serial) == Some(&revision)
+    }
+
     pub(crate) async fn probe_device_features(
         &self,
         serial_number: &str,
@@ -316,6 +347,11 @@ impl<T, F> ConfiguredBambuMachineGateway<T, F> {
     }
 
     pub fn replace_printer(&mut self, endpoint: BambuPrinterEndpoint, mqtt: T, transfer: F) {
+        let revision = self
+            .printer_revisions
+            .entry(endpoint.serial.clone())
+            .or_default();
+        *revision += 1;
         self.printers
             .retain(|(existing, _, _)| existing.serial != endpoint.serial);
         self.printers.push((endpoint, mqtt, transfer));
@@ -325,8 +361,13 @@ impl<T, F> ConfiguredBambuMachineGateway<T, F> {
         printers: Vec<(BambuPrinterEndpoint, T, F)>,
         report_timeout: Duration,
     ) -> Self {
+        let printer_revisions = printers
+            .iter()
+            .map(|(endpoint, _, _)| (endpoint.serial.clone(), 0))
+            .collect();
         Self {
             printers,
+            printer_revisions,
             report_timeout,
         }
     }

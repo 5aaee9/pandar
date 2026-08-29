@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use pandar_core::{BambuDeviceFeatures, BambuNozzleSystem, PrinterCoolingSystem};
+use pandar_protocol::agent::v1::{NozzleTemperature, PrinterSnapshot};
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
 
@@ -44,6 +45,50 @@ pub struct MachineNozzleTemperature {
     pub nozzle_type: Option<String>,
     pub snow: Option<u32>,
     pub hnow: Option<u32>,
+}
+
+impl MachineSnapshot {
+    pub(crate) fn into_proto(self, connection_authoritative: bool) -> PrinterSnapshot {
+        PrinterSnapshot {
+            serial: self.serial,
+            host: self.host.unwrap_or_default(),
+            access_code: self.access_code.unwrap_or_default(),
+            name: self.name,
+            state: self.state.unwrap_or_default(),
+            model: self.model.unwrap_or_default(),
+            nozzle_temperatures: self
+                .nozzle_temperatures
+                .into_iter()
+                .map(|temperature| NozzleTemperature {
+                    label: temperature.label.unwrap_or_default(),
+                    current_celsius: temperature.current_celsius.unwrap_or_default(),
+                    target_celsius: temperature.target_celsius.unwrap_or_default(),
+                    diameter_mm: temperature.diameter_mm.unwrap_or_default(),
+                    nozzle_type: temperature.nozzle_type.unwrap_or_default(),
+                    snow: temperature.snow,
+                    hnow: temperature.hnow,
+                })
+                .collect(),
+            bed_temperature_celsius: self.bed_temperature_celsius.unwrap_or_default(),
+            bed_target_temperature_celsius: self.bed_target_temperature_celsius.unwrap_or_default(),
+            chamber_temperature_celsius: self.chamber_temperature_celsius.unwrap_or_default(),
+            chamber_target_temperature_celsius: self
+                .chamber_target_temperature_celsius
+                .unwrap_or_default(),
+            active_nozzle: self.active_nozzle.unwrap_or_default(),
+            chamber_light_on: self.chamber_light_on,
+            device_features: pandar_protocol::proto_device_features(
+                self.device_features,
+                self.device_features2,
+            ),
+            connection_authoritative,
+            telemetry_authoritative: self.telemetry_authoritative,
+            nozzle_system: self.nozzle_system.map(pandar_protocol::proto_nozzle_system),
+            cooling_system: self
+                .cooling_system
+                .map(pandar_protocol::proto_cooling_system),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

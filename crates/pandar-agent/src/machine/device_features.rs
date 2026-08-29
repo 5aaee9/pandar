@@ -27,7 +27,7 @@ impl DeviceFeatureLease {
         *self.entry.value.read().unwrap()
     }
 
-    fn set(&self, value: Option<BambuDeviceFeatures>) {
+    pub(crate) fn set(&self, value: Option<BambuDeviceFeatures>) {
         *self.entry.value.write().unwrap() = value;
     }
 }

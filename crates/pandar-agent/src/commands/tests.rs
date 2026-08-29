@@ -35,8 +35,8 @@ use tokio::{sync::Mutex, sync::mpsc};
 use super::handle_non_firmware_command_with_gateway as handle_command_with_gateway;
 use super::*;
 use crate::machine::{
-    BambuMachineGateway, BambuPrinterEndpoint, FirmwareObservationCache, MachineSnapshot,
-    MaterialRefreshResult, NoopMachineGateway, PrintProjectDispatchResult,
+    BambuMachineGateway, BambuPrinterEndpoint, FirmwareObservationCache, MachineNozzleTemperature,
+    MachineSnapshot, MaterialRefreshResult, NoopMachineGateway, PrintProjectDispatchResult,
     PrinterOperation as MachinePrinterOperation, PrinterRefreshResult,
     diagnostics::PrinterDiagnosticResult,
     discovery::{DiscoveredPrinter, PrinterDiscoveryResult},
@@ -236,6 +236,46 @@ fn snapshot(serial: &str, name: &str, model: Option<&str>, state: &str) -> Machi
         nozzle_system: None,
         telemetry_authoritative: true,
     }
+}
+
+#[test]
+fn command_and_mqtt_snapshot_events_share_the_machine_projection() {
+    let mut snapshot = snapshot("SERIAL1", "office", Some("X1 Carbon"), "RUNNING");
+    snapshot.nozzle_temperatures = vec![MachineNozzleTemperature {
+        label: Some("left".to_owned()),
+        current_celsius: Some("215".to_owned()),
+        target_celsius: Some("220".to_owned()),
+        diameter_mm: Some("0.4".to_owned()),
+        nozzle_type: Some("hardened_steel".to_owned()),
+        snow: Some(1),
+        hnow: Some(2),
+    }];
+    snapshot.active_nozzle = Some("left".to_owned());
+    snapshot.bed_temperature_celsius = Some("55".to_owned());
+    snapshot.bed_target_temperature_celsius = Some("60".to_owned());
+    snapshot.chamber_temperature_celsius = Some("35".to_owned());
+    snapshot.chamber_target_temperature_celsius = Some("40".to_owned());
+    snapshot.chamber_light_on = Some(true);
+    snapshot.device_features = Some(BambuDeviceFeatures::from_bits(0x41));
+
+    let command = responses::printer_snapshot_event(&test_config(), snapshot.clone());
+    let mqtt = crate::machine::mqtt::printer_snapshot_event(&test_config(), snapshot.clone());
+    let authoritative = authoritative_printer_snapshot_event(&test_config(), snapshot);
+    let Some(agent_event::Event::PrinterSnapshot(command)) = command.event else {
+        panic!("expected command printer snapshot");
+    };
+    let Some(agent_event::Event::PrinterSnapshot(mqtt)) = mqtt.event else {
+        panic!("expected MQTT printer snapshot");
+    };
+    let Some(agent_event::Event::PrinterSnapshot(mut authoritative)) = authoritative.event else {
+        panic!("expected authoritative printer snapshot");
+    };
+
+    assert_eq!(command, mqtt);
+    assert!(!command.connection_authoritative);
+    assert!(authoritative.connection_authoritative);
+    authoritative.connection_authoritative = false;
+    assert_eq!(command, authoritative);
 }
 
 fn assert_snapshot(event: AgentEvent, serial: &str, name: &str, model: &str, state: &str) {

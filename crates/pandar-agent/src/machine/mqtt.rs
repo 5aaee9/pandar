@@ -30,7 +30,7 @@ pub use commands::{
     ProjectFileAmsMapping2, ProjectFileAmsMappingInfo, ProjectFileCommand, SetFanSpeedCommand,
     SetNozzleTemperatureCommand,
 };
-pub(crate) use device_features::{feature_event, probe_device_features};
+pub(crate) use device_features::{feature_event, observe_device_features, probe_device_features};
 #[cfg(test)]
 pub(crate) use fake::FakeMqttTransport;
 pub(crate) use firmware::{
@@ -57,6 +57,7 @@ pub(crate) use reports::{
 #[cfg(test)]
 pub(crate) use reports::{
     forward_print_reports, forward_print_reports_with_firmware, print_job_report_event,
+    printer_snapshot_event,
 };
 #[cfg(test)]
 pub(crate) use rumqttc::TlsConfiguration;

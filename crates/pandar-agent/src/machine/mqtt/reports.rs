@@ -15,9 +15,7 @@ use crate::{
     AgentConfig,
     machine::{BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult},
 };
-use pandar_protocol::agent::v1::{
-    AgentEvent, NozzleTemperature, PrinterMaterialsSnapshot, PrinterSnapshot, agent_event,
-};
+use pandar_protocol::agent::v1::{AgentEvent, PrinterMaterialsSnapshot, agent_event};
 
 use super::{MachineReportDiagnostic, MachineReportDiagnosticPayload, PrintReportProgress};
 use diagnostics::{bounded_u32, collect_hms_diagnostics, print_error_payload, trimmed_string};
@@ -96,53 +94,17 @@ pub fn printer_materials_snapshot_event(
     }
 }
 
-fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> AgentEvent {
+pub(crate) fn printer_snapshot_event(
+    config: &AgentConfig,
+    snapshot: MachineSnapshot,
+) -> AgentEvent {
+    let event_id = format!("printer-snapshot-{}", snapshot.serial);
     AgentEvent {
         agent_id: config.agent_id.clone(),
         tenant_id: config.tenant_id.clone(),
-        event_id: format!("printer-snapshot-{}", snapshot.serial),
-        event: Some(agent_event::Event::PrinterSnapshot(PrinterSnapshot {
-            serial: snapshot.serial,
-            host: snapshot.host.unwrap_or_default(),
-            access_code: snapshot.access_code.unwrap_or_default(),
-            name: snapshot.name,
-            state: snapshot.state.unwrap_or_default(),
-            model: snapshot.model.unwrap_or_default(),
-            nozzle_temperatures: snapshot
-                .nozzle_temperatures
-                .into_iter()
-                .map(|temperature| NozzleTemperature {
-                    label: temperature.label.unwrap_or_default(),
-                    current_celsius: temperature.current_celsius.unwrap_or_default(),
-                    target_celsius: temperature.target_celsius.unwrap_or_default(),
-                    diameter_mm: temperature.diameter_mm.unwrap_or_default(),
-                    nozzle_type: temperature.nozzle_type.unwrap_or_default(),
-                    snow: temperature.snow,
-                    hnow: temperature.hnow,
-                })
-                .collect(),
-            bed_temperature_celsius: snapshot.bed_temperature_celsius.unwrap_or_default(),
-            bed_target_temperature_celsius: snapshot
-                .bed_target_temperature_celsius
-                .unwrap_or_default(),
-            chamber_temperature_celsius: snapshot.chamber_temperature_celsius.unwrap_or_default(),
-            chamber_target_temperature_celsius: snapshot
-                .chamber_target_temperature_celsius
-                .unwrap_or_default(),
-            active_nozzle: snapshot.active_nozzle.unwrap_or_default(),
-            chamber_light_on: snapshot.chamber_light_on,
-            device_features: pandar_protocol::proto_device_features(
-                snapshot.device_features,
-                snapshot.device_features2,
-            ),
-            connection_authoritative: false,
-            telemetry_authoritative: snapshot.telemetry_authoritative,
-            nozzle_system: snapshot
-                .nozzle_system
-                .map(pandar_protocol::proto_nozzle_system),
-            cooling_system: snapshot
-                .cooling_system
-                .map(pandar_protocol::proto_cooling_system),
-        })),
+        event_id,
+        event: Some(agent_event::Event::PrinterSnapshot(
+            snapshot.into_proto(false),
+        )),
     }
 }

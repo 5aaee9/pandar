@@ -99,6 +99,145 @@ async fn device_features_session_startup_precedes_queued_command_and_refreshes_z
 }
 
 #[tokio::test]
+async fn device_features_session_startup_probes_independent_printers_concurrently() {
+    let first = PausedMqttTransport::new_with_feature("1");
+    let second = PausedMqttTransport::new_with_feature("2");
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = std::sync::Arc::new(TestRuntimeBambuMachineGateway::new(
+        vec![
+            (
+                runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+                first.clone(),
+                transfer.clone(),
+            ),
+            (
+                runtime_endpoint("SERIAL2", "workshop", "ACCESS-2"),
+                second.clone(),
+                transfer.clone(),
+            ),
+        ],
+        transfer,
+        Duration::from_secs(1),
+    ));
+    let (sender, mut events) = mpsc::channel(8);
+
+    let prepare = tokio::spawn({
+        let gateway = std::sync::Arc::clone(&gateway);
+        async move { gateway.prepare_session(&test_config(), &sender).await }
+    });
+    assert_eq!(feature_event_bits(events.recv().await.unwrap()), None);
+    assert_eq!(feature_event_bits(events.recv().await.unwrap()), None);
+    tokio::time::timeout(Duration::from_secs(1), async {
+        tokio::join!(first.wait_until_blocked(), second.wait_until_blocked());
+    })
+    .await
+    .expect("both printer probes should start before either probe completes");
+
+    first.release();
+    second.release();
+    prepare.await.unwrap().unwrap();
+
+    assert_eq!(feature_event_bits(events.recv().await.unwrap()), Some(1));
+    assert_eq!(feature_event_bits(events.recv().await.unwrap()), Some(2));
+}
+
+#[tokio::test]
+async fn device_features_session_startup_bounds_concurrent_probes() {
+    let probes = (0..9)
+        .map(|_| PausedMqttTransport::new_with_feature("1"))
+        .collect::<Vec<_>>();
+    let transfer = FakeMachineFileTransfer::default();
+    let printers = probes
+        .iter()
+        .enumerate()
+        .map(|(index, transport)| {
+            (
+                runtime_endpoint(
+                    &format!("SERIAL-{index}"),
+                    &format!("printer-{index}"),
+                    &format!("ACCESS-{index}"),
+                ),
+                transport.clone(),
+                transfer.clone(),
+            )
+        })
+        .collect();
+    let gateway = std::sync::Arc::new(TestRuntimeBambuMachineGateway::new(
+        printers,
+        transfer,
+        Duration::from_secs(1),
+    ));
+    let (sender, mut events) = mpsc::channel(32);
+
+    let prepare = tokio::spawn({
+        let gateway = std::sync::Arc::clone(&gateway);
+        async move { gateway.prepare_session(&test_config(), &sender).await }
+    });
+    for _ in 0..probes.len() {
+        assert_eq!(feature_event_bits(events.recv().await.unwrap()), None);
+    }
+    tokio::time::timeout(Duration::from_secs(1), async {
+        for probe in &probes[..8] {
+            probe.wait_until_blocked().await;
+        }
+    })
+    .await
+    .expect("the first eight probes should fill the concurrency window");
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), probes[8].wait_until_blocked())
+            .await
+            .is_err(),
+        "the ninth probe started before a bounded slot was released"
+    );
+
+    probes[0].release();
+    tokio::time::timeout(Duration::from_secs(1), probes[8].wait_until_blocked())
+        .await
+        .expect("the ninth probe should start after a slot is released");
+    for probe in &probes[1..] {
+        probe.release();
+    }
+    prepare.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn device_features_session_startup_discards_replaced_endpoint_probe() {
+    let stale = PausedMqttTransport::new_with_feature("8000004100000020");
+    let replacement = PausedMqttTransport::ready("X1 Carbon", "READY");
+    let transfer = FakeMachineFileTransfer::default();
+    let endpoint = runtime_endpoint("SERIAL1", "office", "ACCESS-1");
+    let gateway = std::sync::Arc::new(TestRuntimeBambuMachineGateway::new(
+        vec![(endpoint.clone(), stale.clone(), transfer.clone())],
+        transfer,
+        Duration::from_secs(1),
+    ));
+    let cache = gateway.device_feature_cache();
+    let (sender, mut events) = mpsc::channel(4);
+
+    let prepare = tokio::spawn({
+        let gateway = std::sync::Arc::clone(&gateway);
+        async move { gateway.prepare_session(&test_config(), &sender).await }
+    });
+    assert_eq!(feature_event_bits(events.recv().await.unwrap()), None);
+    stale.wait_until_blocked().await;
+
+    tokio::time::timeout(
+        Duration::from_secs(1),
+        gateway.replace_printer_for_test(endpoint, replacement),
+    )
+    .await
+    .expect("endpoint replacement must not wait for stale probe network I/O");
+    stale.release();
+    prepare.await.unwrap().unwrap();
+
+    assert_eq!(cache.get("SERIAL1").await, None);
+    assert!(
+        events.try_recv().is_err(),
+        "stale observation was forwarded"
+    );
+}
+
+#[tokio::test]
 async fn device_features_session_startup_aborts_stale_report_cache_writer() {
     let transport = FakeMqttTransport::with_reports([runtime_fun_only_report("0")]);
     let transfer = FakeMachineFileTransfer::default();
