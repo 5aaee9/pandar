@@ -8,8 +8,6 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-use std::slice;
-
 use anyhow::{Context, ensure};
 
 use crate::{PluginHttpResult, result, stable_error_body};
@@ -18,7 +16,7 @@ use runtime::canonical_hub_identity;
 use runtime::pandar_plugin_account_debug_consistent;
 use types::{
     LocalServerBaseUrl, LocalServerConfig, LoginEnvelope, LoginEnvelopeData, PersistedLogin,
-    Profile, SessionInput, SessionKind, StudioProfile, StudioToken, parse_profile,
+    Profile, SessionInput, SessionKind, StudioProfile, StudioToken, borrowed, parse_profile,
 };
 
 type AccountVisitor = unsafe extern "C" fn(
@@ -36,30 +34,6 @@ type AccountVisitor = unsafe extern "C" fn(
     i32,
 );
 const ACCOUNT_FAILURE: &str = "account_state_unavailable";
-
-pub type AccountTenantVisitor = extern "C" fn(*mut std::ffi::c_void, *const u8, usize);
-
-/// Extracts `tenant_id` from a canonical account profile JSON and hands it to
-/// `visitor(context, ptr, len)` (the slice may be empty). Returns 0 when the
-/// profile parses, 1 otherwise.
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_profile_tenant_id(
-    profile_json_ptr: *const u8,
-    profile_json_len: usize,
-    context: *mut std::ffi::c_void,
-    visitor: Option<AccountTenantVisitor>,
-) -> i32 {
-    let Some(profile_json) = crate::read_utf8(profile_json_ptr, profile_json_len) else {
-        return 1;
-    };
-    let Ok(profile) = parse_profile(&profile_json) else {
-        return 1;
-    };
-    if let Some(visitor) = visitor {
-        visitor(context, profile.tenant_id.as_ptr(), profile.tenant_id.len());
-    }
-    0
-}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_account_decode_session(
@@ -355,16 +329,6 @@ fn visit_account(
         );
     }
     Ok(())
-}
-
-fn borrowed<'a>(ptr: *const u8, len: usize) -> anyhow::Result<&'a str> {
-    ensure!(!ptr.is_null() || len == 0, "account input pointer is null");
-    let bytes = if len == 0 {
-        &[]
-    } else {
-        unsafe { slice::from_raw_parts(ptr, len) }
-    };
-    std::str::from_utf8(bytes).context("account input is not UTF-8")
 }
 
 fn json_field_result<T: serde::de::DeserializeOwned>(

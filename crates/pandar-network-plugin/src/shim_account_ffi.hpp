@@ -50,7 +50,6 @@ using PluginWithCurrentAccount = std::int32_t (*)(
 extern "C" std::int32_t with_current_account(
     void*, void*, PluginAccountTransaction
 );
-using PluginAccountTenantVisitor = void (*)(void*, const uint8_t*, std::size_t);
 
 struct PluginAccountSessionBridge {
     void (*replace)(
@@ -152,9 +151,6 @@ void pandar_plugin_account_session_drain(
     void*, void*, PluginWithCurrentAccount
 );
 int32_t pandar_plugin_account_runtime_config(void*, PluginRuntimeConfigVisitor);
-int32_t pandar_plugin_account_profile_tenant_id(
-    const uint8_t*, std::size_t, void*, PluginAccountTenantVisitor
-);
 bool pandar_plugin_account_debug_consistent(bool);
 PluginHttpResult pandar_plugin_account_login_envelope(
     bool,

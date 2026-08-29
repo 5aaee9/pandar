@@ -235,21 +235,21 @@ fn agent_state_callbacks_share_final_claim_serialization() {
         "local Connected can overtake a Lost delivery"
     );
 
-    let account_lost = include_str!("../src/shim_state.hpp")
-        .split_once("finish_account_printer_transition")
+    let account_transition = include_str!("../src/account/session/callbacks.rs")
+        .split_once("AccountCallback::Transition(callback)")
         .expect("account Lost final claim")
         .1
-        .split_once("LocalLostDelivery clear_login_state")
+        .split_once("impl ExpectedAccount")
         .expect("account Lost final claim end")
         .0;
     assert!(
-        account_lost.contains("pandar_plugin_dispatch_refresh_drain")
-            && account_lost.contains("pandar_plugin_studio_finish_account_transition"),
+        account_transition.contains("dispatch_transition_and_tickets")
+            && account_transition.contains("pandar_plugin_studio_finish_account_transition"),
         "account Lost work bypasses the Rust-owned offline dispatcher"
     );
     assert!(
-        account_lost.find("pandar_plugin_dispatch_refresh_drain")
-            < account_lost.find("pandar_plugin_studio_finish_account_transition"),
+        account_transition.find("dispatch_transition_and_tickets")
+            < account_transition.find("pandar_plugin_studio_finish_account_transition"),
         "account transition admission reopened before Lost delivery completed"
     );
 }

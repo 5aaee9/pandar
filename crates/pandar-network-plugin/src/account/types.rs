@@ -1,5 +1,17 @@
+use std::slice;
+
 use anyhow::{Context, ensure};
 use serde::{Deserialize, Serialize};
+
+pub(super) fn borrowed<'a>(ptr: *const u8, len: usize) -> anyhow::Result<&'a str> {
+    ensure!(!ptr.is_null() || len == 0, "account input pointer is null");
+    let bytes = if len == 0 {
+        &[]
+    } else {
+        unsafe { slice::from_raw_parts(ptr, len) }
+    };
+    std::str::from_utf8(bytes).context("account input is not UTF-8")
+}
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[repr(i32)]

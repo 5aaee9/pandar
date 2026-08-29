@@ -163,6 +163,7 @@ fn account_clear_notification_is_a_typed_rust_decision() {
     let transaction = include_str!("../../src/shim_account_transaction.hpp");
     let ffi = include_str!("../../src/shim_account_ffi.hpp");
     let rust_transaction = include_str!("../../src/account/lifecycle/transaction.rs");
+    let rust_session = include_str!("../../src/account/session/mutation.rs");
     let logout = include_str!("../../src/account/lifecycle/logout.rs");
 
     assert!(
@@ -178,7 +179,7 @@ fn account_clear_notification_is_a_typed_rust_decision() {
         "Rust logout lifecycle does not request the typed logout notification"
     );
     assert!(
-        transaction.contains("mutation.notification == kAccountNotificationLogout"),
-        "C++ account adapter does not execute the typed logout notification"
+        rust_session.contains("mutation.notification == PluginAccountNotification::Logout"),
+        "Rust account session does not execute the typed logout notification"
     );
 }
