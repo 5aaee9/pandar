@@ -764,7 +764,7 @@ cargo run -p pandar-app -- cleanup --dry-run
 cargo run -p pandar-app -- cleanup --execute
 ```
 
-Cleanup removes expired or terminal records according to retention environment variables. In execute mode it builds the configured artifact storage backend, deletes unreferenced artifact objects before deleting their database rows, and leaves artifact rows for retry if storage deletion fails.
+Cleanup removes expired or terminal records according to retention environment variables. In execute mode one database transaction removes unreferenced artifact rows and records their object keys in the durable `artifact_deletions` queue. It then drains that queue through the configured storage backend; deletion is idempotent, and storage failures retain the queued key and full failure context for a later cleanup retry without restoring stale ownership rows.
 
 Backup and restore examples:
 
