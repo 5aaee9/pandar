@@ -84,7 +84,7 @@ class AppContainer(context: Context) {
         apiProvider = { apiState.value ?: throw IllegalStateException("Hub base URL is not configured.") },
         tenantProvider = { settings.currentTenant() },
         ws = printerEvents,
-        logger = logger,
+        scope = scope,
     )
 
     fun startLiveUpdates() {

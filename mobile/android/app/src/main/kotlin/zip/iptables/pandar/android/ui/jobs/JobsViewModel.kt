@@ -8,8 +8,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import zip.iptables.pandar.android.core.di.AppContainer
-import zip.iptables.pandar.android.data.remote.dto.PrinterEventDto
-import zip.iptables.pandar.android.data.remote.dto.toDomain
 import zip.iptables.pandar.android.domain.model.Job
 
 data class JobsUiState(
@@ -26,25 +24,20 @@ class JobsViewModel(private val container: AppContainer) : ViewModel() {
     val state: StateFlow<JobsUiState> = _state.asStateFlow()
 
     init {
-        load()
         viewModelScope.launch {
-            container.pandar.events.collect { event ->
-                if (event is PrinterEventDto.JobProgress) {
-                    val job = event.job.toDomain()
-                    _state.update { state ->
-                        val replaced = state.jobs.map { if (it.id == job.id) job else it }
-                        state.copy(jobs = if (replaced.any { it.id == job.id }) replaced else replaced + job)
-                    }
-                }
+            container.pandar.jobs.collect { jobs ->
+                _state.update { it.copy(jobs = jobs) }
             }
         }
+        load()
     }
 
     fun load() {
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             try {
-                _state.update { it.copy(loading = false, jobs = container.pandar.jobs()) }
+                container.pandar.refreshJobs()
+                _state.update { it.copy(loading = false) }
             } catch (t: Throwable) {
                 _state.update { it.copy(loading = false, error = t.message ?: "Failed to load jobs") }
             }

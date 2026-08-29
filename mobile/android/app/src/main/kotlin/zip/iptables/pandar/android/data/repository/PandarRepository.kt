@@ -1,22 +1,18 @@
 package zip.iptables.pandar.android.data.repository
 
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
-import zip.iptables.pandar.android.core.util.Logger
+import kotlinx.coroutines.launch
 import zip.iptables.pandar.android.data.remote.PandarApi
 import zip.iptables.pandar.android.data.remote.dto.AmsLoadFilamentRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsRereadRfidRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsUnloadFilamentRequest
 import zip.iptables.pandar.android.data.remote.dto.MoveAxesRequest
-import zip.iptables.pandar.android.data.remote.dto.PauseRequest
 import zip.iptables.pandar.android.data.remote.dto.PrinterEventDto
-import zip.iptables.pandar.android.data.remote.dto.ResumeRequest
 import zip.iptables.pandar.android.data.remote.dto.SetBedTemperatureRequest
 import zip.iptables.pandar.android.data.remote.dto.SetChamberLightRequest
 import zip.iptables.pandar.android.data.remote.dto.SetChamberTemperatureRequest
 import zip.iptables.pandar.android.data.remote.dto.SetHotendTemperatureRequest
-import zip.iptables.pandar.android.data.remote.dto.StopRequest
-import zip.iptables.pandar.android.data.remote.dto.ToggleLightRequest
 import zip.iptables.pandar.android.data.remote.dto.toDomain
 import zip.iptables.pandar.android.data.remote.ws.LiveState
 import zip.iptables.pandar.android.data.remote.ws.PrinterEventsRepository
@@ -29,9 +25,13 @@ class PandarRepository(
     private val apiProvider: () -> PandarApi,
     private val tenantProvider: () -> String?,
     private val ws: PrinterEventsRepository,
-    private val logger: Logger,
+    scope: CoroutineScope,
 ) {
-    val events: Flow<PrinterEventDto> = ws.events
+    private val store = PrinterStateStore()
+
+    val printers: StateFlow<List<Printer>> = store.printers
+    val jobs: StateFlow<List<Job>> = store.jobs
+    val latestCommandsByPrinter: StateFlow<Map<String, Command>> = store.latestCommandsByPrinter
     val liveState: StateFlow<LiveState> = ws.liveState
     val needsReauth: StateFlow<Boolean> = ws.needsReauth
 
@@ -39,10 +39,41 @@ class PandarRepository(
     private fun tenant(): String =
         tenantProvider() ?: throw IllegalStateException("Tenant id is not configured.")
 
-    suspend fun printers(): List<Printer> = api.listPrinters(tenant()).printers.map { it.toDomain() }
-    suspend fun printer(id: String): Printer = api.getPrinter(tenant(), id).toDomain()
+    init {
+        scope.launch {
+            ws.events.collect { event ->
+                val update = when (event) {
+                    is PrinterEventDto.PrinterSnapshot ->
+                        PrinterStateUpdate.PrinterSnapshot(event.printer.toDomain())
+                    is PrinterEventDto.JobProgress ->
+                        PrinterStateUpdate.JobProgress(event.job.toDomain())
+                    is PrinterEventDto.CommandResult ->
+                        PrinterStateUpdate.CommandResult(event.command.toDomain())
+                }
+                store.apply(update)
+            }
+        }
+    }
+
+    suspend fun refreshPrinters() {
+        val startedAtRevision = store.revision()
+        val printers = api.listPrinters(tenant()).printers.map { it.toDomain() }
+        store.apply(PrinterStateUpdate.PrinterListLoaded(printers, startedAtRevision))
+    }
+
+    suspend fun refreshPrinter(id: String) {
+        val startedAtRevision = store.revision()
+        val printer = api.getPrinter(tenant(), id).toDomain()
+        store.apply(PrinterStateUpdate.PrinterLoaded(printer, startedAtRevision))
+    }
+
+    suspend fun refreshJobs() {
+        val startedAtRevision = store.revision()
+        val jobs = api.listJobs(tenant()).jobs.map { it.toDomain() }
+        store.apply(PrinterStateUpdate.JobListLoaded(jobs, startedAtRevision))
+    }
+
     suspend fun agents(): List<Agent> = api.listAgents(tenant()).agents.map { it.toDomain() }
-    suspend fun jobs(): List<Job> = api.listJobs(tenant()).jobs.map { it.toDomain() }
 
     suspend fun pause(printerId: String): Command = api.pause(tenant(), printerId).toDomain()
     suspend fun resume(printerId: String): Command = api.resume(tenant(), printerId).toDomain()

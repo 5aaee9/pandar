@@ -11,6 +11,7 @@ fn workspace_production_modules_stay_under_line_limit() {
     let mut oversized = Vec::new();
     collect_oversized_modules(&workspace.join("crates"), &mut oversized);
     collect_oversized_modules(&workspace.join("frontend"), &mut oversized);
+    collect_oversized_modules(&workspace.join("mobile/android"), &mut oversized);
 
     assert!(
         oversized.is_empty(),
@@ -45,19 +46,37 @@ fn is_production_module(path: &Path) -> bool {
     let extension = path.extension().and_then(|extension| extension.to_str());
     matches!(
         extension,
-        Some("rs" | "c" | "cpp" | "cc" | "cxx" | "h" | "hpp" | "ts" | "tsx")
+        Some("rs" | "c" | "cpp" | "cc" | "cxx" | "h" | "hpp" | "ts" | "tsx" | "kt")
     ) && !is_test_source(path)
 }
 
 #[test]
-fn c_sources_are_production_modules() {
+fn c_and_kotlin_sources_are_production_modules() {
     assert!(is_production_module(Path::new("module.c")));
+    assert!(is_production_module(Path::new("src/main/kotlin/Module.kt")));
+    assert!(!is_production_module(Path::new(
+        "src/test/kotlin/ModuleTest.kt"
+    )));
+    assert!(!is_production_module(Path::new(
+        "src/androidTest/kotlin/ModuleTest.kt"
+    )));
+    assert!(is_ignored_directory(Path::new("build")));
+    assert!(is_ignored_directory(Path::new("generated")));
 }
 
 fn is_ignored_directory(path: &Path) -> bool {
     matches!(
         path.file_name().and_then(|name| name.to_str()),
-        Some("node_modules" | ".next" | "dist" | "out" | "target")
+        Some(
+            "node_modules"
+                | ".next"
+                | ".gradle"
+                | "build"
+                | "dist"
+                | "generated"
+                | "out"
+                | "target"
+        )
     )
 }
 
@@ -65,7 +84,7 @@ fn is_test_source(path: &Path) -> bool {
     if path.components().any(|component| {
         matches!(
             component.as_os_str().to_str(),
-            Some("tests" | "test" | "__tests__")
+            Some("tests" | "test" | "androidTest" | "testFixtures" | "__tests__")
         )
     }) {
         return true;
