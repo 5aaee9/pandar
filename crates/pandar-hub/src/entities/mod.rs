@@ -1,5 +1,7 @@
 pub mod agents;
 pub mod api_tokens;
+pub mod artifact_deletions;
+pub mod artifact_quota_reservations;
 pub mod audit_events;
 pub mod commands;
 pub mod job_artifacts;

@@ -13,6 +13,7 @@ mod lifecycle;
 mod mapping;
 mod recovery;
 mod repository;
+pub(super) mod reservations;
 pub(super) mod stalled;
 mod studio_contract;
 mod studio_tasks;

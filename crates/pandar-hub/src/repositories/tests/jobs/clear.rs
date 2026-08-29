@@ -14,6 +14,8 @@ use crate::{
     },
 };
 
+pub(in crate::repositories::tests) mod lifecycle;
+
 const STALE_AT: &str = "2000-01-01T00:00:00Z";
 
 #[tokio::test]
@@ -23,49 +25,6 @@ async fn clear_jobs_removes_terminal_and_stalled_jobs_safely_on_sqlite() {
     let storage = FilesystemArtifactStorage::new(spool.path(), DEFAULT_MAX_ARTIFACT_BYTES).unwrap();
 
     exercise_clear_jobs(database, tenants, agents, commands, jobs, &storage).await;
-}
-
-#[tokio::test]
-async fn artifact_delete_failure_rolls_back_job_clear_on_sqlite() {
-    let (database, tenants, agents, _, commands, jobs) = repositories().await;
-    let tenant = tenants
-        .create("clear-failure", "Clear Failure")
-        .await
-        .unwrap();
-    let agent = agents.create(tenant.id, "agent").await.unwrap();
-    let printer_id =
-        crate::repositories::test_helpers::insert_printer_fixture(&database, tenant.id, agent.id)
-            .await
-            .unwrap();
-    let terminal = create_job(&jobs, tenant.id, agent.id, &printer_id, "terminal").await;
-    succeed(&jobs, terminal.job.command_id, tenant.id, agent.id).await;
-    jobs.apply_print_report(report_input(
-        tenant.id,
-        agent.id,
-        &printer_id,
-        Some(terminal.job.id),
-        None,
-        "FINISH",
-    ))
-    .await
-    .unwrap();
-    let storage = crate::repositories::tests::cleanup::storage::RecordingArtifactStorage::failing();
-
-    let error = jobs
-        .clear_for_tenant_with_audit(&storage, tenant.id, AuditActor::no_auth())
-        .await
-        .unwrap_err();
-
-    assert!(format!("{error:#}").contains("delete failed"));
-    assert!(
-        jobs.get_for_tenant(tenant.id, terminal.job.id)
-            .await
-            .unwrap()
-            .is_some()
-    );
-    assert_eq!(commands.count().await.unwrap(), 1);
-    assert_eq!(artifact_count(&database, tenant.id).await, 1);
-    assert_eq!(clear_audit_count(&database, tenant.id).await, 0);
 }
 
 pub(in crate::repositories::tests) async fn exercise_clear_jobs(

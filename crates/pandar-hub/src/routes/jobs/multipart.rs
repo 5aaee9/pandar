@@ -4,14 +4,13 @@ use tokio::fs;
 
 use crate::{
     AppState,
-    repositories::{AuditActor, CreatePrintJob, JobWithArtifact},
+    repositories::{AuditActor, JobWithArtifact},
     routes::{ApiError, jobs::material},
 };
 
-use super::metadata_preview::{artifact_metadata_json, parsed_artifact_metadata};
+use super::metadata_preview::parsed_artifact_metadata;
 use parsing::{parse_bool, parse_calibration_mode, parse_i64, parse_optional_json_field, required};
-use quota::{artifact_quota, staged_artifact_size};
-use staging::{acquire_staging_permit, cleanup_staged_upload, read_text_field, stage_file_field};
+use staging::{acquire_staging_permit, read_text_field, stage_file_field};
 use types::PreparedPrintJob;
 
 mod parsing;
@@ -19,6 +18,7 @@ mod quota;
 mod staging;
 mod studio;
 mod types;
+mod upload;
 pub(in crate::routes::jobs) use types::{MultipartPrintFields, StagedUpload};
 
 #[derive(Clone, Copy)]
@@ -55,24 +55,7 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
         studio_metadata.as_ref(),
     )
     .await;
-    let PreparedPrintJob {
-        printer,
-        plate_id,
-        ams_mapping_json,
-        ams_mapping2_json,
-        ams_mapping_info_json,
-        use_ams,
-        bed_leveling,
-        auto_bed_leveling,
-        flow_cali,
-        auto_flow_cali,
-        auto_offset_cali,
-        timelapse,
-        filename,
-        content_type,
-        artifact_metadata,
-        upload_file,
-    } = match prepared {
+    let prepared = match prepared {
         Ok(prepared) => prepared,
         Err(err) => {
             parsed.cleanup_staged_uploads().await;
@@ -83,110 +66,16 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
         .file
         .as_ref()
         .expect("prepared print job requires staged file");
-    let artifact_quota = artifact_quota();
-    let upload_bytes = match staged_artifact_size(file).await {
-        Ok(upload_bytes) => upload_bytes,
-        Err(error) => {
-            cleanup_staged_upload(file).await;
-            return Err(error);
-        }
-    };
-    let reservation = match state
-        .jobs()
-        .reserve_artifact_quota(tenant_id, upload_bytes, artifact_quota)
-        .await
-    {
-        Ok(reservation) => reservation,
-        Err(error) => {
-            cleanup_staged_upload(file).await;
-            return Err(error.into());
-        }
-    };
-    let artifact_metadata_json = match artifact_metadata_json(artifact_metadata.as_ref()) {
-        Ok(metadata) => metadata,
-        Err(error) => {
-            cleanup_staged_upload(file).await;
-            return Err(error);
-        }
-    };
-    let artifact_id = uuid::Uuid::new_v4().to_string();
-    let stored = tokio::time::timeout(
-        std::time::Duration::from_secs(120),
-        state
-            .artifact_storage()
-            .put_artifact(crate::artifacts::StoreArtifactInput {
-                tenant_id,
-                artifact_id: &artifact_id,
-                filename: &filename,
-                body: crate::artifacts::ArtifactUploadBody::reader(upload_file),
-            }),
+    upload::persist(
+        state,
+        tenant_id,
+        file,
+        prepared,
+        studio_metadata,
+        audit_actor,
+        log_context,
     )
     .await
-    .map_err(|err| anyhow::Error::new(err).context("print artifact storage timed out"))
-    .and_then(|stored| stored)
-    .map_err(|err| {
-        tracing::error!(
-            error = %super::redact_artifact_error(&format!("{err:#}")),
-            context = log_context,
-            "failed to write print artifact"
-        );
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
-    });
-    cleanup_staged_upload(file).await;
-    let stored = stored?;
-
-    let input = CreatePrintJob {
-        tenant_id,
-        printer_id: printer.id,
-        agent_id: printer.agent_id,
-        artifact_id,
-        artifact_filename: stored.filename,
-        artifact_content_type: content_type,
-        artifact_size_bytes: stored.size_bytes,
-        artifact_storage_path: stored.storage_path.clone(),
-        artifact_metadata_json,
-        plate_id,
-        use_ams,
-        bed_leveling,
-        auto_bed_leveling,
-        flow_cali,
-        auto_flow_cali,
-        auto_offset_cali,
-        timelapse,
-        ams_mapping_json,
-        ams_mapping2_json,
-        ams_mapping_info_json,
-    };
-    let created = match studio_metadata {
-        Some(metadata) => {
-            reservation
-                .create_studio_print_job_with_audit(input, metadata, audit_actor)
-                .await
-        }
-        None => {
-            reservation
-                .create_print_job_with_audit(input, audit_actor)
-                .await
-        }
-    };
-
-    match created {
-        Ok(created) => Ok(created),
-        Err(err) => {
-            if let Err(cleanup_err) = state
-                .artifact_storage()
-                .delete_artifact(&stored.storage_key)
-                .await
-            {
-                tracing::warn!(
-                    error = %super::redact_artifact_error(&format!("{cleanup_err:#}")),
-                    context = log_context,
-                    "failed to remove print artifact after repository error"
-                );
-            }
-            Err(err.into())
-        }
-    }
 }
 
 pub(super) async fn parse_multipart_print_fields(

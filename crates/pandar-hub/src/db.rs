@@ -168,6 +168,7 @@ pub enum UniqueConstraint {
     UserIdentityUserProvider,
     JobFilamentUsageSlot,
     PersonalPresetName,
+    ArtifactDeletionStoragePath,
 }
 
 impl UniqueConstraint {
@@ -202,6 +203,10 @@ impl UniqueConstraint {
             Self::PersonalPresetName => (
                 "personal_presets.tenant_id, personal_presets.owner_user_id, personal_presets.name",
                 "personal_presets_tenant_id_owner_user_id_name_key",
+            ),
+            Self::ArtifactDeletionStoragePath => (
+                "artifact_deletions.storage_path",
+                "artifact_deletions_storage_path_key",
             ),
         }
     }
@@ -349,6 +354,8 @@ mod tests {
             UniqueConstraint::UserIdentityExternal,
             UniqueConstraint::UserIdentityUserProvider,
             UniqueConstraint::JobFilamentUsageSlot,
+            UniqueConstraint::PersonalPresetName,
+            UniqueConstraint::ArtifactDeletionStoragePath,
         ];
         let spellings: Vec<_> = constraints.iter().map(|c| c.spellings()).collect();
         for (index, spelling) in spellings.iter().enumerate() {

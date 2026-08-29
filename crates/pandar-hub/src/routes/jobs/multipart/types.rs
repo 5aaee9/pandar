@@ -48,7 +48,7 @@ pub(in crate::routes::jobs) struct MultipartPrintFields {
 impl MultipartPrintFields {
     pub(in crate::routes::jobs) async fn cleanup_staged_uploads(&self) {
         if let Some(file) = &self.file {
-            super::cleanup_staged_upload(file).await;
+            super::staging::cleanup_staged_upload(file).await;
         }
     }
 }

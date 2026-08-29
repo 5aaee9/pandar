@@ -18,7 +18,7 @@ impl RecordingArtifactStorage {
         }
     }
 
-    pub(super) fn deleted(&self) -> Vec<String> {
+    pub(in crate::repositories::tests) fn deleted(&self) -> Vec<String> {
         self.deleted.lock().unwrap().clone()
     }
 }

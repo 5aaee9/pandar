@@ -3,6 +3,7 @@ use sqlx::{Executor, Postgres, Sqlite, Transaction};
 
 use crate::{artifacts::ArtifactStorage, db::Database};
 
+mod artifacts;
 mod options;
 mod sql;
 
@@ -75,27 +76,18 @@ pub async fn cleanup_database(
     };
 
     if mode == CleanupMode::Execute {
-        if let Some(artifact_storage) = artifact_storage {
-            delete_artifacts(artifact_storage, &summary.artifact_storage_paths).await?;
-        }
         execute_cleanup(database, &cutoffs).await?;
-        if artifact_storage.is_some() {
-            cleanup_artifact_rows(database, &summary.artifact_ids).await?;
+        crate::artifacts::lifecycle::reap_expired_reservations(database).await?;
+        if let Some(artifact_storage) = artifact_storage {
+            crate::artifacts::lifecycle::drain_deletions(database, artifact_storage).await?;
         }
     }
 
     Ok(summary)
 }
 
-pub async fn cleanup_artifact_rows(
-    database: &Database,
-    artifact_ids: &[String],
-) -> anyhow::Result<()> {
-    delete_ids(database, DELETE_ARTIFACTS_SQL, artifact_ids, "artifact").await
-}
-
 async fn execute_cleanup(database: &Database, cutoffs: &CleanupCutoffs) -> anyhow::Result<()> {
-    delete_category(database, DELETE_JOBS_SQL, &[&cutoffs.jobs], "job").await?;
+    artifacts::cleanup_jobs_and_artifacts(database, &cutoffs.jobs).await?;
 
     delete_category(
         database,
@@ -141,37 +133,6 @@ async fn execute_cleanup(database: &Database, cutoffs: &CleanupCutoffs) -> anyho
         "tenant token",
     )
     .await
-}
-
-pub(crate) async fn delete_artifacts(
-    artifact_storage: &dyn ArtifactStorage,
-    storage_paths: &[String],
-) -> anyhow::Result<()> {
-    for storage_path in storage_paths {
-        artifact_storage
-            .delete_artifact(storage_path)
-            .await
-            .context("failed to delete cleanup artifact [redacted]")
-            .map_err(|err| {
-                anyhow::anyhow!("{}", crate::redaction::redact_secrets(&format!("{err:#}")))
-            })?;
-    }
-    Ok(())
-}
-
-async fn delete_ids(
-    database: &Database,
-    sql_prefix: &'static str,
-    ids: &[String],
-    label: &'static str,
-) -> anyhow::Result<()> {
-    if ids.is_empty() {
-        return Ok(());
-    }
-    let placeholders = (0..ids.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
-    let sql = format!("{sql_prefix}{placeholders})");
-    let binds = ids.iter().map(String::as_str).collect::<Vec<_>>();
-    delete_category(database, &sql, &binds, label).await
 }
 
 async fn delete_category(

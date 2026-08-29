@@ -110,19 +110,20 @@ pub(super) async fn enforce_artifact_quota(
         .await
         .context("failed to lock PostgreSQL tenant artifact quota")?;
     }
+    let now = pandar_core::created_at_now();
     let sql = match backend {
         DatabaseBackend::Postgres => {
-            "SELECT COALESCE(SUM(size_bytes), 0)::BIGINT AS bytes, COUNT(*)::BIGINT AS count FROM job_artifacts WHERE tenant_id = $1"
+            "SELECT (COALESCE((SELECT SUM(size_bytes) FROM job_artifacts WHERE tenant_id = $1), 0) + COALESCE((SELECT SUM(size_bytes) FROM artifact_quota_reservations WHERE tenant_id = $1 AND expires_at > $2), 0))::BIGINT AS bytes, ((SELECT COUNT(*) FROM job_artifacts WHERE tenant_id = $1) + (SELECT COUNT(*) FROM artifact_quota_reservations WHERE tenant_id = $1 AND expires_at > $2))::BIGINT AS count"
         }
         _ => {
-            "SELECT COALESCE(SUM(size_bytes), 0) AS bytes, COUNT(*) AS count FROM job_artifacts WHERE tenant_id = ?1"
+            "SELECT COALESCE((SELECT SUM(size_bytes) FROM job_artifacts WHERE tenant_id = ?1), 0) + COALESCE((SELECT SUM(size_bytes) FROM artifact_quota_reservations WHERE tenant_id = ?1 AND expires_at > ?2), 0) AS bytes, (SELECT COUNT(*) FROM job_artifacts WHERE tenant_id = ?1) + (SELECT COUNT(*) FROM artifact_quota_reservations WHERE tenant_id = ?1 AND expires_at > ?2) AS count"
         }
     };
     let usage = tx
         .query_one_raw(Statement::from_sql_and_values(
             backend,
             sql,
-            [tenant_id.into()],
+            [tenant_id.into(), now.clone().into()],
         ))
         .await
         .context("failed to load transactional tenant artifact usage")?
@@ -137,13 +138,13 @@ pub(super) async fn enforce_artifact_quota(
         return Err(crate::repositories::RepositoryError::ArtifactQuotaExceeded);
     }
     let global_usage = tx
-        .query_one_raw(Statement::from_string(
+        .query_one_raw(Statement::from_sql_and_values(
             backend,
             match backend {
-                DatabaseBackend::Postgres => "SELECT COALESCE(SUM(size_bytes), 0)::BIGINT AS bytes, COUNT(*)::BIGINT AS count FROM job_artifacts",
-                _ => "SELECT COALESCE(SUM(size_bytes), 0) AS bytes, COUNT(*) AS count FROM job_artifacts",
-            }
-            .to_owned(),
+                DatabaseBackend::Postgres => "SELECT (COALESCE((SELECT SUM(size_bytes) FROM job_artifacts), 0) + COALESCE((SELECT SUM(size_bytes) FROM artifact_quota_reservations WHERE expires_at > $1), 0))::BIGINT AS bytes, ((SELECT COUNT(*) FROM job_artifacts) + (SELECT COUNT(*) FROM artifact_quota_reservations WHERE expires_at > $1))::BIGINT AS count",
+                _ => "SELECT COALESCE((SELECT SUM(size_bytes) FROM job_artifacts), 0) + COALESCE((SELECT SUM(size_bytes) FROM artifact_quota_reservations WHERE expires_at > ?1), 0) AS bytes, (SELECT COUNT(*) FROM job_artifacts) + (SELECT COUNT(*) FROM artifact_quota_reservations WHERE expires_at > ?1) AS count",
+            },
+            [now.into()],
         ))
         .await
         .context("failed to load transactional global artifact usage")?

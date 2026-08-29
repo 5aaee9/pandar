@@ -142,13 +142,9 @@ impl JobRepository {
             .into_iter()
             .filter(|artifact| orphan_artifact_ids.contains(&artifact.id))
             .collect::<Vec<_>>();
-        let artifact_paths = orphan_artifacts
-            .iter()
-            .map(|artifact| artifact.storage_path.clone())
-            .collect::<Vec<_>>();
-        crate::cleanup::delete_artifacts(artifact_storage, &artifact_paths)
-            .await
-            .map_err(crate::repositories::RepositoryError::from)?;
+        for artifact in &orphan_artifacts {
+            crate::artifacts::lifecycle::enqueue_deletion(&tx, &artifact.storage_path).await?;
+        }
 
         let deleted_jobs = delete_jobs(&tx, tenant_id, &clearable_ids).await?;
         let deleted_commands = delete_unreferenced_commands(&tx, commands, &clearable_ids).await?;
@@ -176,6 +172,14 @@ impl JobRepository {
         tx.commit()
             .await
             .context("failed to commit job clear transaction")?;
+        if let Err(err) =
+            crate::artifacts::lifecycle::drain_deletions(&self.database, artifact_storage).await
+        {
+            tracing::warn!(
+                error = %crate::redaction::redact_secrets(&format!("{err:#}")),
+                "artifact deletion remains queued after job clear"
+            );
+        }
         Ok(outcome)
     }
 }

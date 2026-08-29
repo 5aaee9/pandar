@@ -50,6 +50,42 @@ async fn plugin_print_storage_put_failure_creates_no_job_or_command() {
         .await
         .unwrap();
     assert_eq!(jobs.0, 0);
+    let reservations: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM artifact_quota_reservations")
+        .fetch_one(sqlite_pool(&state))
+        .await
+        .unwrap();
+    assert_eq!(reservations.0, 0);
+    let queued_deletions: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM artifact_deletions")
+        .fetch_one(sqlite_pool(&state))
+        .await
+        .unwrap();
+    assert_eq!(queued_deletions.0, 1);
+    let retry = state
+        .jobs()
+        .reserve_artifact_quota(
+            tenant.id,
+            "retry-artifact".to_owned(),
+            "retry-artifact/path".to_owned(),
+            3,
+            crate::repositories::ArtifactQuotaLimits {
+                tenant_bytes: 3,
+                tenant_count: 1,
+                global_bytes: 3,
+                global_count: 1,
+            },
+        )
+        .await
+        .unwrap();
+    retry.release().await.unwrap();
+    crate::artifacts::lifecycle::drain_deletions(state.database(), state.artifact_storage())
+        .await
+        .unwrap();
+    assert_eq!(
+        crate::artifacts::lifecycle::queued_deletion_count(state.database())
+            .await
+            .unwrap(),
+        0
+    );
     assert!(
         state
             .metrics()
@@ -308,7 +344,7 @@ impl crate::artifacts::ArtifactStorage for PutFailingArtifactStorage {
     }
 
     async fn delete_artifact(&self, _storage_key: &str) -> anyhow::Result<()> {
-        unreachable!("put failure test never deletes artifacts")
+        Ok(())
     }
 
     async fn check_ready(&self) -> anyhow::Result<()> {

@@ -45,7 +45,11 @@ pub struct JobRepository {
 }
 
 pub(crate) struct ArtifactQuotaReservation {
-    tx: sea_orm::DatabaseTransaction,
+    database: Database,
+    id: String,
+    tenant_id: TenantId,
+    artifact_id: String,
+    storage_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

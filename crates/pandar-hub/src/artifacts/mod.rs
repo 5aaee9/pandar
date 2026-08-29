@@ -10,6 +10,7 @@ use tokio::{fs, io::AsyncRead};
 
 mod app_state;
 mod filesystem;
+pub mod lifecycle;
 pub(crate) mod metadata;
 mod s3;
 
@@ -72,6 +73,9 @@ pub trait ArtifactStorage: Send + Sync {
     async fn check_ready(&self) -> anyhow::Result<()>;
     fn max_artifact_bytes(&self) -> usize;
     fn backend(&self) -> ArtifactStorageBackend;
+    fn storage_key(&self, tenant_id: TenantId, artifact_id: &str, filename: &str) -> String {
+        artifact_storage_key(self.backend(), tenant_id, artifact_id, filename)
+    }
     fn is_not_found(&self, _err: &anyhow::Error) -> bool {
         false
     }
@@ -160,6 +164,20 @@ impl ArtifactStorageConfig {
                 Ok(Arc::new(config.build().await?))
             }
         }
+    }
+}
+
+fn artifact_storage_key(
+    backend: ArtifactStorageBackend,
+    tenant_id: TenantId,
+    artifact_id: &str,
+    filename: &str,
+) -> String {
+    match backend {
+        ArtifactStorageBackend::Filesystem => {
+            format!("{tenant_id}/{artifact_id}/{}", sanitize_filename(filename))
+        }
+        ArtifactStorageBackend::S3 => format!("{tenant_id}/{artifact_id}"),
     }
 }
 

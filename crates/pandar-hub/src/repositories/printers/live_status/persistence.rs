@@ -57,7 +57,7 @@ fn merged_active_model(
             print_task_id: Set(state.task_id.clone()),
             print_subtask_id: Set(state.subtask_id.clone()),
             print_progress_percent: Set(state.progress_percent.map(i64::from)),
-            print_speed_level: Set(state.speed_level.map(i64::from)),
+            print_speed_level: Set(state.speed_level.map(i32::from)),
             print_remaining_time_minutes: Set(state.remaining_time_minutes.map(i64::from)),
             print_current_layer: Set(state.current_layer.map(i64::from)),
             print_total_layers: Set(state.total_layers.map(i64::from)),

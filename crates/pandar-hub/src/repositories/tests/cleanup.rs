@@ -1,6 +1,7 @@
 use super::*;
 use crate::cleanup::{CleanupMode, CleanupOptions, cleanup_database};
 
+pub(in crate::repositories::tests) mod lifecycle;
 mod retention;
 pub(super) mod storage;
 
@@ -186,75 +187,6 @@ pub(super) async fn exercise_cleanup(
             .is_some()
     );
     assert_eq!(commands.count().await.unwrap(), 2);
-}
-
-#[tokio::test]
-async fn cleanup_execute_keeps_artifact_rows_when_storage_delete_fails() {
-    let (database, tenants, agents, _, commands, jobs) = repositories().await;
-    let tenant = tenants
-        .create("cleanup-failure", "Cleanup Failure")
-        .await
-        .unwrap();
-    let agent = agents.create(tenant.id, "agent").await.unwrap();
-    let printer_id =
-        crate::repositories::test_helpers::insert_printer_fixture(&database, tenant.id, agent.id)
-            .await
-            .unwrap();
-    let terminal = jobs
-        .create_print_job(crate::repositories::tests::jobs::create_input(
-            tenant.id,
-            agent.id,
-            &printer_id,
-            "terminal-artifact",
-        ))
-        .await
-        .unwrap();
-    jobs.mark_print_sent(terminal.job.command_id, tenant.id, agent.id)
-        .await
-        .unwrap();
-    jobs.mark_print_succeeded(terminal.job.command_id, tenant.id, agent.id)
-        .await
-        .unwrap();
-    jobs.apply_print_report(crate::repositories::tests::jobs::report_input(
-        tenant.id,
-        agent.id,
-        &printer_id,
-        Some(terminal.job.id),
-        None,
-        "FINISH",
-    ))
-    .await
-    .unwrap();
-    make_old(
-        &database,
-        &terminal.job.id.to_string(),
-        &terminal.job.command_id.to_string(),
-    )
-    .await;
-    let storage = RecordingArtifactStorage::failing();
-
-    let err = cleanup_database(
-        &database,
-        Some(&storage),
-        CleanupOptions::default(),
-        CleanupMode::Execute,
-    )
-    .await
-    .unwrap_err();
-
-    let message = format!("{err:#}");
-    assert!(message.contains("delete failed"));
-    assert!(!message.contains("storage/"));
-    assert!(!message.contains("terminal-artifact"));
-    assert_eq!(storage.deleted(), vec![terminal.artifact.storage_path]);
-    assert_eq!(artifact_count(&database).await, 1);
-    assert!(
-        jobs.get_for_tenant(tenant.id, terminal.job.id)
-            .await
-            .unwrap()
-            .is_some()
-    );
-    assert_eq!(commands.count().await.unwrap(), 1);
 }
 
 #[tokio::test]

@@ -119,12 +119,16 @@ WHERE id IN (
     AND commands.status NOT IN ('queued', 'sent', 'acknowledged')
 )";
 
-pub(super) const DELETE_ARTIFACTS_SQL: &str = "\
+pub(super) const DROP_ARTIFACT_CANDIDATES_SQL: &str =
+    "DROP TABLE IF EXISTS cleanup_artifact_candidates";
+
+pub(super) const DELETE_ARTIFACT_CANDIDATES_SQL: &str = "\
 DELETE FROM job_artifacts
-WHERE NOT EXISTS (
-  SELECT 1 FROM jobs retained WHERE retained.artifact_id = job_artifacts.id
-)
-AND id IN (";
+WHERE id IN (SELECT id FROM cleanup_artifact_candidates)
+  AND NOT EXISTS (
+    SELECT 1 FROM jobs retained WHERE retained.artifact_id = job_artifacts.id
+  )
+RETURNING storage_path";
 
 pub(super) const DELETE_COMMANDS_SQL: &str = "\
 DELETE FROM commands

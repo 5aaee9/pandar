@@ -156,8 +156,7 @@ impl ArtifactStorage for FilesystemArtifactStorage {
         match fs::remove_file(&path).await {
             Ok(()) => Ok(()),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(err) => Err(err)
-                .with_context(|| format!("failed to remove artifact file {}", path.display())),
+            Err(err) => Err(err).context("failed to remove artifact file [redacted]"),
         }
     }
 
