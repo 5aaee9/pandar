@@ -93,7 +93,7 @@ fn h2c_auto_mapping_is_classified_and_forwarded_as_a_typed_request() {
 #[test]
 fn malformed_h2c_auto_mapping_never_falls_through_to_an_ordinary_operation() {
     let result = dispatch(
-        r#"{"print":{"command":"get_auto_nozzle_mapping","sequence_id":"42","version":1,"group_info":[{"id":0,"ext":1,"dia":0.4,"vol":"unknown"}]}}"#,
+        r#"{"print":{"command":"get_auto_nozzle_mapping","sequence_id":"42","version":"1","group_info":[{"id":0,"ext":1,"dia":0.4,"vol":"E3D High Flow"}]}}"#,
     );
 
     assert_eq!(result.0, H2C_AUTO_NOZZLE_MAPPING);

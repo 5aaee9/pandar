@@ -1,6 +1,9 @@
+use std::time::Duration;
+
 use pandar_core::PrintTransferFailure;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
+use tokio::time::Instant;
 
 use super::{
     admission::{AdmittedPrint, PrintFailure},
@@ -9,7 +12,8 @@ use super::{
     transport::{self, HttpReply},
 };
 
-const MAX_JOB_POLLS: usize = 600;
+const OPERATION_TIMEOUT: Duration = Duration::from_secs(60);
+const JOB_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Deserialize)]
 struct CreatedPrint {
@@ -73,7 +77,14 @@ pub(super) fn start(print: AdmittedPrint, callbacks: PluginStudioCallbacks) -> i
         return failure.code;
     }
     callbacks.update(0, 0, "");
-    match crate::runtime().block_on(run(print, callbacks)) {
+    let deadline = Instant::now() + OPERATION_TIMEOUT;
+    let result = crate::runtime().block_on(async {
+        match tokio::time::timeout_at(deadline, run(print, callbacks, deadline)).await {
+            Ok(result) => result,
+            Err(error) => Err(operation_deadline_failure(error)),
+        }
+    });
+    match result {
         Ok(()) => 0,
         Err(failure) => {
             callbacks.error(&failure);
@@ -82,9 +93,13 @@ pub(super) fn start(print: AdmittedPrint, callbacks: PluginStudioCallbacks) -> i
     }
 }
 
-async fn run(print: AdmittedPrint, callbacks: PluginStudioCallbacks) -> Result<(), PrintFailure> {
+async fn run(
+    print: AdmittedPrint,
+    callbacks: PluginStudioCallbacks,
+    deadline: Instant,
+) -> Result<(), PrintFailure> {
     let client = transport::client()?;
-    let created_reply = transport::submit(&client, &print, callbacks).await?;
+    let created_reply = transport::submit(&client, &print, callbacks, deadline).await?;
     if created_reply.status != 201 {
         return Err(transport::failure_from_reply(&created_reply));
     }
@@ -99,21 +114,70 @@ async fn run(print: AdmittedPrint, callbacks: PluginStudioCallbacks) -> Result<(
     callbacks.update(2, 0, "");
 
     if !callbacks.snapshot_current(&print) {
-        return retain_or_cancel_stale(&client, &print, submission_id).await;
+        return retain_or_cancel_stale(&client, &print, submission_id, deadline).await;
     }
 
+    let poller = HttpJobPoller {
+        client: &client,
+        print: &print,
+    };
+    poll_until_complete(&poller, &client, &print, callbacks, submission_id, deadline).await
+}
+
+trait JobPoller {
+    fn now(&self) -> Instant;
+
+    async fn poll(&self, submission_id: i32, deadline: Instant) -> Result<JobState, PrintFailure>;
+
+    async fn sleep_until(&self, deadline: Instant);
+}
+
+struct HttpJobPoller<'a> {
+    client: &'a reqwest::Client,
+    print: &'a AdmittedPrint,
+}
+
+impl JobPoller for HttpJobPoller<'_> {
+    fn now(&self) -> Instant {
+        Instant::now()
+    }
+
+    async fn poll(&self, submission_id: i32, deadline: Instant) -> Result<JobState, PrintFailure> {
+        poll(self.client, self.print, submission_id, deadline).await
+    }
+
+    async fn sleep_until(&self, deadline: Instant) {
+        tokio::time::sleep_until(deadline).await;
+    }
+}
+
+async fn poll_until_complete<P: JobPoller>(
+    poller: &P,
+    client: &reqwest::Client,
+    print: &AdmittedPrint,
+    callbacks: PluginStudioCallbacks,
+    submission_id: i32,
+    deadline: Instant,
+) -> Result<(), PrintFailure> {
     let mut sending_emitted = false;
-    for attempt in 0..MAX_JOB_POLLS {
-        if !callbacks.snapshot_current(&print) {
-            return retain_or_cancel_stale(&client, &print, submission_id).await;
+    loop {
+        if poller.now() >= deadline {
+            return Err(PrintFailure::simple("delivery_timeout"));
+        }
+        if !callbacks.snapshot_current(print) {
+            return retain_or_cancel_stale(client, print, submission_id, deadline).await;
         }
         if callbacks.cancelled() {
-            return cancel_or_retain_if_stale(&client, &print, callbacks, submission_id).await;
+            return cancel_or_retain_if_stale(client, print, callbacks, submission_id, deadline)
+                .await;
         }
 
-        let state = poll(&client, &print, submission_id).await?;
-        if !callbacks.snapshot_current(&print) {
-            return retain_or_cancel_stale(&client, &print, submission_id).await;
+        let state = poller.poll(submission_id, deadline).await?;
+        if poller.now() >= deadline {
+            return Err(PrintFailure::simple("delivery_timeout"));
+        }
+        if !callbacks.snapshot_current(print) {
+            return retain_or_cancel_stale(client, print, submission_id, deadline).await;
         }
         if state.studio_submission_id != submission_id {
             return Err(PrintFailure::simple("invalid_response"));
@@ -136,7 +200,7 @@ async fn run(print: AdmittedPrint, callbacks: PluginStudioCallbacks) -> Result<(
                     callbacks.update(3, 0, "");
                 }
                 callbacks.update(4, 0, "");
-                return finish(&client, &print, callbacks, submission_id).await;
+                return finish(client, print, callbacks, submission_id, deadline).await;
             }
             HubJobStatus::Failed => {
                 return Err(match &state.failure {
@@ -146,19 +210,19 @@ async fn run(print: AdmittedPrint, callbacks: PluginStudioCallbacks) -> Result<(
             }
             HubJobStatus::Cancelled => return Err(PrintFailure::simple("invalid_response")),
         }
-        if attempt + 1 < MAX_JOB_POLLS {
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
+
+        let sleep_deadline = (poller.now() + JOB_POLL_INTERVAL).min(deadline);
+        poller.sleep_until(sleep_deadline).await;
     }
-    Err(PrintFailure::simple("delivery_timeout"))
 }
 
 async fn retain_or_cancel_stale(
     client: &reqwest::Client,
     print: &AdmittedPrint,
     submission_id: i32,
+    deadline: Instant,
 ) -> Result<(), PrintFailure> {
-    match cancel(client, print, submission_id).await {
+    match cancel(client, print, submission_id, deadline).await {
         Ok(()) => Err(PrintFailure::simple("stale_print_submission")),
         Err(failure) => {
             log_retained_submission(&failure);
@@ -172,8 +236,9 @@ async fn cancel_or_retain_if_stale(
     print: &AdmittedPrint,
     callbacks: PluginStudioCallbacks,
     submission_id: i32,
+    deadline: Instant,
 ) -> Result<(), PrintFailure> {
-    match cancel(client, print, submission_id).await {
+    match cancel(client, print, submission_id, deadline).await {
         Ok(()) => Err(PrintFailure::cancelled()),
         Err(failure) if !callbacks.snapshot_current(print) => {
             log_retained_submission(&failure);
@@ -195,10 +260,11 @@ async fn finish(
     print: &AdmittedPrint,
     callbacks: PluginStudioCallbacks,
     submission_id: i32,
+    deadline: Instant,
 ) -> Result<(), PrintFailure> {
     callbacks.update(5, 0, "");
     if callbacks.cancelled() {
-        return cancel_or_retain_if_stale(client, print, callbacks, submission_id).await;
+        return cancel_or_retain_if_stale(client, print, callbacks, submission_id, deadline).await;
     }
     let wait_info = serde_json::to_string(&WaitInfo {
         job_id: submission_id,
@@ -206,7 +272,10 @@ async fn finish(
     .expect("wait information is serializable");
     let waited = callbacks.wait(&wait_info);
     if callbacks.cancelled() {
-        return cancel_or_retain_if_stale(client, print, callbacks, submission_id).await;
+        return cancel_or_retain_if_stale(client, print, callbacks, submission_id, deadline).await;
+    }
+    if Instant::now() >= deadline {
+        return Err(PrintFailure::simple("delivery_timeout"));
     }
     if !waited {
         return Err(PrintFailure::simple("wait_failed"));
@@ -219,12 +288,14 @@ async fn poll(
     client: &reqwest::Client,
     print: &AdmittedPrint,
     submission_id: i32,
+    deadline: Instant,
 ) -> Result<JobState, PrintFailure> {
-    let reply = transport::request(
+    let reply = transport::request_before(
         client,
         Method::GET,
         format!("{}/api/v1/plugin/jobs/{submission_id}", print.hub_url),
         &print.token,
+        deadline,
     )
     .await?;
     if !(200..300).contains(&reply.status) {
@@ -237,8 +308,9 @@ async fn cancel(
     client: &reqwest::Client,
     print: &AdmittedPrint,
     submission_id: i32,
+    deadline: Instant,
 ) -> Result<(), PrintFailure> {
-    let reply = transport::request(
+    let reply = transport::request_before(
         client,
         Method::POST,
         format!(
@@ -246,6 +318,7 @@ async fn cancel(
             print.hub_url
         ),
         &print.token,
+        deadline,
     )
     .await?;
     if !(200..300).contains(&reply.status) {
@@ -268,3 +341,12 @@ fn decode<T: serde::de::DeserializeOwned>(reply: &HttpReply) -> Result<T, PrintF
         PrintFailure::simple("invalid_response")
     })
 }
+
+fn operation_deadline_failure(error: tokio::time::error::Elapsed) -> PrintFailure {
+    let error = anyhow::Error::new(error).context("complete synchronous Studio print operation");
+    eprintln!("pandar network plugin print timed out: {error:#}");
+    PrintFailure::simple("delivery_timeout")
+}
+
+#[cfg(test)]
+mod tests;

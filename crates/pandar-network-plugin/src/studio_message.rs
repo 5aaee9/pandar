@@ -35,6 +35,8 @@ pub(crate) enum StudioMessageRoute {
 }
 
 pub(crate) fn classify_studio_message(message: &str) -> StudioMessageRoute {
+    let outer = serde_json::from_str::<StudioCommandEnvelope>(message).ok();
+
     match parse_studio_firmware(message) {
         StudioFirmwareParse::Firmware(_) => return StudioMessageRoute::Firmware,
         StudioFirmwareParse::InvalidFirmware => {
@@ -43,7 +45,7 @@ pub(crate) fn classify_studio_message(message: &str) -> StudioMessageRoute {
         StudioFirmwareParse::NotFirmware => {}
     }
 
-    match classify_h2c_auto_nozzle_mapping(message) {
+    match classify_h2c_auto_nozzle_mapping(message, outer.as_ref()) {
         H2cAutoNozzleMappingClassification::Valid(request) => {
             return StudioMessageRoute::H2cAutoNozzleMapping {
                 request_json: serde_json::to_string(&request)
@@ -182,38 +184,37 @@ enum H2cAutoNozzleMappingClassification {
     NotH2c,
 }
 
-/// Classifies a message by its typed `print.command`, never by substring
-/// matching, so payloads that merely mention the command (for example a gcode
-/// line printed with `M117`) are not misrouted into the H2C parser.
-fn classify_h2c_auto_nozzle_mapping(message: &str) -> H2cAutoNozzleMappingClassification {
-    match serde_json::from_str::<pandar_core::H2cAutoNozzleMappingEnvelope>(message) {
-        Ok(envelope) if envelope.print.command == H2C_AUTO_NOZZLE_MAPPING_COMMAND => {
-            if envelope.print.is_valid() {
-                H2cAutoNozzleMappingClassification::Valid(envelope.print)
-            } else {
-                H2cAutoNozzleMappingClassification::Invalid
-            }
-        }
-        _ => {
-            // The full envelope requires typed payload fields; probe the print
-            // command so malformed mapping requests still report the H2C kind.
-            let intended = serde_json::from_str::<H2cCommandProbe>(message)
-                .ok()
-                .and_then(|probe| probe.print)
-                .is_some_and(|command| command == H2C_AUTO_NOZZLE_MAPPING_COMMAND);
-            if intended {
-                H2cAutoNozzleMappingClassification::Invalid
-            } else {
-                H2cAutoNozzleMappingClassification::NotH2c
-            }
-        }
-    }
+#[derive(Deserialize)]
+struct StudioCommandEnvelope {
+    #[serde(default)]
+    print: Option<StudioCommand>,
 }
 
 #[derive(Deserialize)]
-struct H2cCommandProbe {
-    #[serde(default)]
-    print: Option<String>,
+struct StudioCommand {
+    command: String,
+}
+
+/// Classifies a message by its typed `print.command`, never by substring
+/// matching, so payloads that merely mention the command (for example a gcode
+/// line printed with `M117`) are not misrouted into the H2C parser.
+fn classify_h2c_auto_nozzle_mapping(
+    message: &str,
+    outer: Option<&StudioCommandEnvelope>,
+) -> H2cAutoNozzleMappingClassification {
+    if outer
+        .and_then(|outer| outer.print.as_ref())
+        .is_none_or(|print| print.command != H2C_AUTO_NOZZLE_MAPPING_COMMAND)
+    {
+        return H2cAutoNozzleMappingClassification::NotH2c;
+    }
+
+    match serde_json::from_str::<pandar_core::H2cAutoNozzleMappingEnvelope>(message) {
+        Ok(envelope) if envelope.print.is_valid() => {
+            H2cAutoNozzleMappingClassification::Valid(envelope.print)
+        }
+        _ => H2cAutoNozzleMappingClassification::Invalid,
+    }
 }
 
 #[cfg(test)]
@@ -252,7 +253,8 @@ mod tests {
 
     #[test]
     fn malformed_h2c_mapping_request_reports_the_h2c_kind() {
-        let message = r#"{"print":{"command":"get_auto_nozzle_mapping","sequence_id":"abc"}}"#;
+        let message =
+            r#"{"print":{"command":"get_auto_nozzle_mapping","sequence_id":"42","version":"1"}}"#;
         let outcome = dispatch(message);
         assert_eq!(outcome.kind, H2C_AUTO_NOZZLE_MAPPING);
         assert_eq!(outcome.outcome, INVALID);

@@ -56,7 +56,30 @@ pub(super) async fn request(
     reply(response).await
 }
 
+pub(super) async fn request_before(
+    client: &Client,
+    method: Method,
+    url: String,
+    token: &str,
+    deadline: tokio::time::Instant,
+) -> Result<HttpReply, PrintFailure> {
+    tokio::time::timeout_at(deadline, request(client, method, url, token))
+        .await
+        .map_err(|error| deadline_failure(error, "complete Studio print Hub request"))?
+}
+
 pub(super) async fn submit(
+    client: &Client,
+    print: &AdmittedPrint,
+    callbacks: PluginStudioCallbacks,
+    deadline: tokio::time::Instant,
+) -> Result<HttpReply, PrintFailure> {
+    tokio::time::timeout_at(deadline, submit_inner(client, print, callbacks))
+        .await
+        .map_err(|error| deadline_failure(error, "complete Studio print submission"))?
+}
+
+async fn submit_inner(
     client: &Client,
     print: &AdmittedPrint,
     callbacks: PluginStudioCallbacks,
@@ -276,4 +299,10 @@ fn diagnosed_artifact_failure(error: std::io::Error, context: &'static str) -> P
     let error = anyhow::Error::new(error).context(context);
     eprintln!("pandar network plugin artifact failed: {error:#}");
     PrintFailure::simple("artifact_missing")
+}
+
+fn deadline_failure(error: tokio::time::error::Elapsed, context: &'static str) -> PrintFailure {
+    let error = anyhow::Error::new(error).context(context);
+    eprintln!("pandar network plugin request timed out: {error:#}");
+    PrintFailure::simple("delivery_timeout")
 }
