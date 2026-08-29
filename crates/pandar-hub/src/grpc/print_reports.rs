@@ -6,9 +6,10 @@ use crate::{
     AppState,
     grpc::commands::repository_status,
     metrics::PrintReportMetric,
-    printer_events::{PrinterEvent, fence_printer_nozzle_system, printer_event_printer},
+    printer_events::{
+        PrinterEvent, PrinterEventJob, fence_printer_nozzle_system, printer_event_printer,
+    },
     repositories::{ApplyPrintReport, MaterialPatchOutcome, PrintReportDiagnostic, PrinterHms},
-    routes::jobs::JobResponse,
     sessions::SessionToken,
 };
 use pandar_protocol::agent::v1::PrintJobReport;
@@ -64,7 +65,7 @@ pub async fn handle_print_report(
             .publish_printer_event(
                 tenant_id,
                 PrinterEvent::JobProgress {
-                    job: Box::new(JobResponse::try_from(job).map_err(repository_status)?),
+                    job: Box::new(PrinterEventJob::try_from(job).map_err(repository_status)?),
                 },
             )
             .await;

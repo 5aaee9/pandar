@@ -60,6 +60,22 @@ pub struct AgentSession {
     pub live_command_transition: Arc<Mutex<()>>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct CurrentAgentSessionSnapshot {
+    token: SessionToken,
+    capabilities: HashSet<AgentCapability>,
+}
+
+impl CurrentAgentSessionSnapshot {
+    pub(crate) fn persisted_id(&self) -> String {
+        self.token.persisted_id()
+    }
+
+    pub(crate) fn supports(&self, capability: AgentCapability) -> bool {
+        self.capabilities.contains(&capability)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SessionToken(Uuid);
 
@@ -193,6 +209,27 @@ impl SessionRegistry {
             .get(&agent_id)
             .filter(|session| session.tenant_id == tenant_id)
             .map(|session| session.token)
+    }
+
+    pub(crate) async fn current_session_snapshots(
+        &self,
+        tenant_id: TenantId,
+    ) -> HashMap<AgentId, CurrentAgentSessionSnapshot> {
+        self.sessions
+            .lock()
+            .await
+            .values()
+            .filter(|session| session.tenant_id == tenant_id)
+            .map(|session| {
+                (
+                    session.agent_id,
+                    CurrentAgentSessionSnapshot {
+                        token: session.token,
+                        capabilities: session.capabilities.clone(),
+                    },
+                )
+            })
+            .collect()
     }
 
     pub async fn while_current<T, Fut>(

@@ -169,7 +169,7 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
 }
 
 #[tokio::test]
-async fn h2c_rack_projection_requires_current_capable_session_telemetry() {
+async fn h2c_rack_projection_uses_one_current_session_snapshot_for_all_capabilities() {
     let state = state().await;
     let app = router(state.clone());
     let tenant = state
@@ -231,7 +231,7 @@ async fn h2c_rack_projection_requires_current_capable_session_telemetry() {
                 cooling_system: None,
                 nozzle_system: Some(nozzle_system),
                 connection_authoritative: false,
-                telemetry_authoritative: false,
+                telemetry_authoritative: true,
             },
             Some(pandar_core::BambuDeviceFeatures::from_bits(1_u64 << 60)),
         )
@@ -248,6 +248,7 @@ async fn h2c_rack_projection_requires_current_capable_session_telemetry() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["devices"][0]["fun"], "1000000000000000");
+    assert!(body["devices"][0]["online"].as_bool().unwrap());
     assert!(body["devices"][0].get("fun2").is_none());
     assert_eq!(
         body["devices"][0]["nozzle_system"]["nozzle"]["info"][0]["id"],
@@ -268,6 +269,7 @@ async fn h2c_rack_projection_requires_current_capable_session_telemetry() {
         request_as(app, Method::GET, "/api/v1/plugin/printers", None, &token).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["devices"][0]["fun"], "0");
+    assert!(!body["devices"][0]["online"].as_bool().unwrap());
     assert!(body["devices"][0].get("nozzle_system").is_none());
 }
 

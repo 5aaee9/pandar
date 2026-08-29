@@ -11,6 +11,7 @@ pub mod firmware_control;
 pub mod grpc;
 mod grpc_connection_limit;
 pub mod identity;
+mod job_projection;
 pub mod jobs;
 pub(crate) mod material_mapping;
 pub mod metrics;

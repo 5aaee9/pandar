@@ -218,7 +218,7 @@ async fn mark_stalled_pending_jobs_once(state: &AppState, now: &str) -> anyhow::
     for job in stalled {
         let tenant_id = job.job.tenant_id;
         let printer_id = job.job.printer_id.clone();
-        let response = crate::routes::jobs::JobResponse::try_from(job)
+        let response = crate::printer_events::PrinterEventJob::try_from(job)
             .context("failed to build stalled print job event")?;
         state
             .publish_printer_event(

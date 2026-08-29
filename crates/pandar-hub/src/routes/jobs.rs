@@ -6,12 +6,12 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
 };
-use pandar_core::{Job, JobArtifact, JobId, JobPrintState};
+use pandar_core::JobId;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
-    repositories::{JobWithArtifact, RepositoryError, UserRole},
+    repositories::UserRole,
     routes::{ApiError, auth, parse_tenant_id},
 };
 
@@ -24,67 +24,16 @@ pub(super) use delete::delete_job;
 
 use recovery_request::{DuplicateJobRequest, ReprintJobRequest};
 
+pub use crate::job_projection::JobProjection as JobResponse;
+
 #[derive(Debug, Deserialize)]
 pub struct RecoveryReasonRequest {
     reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobResponse {
-    id: String,
-    tenant_id: String,
-    printer_id: String,
-    agent_id: String,
-    artifact_id: String,
-    command_id: String,
-    status: String,
-    error: Option<String>,
-    created_at: String,
-    updated_at: String,
-    print: JobPrintResponse,
-    command: JobCommandResponse,
-    artifact: JobArtifactResponse,
-    material: material::JobMaterialResponse,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobPrintResponse {
-    status: String,
-    printer_state: Option<String>,
-    progress_percent: Option<u8>,
-    remaining_time_minutes: Option<u32>,
-    current_layer: Option<u32>,
-    total_layers: Option<u32>,
-    active_file: Option<String>,
-    last_progress_percent: Option<u8>,
-    last_layer: Option<u32>,
-    error: Option<String>,
-    started_at: Option<String>,
-    finished_at: Option<String>,
-    updated_at: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobArtifactResponse {
-    id: String,
-    tenant_id: String,
-    filename: String,
-    content_type: String,
-    size_bytes: u64,
-    metadata: Option<ArtifactMetadata>,
-    created_at: String,
-}
-
 #[derive(Debug, Serialize)]
 pub struct ArtifactMetadataPreviewResponse {
     metadata: Option<ArtifactMetadata>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobCommandResponse {
-    id: String,
-    kind: String,
-    status: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -277,80 +226,4 @@ pub async fn get_job(
     };
 
     Ok(Json(JobResponse::try_from(job)?))
-}
-
-impl TryFrom<JobWithArtifact> for JobResponse {
-    type Error = RepositoryError;
-
-    fn try_from(value: JobWithArtifact) -> Result<Self, Self::Error> {
-        Self::from_parts(value.job, value.artifact)
-    }
-}
-
-impl JobResponse {
-    fn from_parts(job: Job, artifact: JobArtifact) -> Result<Self, RepositoryError> {
-        let material = material::JobMaterialResponse::from_job(&job)?;
-        Ok(Self {
-            id: job.id.to_string(),
-            tenant_id: job.tenant_id.to_string(),
-            printer_id: job.printer_id,
-            agent_id: job.agent_id.to_string(),
-            artifact_id: job.artifact_id,
-            command_id: job.command_id.to_string(),
-            status: job.status.to_string(),
-            error: job.error,
-            created_at: job.created_at,
-            updated_at: job.updated_at,
-            print: JobPrintResponse::from(job.print),
-            command: JobCommandResponse {
-                id: job.command_id.to_string(),
-                kind: "print_project_file".to_string(),
-                status: job.status.to_string(),
-            },
-            artifact: JobArtifactResponse::try_from_artifact(artifact)?,
-            material,
-        })
-    }
-}
-
-impl From<JobPrintState> for JobPrintResponse {
-    fn from(print: JobPrintState) -> Self {
-        Self {
-            status: print.status.to_string(),
-            printer_state: print.printer_state,
-            progress_percent: print.progress_percent,
-            remaining_time_minutes: print.remaining_time_minutes,
-            current_layer: print.current_layer,
-            total_layers: print.total_layers,
-            active_file: print.active_file,
-            last_progress_percent: print.last_progress_percent,
-            last_layer: print.last_layer,
-            error: print.error,
-            started_at: print.started_at,
-            finished_at: print.finished_at,
-            updated_at: print.updated_at,
-        }
-    }
-}
-
-impl JobArtifactResponse {
-    fn try_from_artifact(artifact: JobArtifact) -> Result<Self, RepositoryError> {
-        Ok(Self {
-            id: artifact.id,
-            tenant_id: artifact.tenant_id.to_string(),
-            filename: artifact.filename,
-            content_type: artifact.content_type,
-            size_bytes: artifact.size_bytes,
-            metadata: artifact
-                .metadata_json
-                .map(|value| serde_json::from_str::<ArtifactMetadata>(&value))
-                .transpose()
-                .map_err(|err| {
-                    RepositoryError::Database(
-                        anyhow::Error::new(err).context("invalid persisted artifact metadata"),
-                    )
-                })?,
-            created_at: artifact.created_at,
-        })
-    }
 }

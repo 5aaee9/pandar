@@ -1,7 +1,8 @@
 use anyhow::Context;
 use pandar_core::{TenantId, created_at_now};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseTransaction, EntityTrait,
+    PaginatorTrait, QueryFilter,
 };
 
 use super::{
@@ -28,76 +29,43 @@ pub(super) async fn create(
         .begin_write_transaction()
         .await
         .context("failed to begin personal preset create transaction")?;
-    if let Err(error) = lock_owner(&tx, tenant_id, owner).await {
-        tx.rollback()
-            .await
-            .context("failed to finish missing personal preset owner")?;
-        return Err(error);
-    }
-    let existing = match find_by_name(&tx, tenant_id, owner, &input.name).await {
-        Ok(value) => value,
-        Err(error) => {
-            tx.rollback()
-                .await
-                .context("failed to roll back personal preset lookup error")?;
-            return Err(error);
-        }
-    };
-    if let Some(existing) = existing {
-        let existing = match preset_from_model(existing) {
-            Ok(preset) => preset,
-            Err(error) => {
-                tx.rollback()
-                    .await
-                    .context("failed to roll back personal preset conversion error")?;
-                return Err(error);
-            }
+    let preset = create_in_transaction(&tx, tenant_id, owner, input, options_json, actor).await?;
+    tx.commit()
+        .await
+        .context("failed to commit personal preset create")?;
+    Ok(preset)
+}
+
+async fn create_in_transaction(
+    tx: &DatabaseTransaction,
+    tenant_id: TenantId,
+    owner: &str,
+    input: CreatePersonalPreset,
+    options_json: String,
+    actor: AuditActor,
+) -> RepositoryResult<PersonalPreset> {
+    lock_owner(tx, tenant_id, owner).await?;
+    if let Some(existing) = find_by_name(tx, tenant_id, owner, &input.name).await? {
+        let existing = preset_from_model(existing)?;
+        return if replay_matches(&existing, &input) {
+            Ok(existing)
+        } else {
+            Err(RepositoryError::DuplicatePersonalPresetName)
         };
-        if replay_matches(&existing, &input) {
-            tx.rollback()
-                .await
-                .context("failed to finish preset replay")?;
-            return Ok(existing);
-        }
-        tx.rollback()
-            .await
-            .context("failed to finish duplicate preset create")?;
-        return Err(RepositoryError::DuplicatePersonalPresetName);
     }
     let count = personal_presets::Entity::find()
         .filter(personal_presets::Column::TenantId.eq(tenant_id.to_string()))
         .filter(personal_presets::Column::OwnerUserId.eq(owner))
-        .count(&tx)
-        .await;
-    let count = match count {
-        Ok(count) => count,
-        Err(error) => {
-            let error = anyhow::Error::new(error).context("failed to count owner personal presets");
-            tx.rollback()
-                .await
-                .context("failed to roll back personal preset count error")?;
-            return Err(error.into());
-        }
-    };
+        .count(tx)
+        .await
+        .context("failed to count owner personal presets")?;
     if count >= validation::OWNER_PRESET_LIMIT {
-        tx.rollback()
-            .await
-            .context("failed to finish preset quota rejection")?;
         return Err(RepositoryError::PersonalPresetLimitExceeded);
     }
-    let updated_time = match advance_clock(&tx, tenant_id, owner).await {
-        Ok(value) => value,
-        Err(error) => {
-            tx.rollback()
-                .await
-                .context("failed to roll back personal preset clock error")?;
-            return Err(error);
-        }
-    };
+    let updated_time = advance_clock(tx, tenant_id, owner).await?;
     let now = created_at_now();
-    let id = uuid::Uuid::new_v4().to_string();
     let model = personal_presets::ActiveModel {
-        id: Set(id),
+        id: Set(uuid::Uuid::new_v4().to_string()),
         tenant_id: Set(tenant_id.to_string()),
         owner_user_id: Set(owner.to_owned()),
         preset_type: Set(input.preset_type.as_str().to_owned()),
@@ -111,56 +79,27 @@ pub(super) async fn create(
         created_at: Set(now.clone()),
         updated_at: Set(now),
     }
-    .insert(&tx)
-    .await;
-    let model = match model {
-        Ok(model) => model,
-        Err(error)
-            if crate::db::is_unique_violation(
-                &error,
-                crate::db::UniqueConstraint::PersonalPresetName,
-            ) =>
-        {
-            tx.rollback()
-                .await
-                .context("failed to finish concurrent duplicate preset create")?;
-            return Err(RepositoryError::DuplicatePersonalPresetName);
+    .insert(tx)
+    .await
+    .map_err(|error| {
+        if crate::db::is_unique_violation(&error, crate::db::UniqueConstraint::PersonalPresetName) {
+            RepositoryError::DuplicatePersonalPresetName
+        } else {
+            anyhow::Error::new(error)
+                .context("failed to insert personal preset")
+                .into()
         }
-        Err(error) => {
-            let error = anyhow::Error::new(error).context("failed to insert personal preset");
-            tx.rollback()
-                .await
-                .context("failed to roll back personal preset insert error")?;
-            return Err(error.into());
-        }
-    };
-    let preset = match preset_from_model(model) {
-        Ok(preset) => preset,
-        Err(error) => {
-            tx.rollback()
-                .await
-                .context("failed to roll back personal preset conversion error")?;
-            return Err(error);
-        }
-    };
-    if let Err(error) = audit(
-        &tx,
+    })?;
+    let preset = preset_from_model(model)?;
+    audit(
+        tx,
         tenant_id,
         actor,
         "personal_preset.create",
         &preset,
         options_json.len(),
     )
-    .await
-    {
-        tx.rollback()
-            .await
-            .context("failed to roll back personal preset audit error")?;
-        return Err(error);
-    }
-    tx.commit()
-        .await
-        .context("failed to commit personal preset create")?;
+    .await?;
     Ok(preset)
 }
 
@@ -179,58 +118,40 @@ pub(super) async fn replace(
         .begin_write_transaction()
         .await
         .context("failed to begin personal preset replace transaction")?;
-    if let Err(error) = lock_owner(&tx, tenant_id, owner).await {
-        tx.rollback()
-            .await
-            .context("failed to finish missing personal preset owner")?;
-        return Err(error);
-    }
+    let preset =
+        replace_in_transaction(&tx, tenant_id, owner, id, input, options_json, actor).await?;
+    tx.commit()
+        .await
+        .context("failed to commit personal preset replace")?;
+    Ok(preset)
+}
+
+async fn replace_in_transaction(
+    tx: &DatabaseTransaction,
+    tenant_id: TenantId,
+    owner: &str,
+    id: &str,
+    input: CreatePersonalPreset,
+    options_json: String,
+    actor: AuditActor,
+) -> RepositoryResult<PersonalPreset> {
+    lock_owner(tx, tenant_id, owner).await?;
     let query = personal_presets::Entity::find_by_id(id)
         .filter(personal_presets::Column::TenantId.eq(tenant_id.to_string()))
         .filter(personal_presets::Column::OwnerUserId.eq(owner));
-    let locked = tx.lock_for_update(query).one(&tx).await;
-    let locked = match locked {
-        Ok(value) => value,
-        Err(error) => {
-            let error = anyhow::Error::new(error).context("failed to lock personal preset");
-            tx.rollback()
-                .await
-                .context("failed to roll back personal preset lock error")?;
-            return Err(error.into());
-        }
-    };
-    let Some(model) = locked else {
-        tx.rollback()
-            .await
-            .context("failed to finish missing preset replacement")?;
-        return Err(RepositoryError::MissingPersonalPreset);
-    };
-    let named = match find_by_name(&tx, tenant_id, owner, &input.name).await {
-        Ok(value) => value,
-        Err(error) => {
-            tx.rollback()
-                .await
-                .context("failed to roll back personal preset lookup error")?;
-            return Err(error);
-        }
-    };
-    if let Some(named) = named
-        && named.id != id
+    let model = tx
+        .lock_for_update(query)
+        .one(tx)
+        .await
+        .context("failed to lock personal preset")?
+        .ok_or(RepositoryError::MissingPersonalPreset)?;
+    if find_by_name(tx, tenant_id, owner, &input.name)
+        .await?
+        .is_some_and(|named| named.id != id)
     {
-        tx.rollback()
-            .await
-            .context("failed to finish duplicate preset replacement")?;
         return Err(RepositoryError::DuplicatePersonalPresetName);
     }
-    let updated_time = match advance_clock(&tx, tenant_id, owner).await {
-        Ok(value) => value,
-        Err(error) => {
-            tx.rollback()
-                .await
-                .context("failed to roll back personal preset clock error")?;
-            return Err(error);
-        }
-    };
+    let updated_time = advance_clock(tx, tenant_id, owner).await?;
     let mut active: personal_presets::ActiveModel = model.into();
     active.preset_type = Set(input.preset_type.as_str().to_owned());
     active.name = Set(input.name);
@@ -241,55 +162,25 @@ pub(super) async fn replace(
     active.options_json = Set(options_json.clone());
     active.updated_time = Set(updated_time);
     active.updated_at = Set(created_at_now());
-    let updated = active.update(&tx).await;
-    let updated = match updated {
-        Ok(model) => model,
-        Err(error)
-            if crate::db::is_unique_violation(
-                &error,
-                crate::db::UniqueConstraint::PersonalPresetName,
-            ) =>
-        {
-            tx.rollback()
-                .await
-                .context("failed to finish concurrent duplicate preset replacement")?;
-            return Err(RepositoryError::DuplicatePersonalPresetName);
+    let updated = active.update(tx).await.map_err(|error| {
+        if crate::db::is_unique_violation(&error, crate::db::UniqueConstraint::PersonalPresetName) {
+            RepositoryError::DuplicatePersonalPresetName
+        } else {
+            anyhow::Error::new(error)
+                .context("failed to replace personal preset")
+                .into()
         }
-        Err(error) => {
-            let error = anyhow::Error::new(error).context("failed to replace personal preset");
-            tx.rollback()
-                .await
-                .context("failed to roll back personal preset replace error")?;
-            return Err(error.into());
-        }
-    };
-    let preset = match preset_from_model(updated) {
-        Ok(preset) => preset,
-        Err(error) => {
-            tx.rollback()
-                .await
-                .context("failed to roll back personal preset conversion error")?;
-            return Err(error);
-        }
-    };
-    if let Err(error) = audit(
-        &tx,
+    })?;
+    let preset = preset_from_model(updated)?;
+    audit(
+        tx,
         tenant_id,
         actor,
         "personal_preset.update",
         &preset,
         options_json.len(),
     )
-    .await
-    {
-        tx.rollback()
-            .await
-            .context("failed to roll back personal preset audit error")?;
-        return Err(error);
-    }
-    tx.commit()
-        .await
-        .context("failed to commit personal preset replace")?;
+    .await?;
     Ok(preset)
 }
 
@@ -305,64 +196,38 @@ pub(super) async fn delete(
         .begin_write_transaction()
         .await
         .context("failed to begin personal preset delete transaction")?;
-    if let Err(error) = lock_owner(&tx, tenant_id, owner).await {
-        tx.rollback()
-            .await
-            .context("failed to finish missing personal preset owner")?;
-        return Err(error);
-    }
-    let query = personal_presets::Entity::find_by_id(id)
-        .filter(personal_presets::Column::TenantId.eq(tenant_id.to_string()))
-        .filter(personal_presets::Column::OwnerUserId.eq(owner));
-    let locked = tx.lock_for_update(query).one(&tx).await;
-    let locked = match locked {
-        Ok(value) => value,
-        Err(error) => {
-            let error =
-                anyhow::Error::new(error).context("failed to lock personal preset before delete");
-            tx.rollback()
-                .await
-                .context("failed to roll back personal preset lock error")?;
-            return Err(error.into());
-        }
-    };
-    let Some(model) = locked else {
-        tx.rollback()
-            .await
-            .context("failed to finish missing preset delete")?;
-        return Ok(false);
-    };
-    let preset = match preset_from_model(model) {
-        Ok(preset) => preset,
-        Err(error) => {
-            tx.rollback()
-                .await
-                .context("failed to roll back personal preset conversion error")?;
-            return Err(error);
-        }
-    };
-    if let Err(error) = advance_clock(&tx, tenant_id, owner).await {
-        tx.rollback()
-            .await
-            .context("failed to roll back personal preset clock error")?;
-        return Err(error);
-    }
-    let deleted = personal_presets::Entity::delete_by_id(id).exec(&tx).await;
-    if let Err(error) = deleted {
-        let error = anyhow::Error::new(error).context("failed to delete personal preset");
-        tx.rollback()
-            .await
-            .context("failed to roll back personal preset delete error")?;
-        return Err(error.into());
-    }
-    if let Err(error) = audit(&tx, tenant_id, actor, "personal_preset.delete", &preset, 0).await {
-        tx.rollback()
-            .await
-            .context("failed to roll back personal preset audit error")?;
-        return Err(error);
-    }
+    let deleted = delete_in_transaction(&tx, tenant_id, owner, id, actor).await?;
     tx.commit()
         .await
         .context("failed to commit personal preset delete")?;
+    Ok(deleted)
+}
+
+async fn delete_in_transaction(
+    tx: &DatabaseTransaction,
+    tenant_id: TenantId,
+    owner: &str,
+    id: &str,
+    actor: AuditActor,
+) -> RepositoryResult<bool> {
+    lock_owner(tx, tenant_id, owner).await?;
+    let query = personal_presets::Entity::find_by_id(id)
+        .filter(personal_presets::Column::TenantId.eq(tenant_id.to_string()))
+        .filter(personal_presets::Column::OwnerUserId.eq(owner));
+    let Some(model) = tx
+        .lock_for_update(query)
+        .one(tx)
+        .await
+        .context("failed to lock personal preset before delete")?
+    else {
+        return Ok(false);
+    };
+    let preset = preset_from_model(model)?;
+    advance_clock(tx, tenant_id, owner).await?;
+    personal_presets::Entity::delete_by_id(id)
+        .exec(tx)
+        .await
+        .context("failed to delete personal preset")?;
+    audit(tx, tenant_id, actor, "personal_preset.delete", &preset, 0).await?;
     Ok(true)
 }

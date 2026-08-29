@@ -1,8 +1,10 @@
+use std::collections::HashMap;
+
 use anyhow::Context;
 use pandar_core::{Agent, AgentId, AgentStatus, TenantId};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ConnectionTrait, DatabaseTransaction, EntityTrait,
-    IntoActiveModel,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseTransaction,
+    EntityTrait, IntoActiveModel, QueryFilter,
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -14,6 +16,27 @@ use crate::{
 };
 
 impl AgentRepository {
+    pub(crate) async fn current_session_ids_for_tenant(
+        &self,
+        tenant_id: TenantId,
+    ) -> RepositoryResult<HashMap<AgentId, String>> {
+        agents::Entity::find()
+            .filter(agents::Column::TenantId.eq(tenant_id.to_string()))
+            .all(&self.database.sea_orm_connection())
+            .await
+            .context("failed to load current Agent sessions for projection")?
+            .into_iter()
+            .filter_map(|agent| {
+                agent.current_session_id.map(|session_id| {
+                    AgentId::parse(&agent.id)
+                        .with_context(|| format!("failed to parse persisted Agent id {}", agent.id))
+                        .map(|agent_id| (agent_id, session_id))
+                })
+            })
+            .collect::<Result<_, anyhow::Error>>()
+            .map_err(RepositoryError::Database)
+    }
+
     pub(crate) async fn begin_current_session_fence(
         &self,
         tenant_id: TenantId,

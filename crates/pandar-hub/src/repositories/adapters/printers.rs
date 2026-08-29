@@ -1,9 +1,11 @@
 use anyhow::Context;
 use pandar_core::{AgentId, BambuDeviceFeatures, TenantId};
-use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseTransaction, Statement};
+use sea_orm::sea_query::{Alias, Expr, ExprTrait, OnConflict, Query};
+use sea_orm::{ConnectionTrait, DatabaseTransaction};
 
-use crate::repositories::{
-    PrinterSnapshotUpsert, RepositoryResult, printers::SnapshotSessionState,
+use crate::{
+    entities::printers,
+    repositories::{PrinterSnapshotUpsert, RepositoryResult, printers::SnapshotSessionState},
 };
 
 struct TelemetryWriteMask {
@@ -37,8 +39,8 @@ impl TelemetryWriteMask {
     }
 }
 
-// SeaORM's generic update path is select-then-write here; keep one SQL escape hatch so
-// SQLite and Postgres both preserve atomic ON CONFLICT upsert semantics for snapshots.
+// SeaORM's generic update path is select-then-write here; keep one SeaQuery
+// statement so both backends preserve atomic ON CONFLICT snapshot semantics.
 pub(crate) async fn upsert_snapshot(
     transaction: &DatabaseTransaction,
     tenant_id: TenantId,
@@ -47,11 +49,9 @@ pub(crate) async fn upsert_snapshot(
     access_code_encrypted: Option<&str>,
     session_state: SnapshotSessionState<'_>,
 ) -> RepositoryResult<()> {
-    let printer_id = uuid::Uuid::new_v4().to_string();
     let bambu_fun_bits = session_state
         .device_features
         .map(BambuDeviceFeatures::to_hex);
-    let bambu_fun_session_id = session_state.device_features_session_id.map(str::to_owned);
     let cooling_system_json = snapshot
         .cooling_system
         .as_ref()
@@ -64,196 +64,221 @@ pub(crate) async fn upsert_snapshot(
         .map(serde_json::to_string)
         .transpose()
         .context("failed to serialize Bambu nozzle system")?;
-    let bambu_nozzle_system_session_id = session_state.nozzle_system_session_id.map(str::to_owned);
-    let mqtt_presence_session_id = session_state.mqtt_presence_session_id.map(str::to_owned);
+    let nozzle_temperatures_json = serde_json::to_string(&snapshot.nozzle_temperatures)
+        .context("failed to serialize nozzle temperatures")?;
     let telemetry_write = TelemetryWriteMask::from_snapshot(snapshot);
     let status = snapshot
         .status
         .clone()
         .unwrap_or_else(|| "unknown".to_owned());
-    match transaction.get_database_backend() {
-        DatabaseBackend::Sqlite => {
-            let nozzle_temperatures_json = serde_json::to_string(&snapshot.nozzle_temperatures)
-                .context("failed to serialize nozzle temperatures")?;
-            transaction
-                .execute_raw(Statement::from_sql_and_values(
-                    DatabaseBackend::Sqlite,
-                    "INSERT INTO printers (
-                     id, tenant_id, agent_id, serial_number, host, access_code,
-                     access_code_encrypted, name, model, status,
-                     last_seen_at, created_at, nozzle_temperatures_json,
-                     active_nozzle, bed_temperature_celsius, bed_target_temperature_celsius,
-                     chamber_temperature_celsius, chamber_target_temperature_celsius,
-                     chamber_light_on, cooling_system_json, bambu_fun_bits,
-                     bambu_fun_session_id, bambu_nozzle_system_json,
-                     bambu_nozzle_system_session_id, mqtt_presence_session_id, state_revision
-                  )
-                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, 1)
-                 ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
-                     agent_id = excluded.agent_id,
-                     host = CASE
-                         WHEN ?24 THEN excluded.host
-                         ELSE COALESCE(printers.host, excluded.host)
-                     END,
-                     access_code = NULL,
-                     access_code_encrypted = CASE
-                         WHEN ?24 THEN excluded.access_code_encrypted
-                         ELSE COALESCE(printers.access_code_encrypted, excluded.access_code_encrypted)
-                     END,
-                     model = COALESCE(excluded.model, printers.model),
-                     status = CASE WHEN ?25 THEN excluded.status ELSE printers.status END,
-                     last_seen_at = excluded.last_seen_at,
-                     nozzle_temperatures_json = CASE WHEN ?26 THEN excluded.nozzle_temperatures_json ELSE printers.nozzle_temperatures_json END,
-                     active_nozzle = CASE WHEN ?27 THEN excluded.active_nozzle ELSE printers.active_nozzle END,
-                     bed_temperature_celsius = CASE WHEN ?28 THEN excluded.bed_temperature_celsius ELSE printers.bed_temperature_celsius END,
-                     bed_target_temperature_celsius = CASE WHEN ?29 THEN excluded.bed_target_temperature_celsius ELSE printers.bed_target_temperature_celsius END,
-                     chamber_temperature_celsius = CASE WHEN ?30 THEN excluded.chamber_temperature_celsius ELSE printers.chamber_temperature_celsius END,
-                     chamber_target_temperature_celsius = CASE WHEN ?31 THEN excluded.chamber_target_temperature_celsius ELSE printers.chamber_target_temperature_celsius END,
-                     chamber_light_on = CASE WHEN ?32 THEN excluded.chamber_light_on ELSE printers.chamber_light_on END,
-                     cooling_system_json = CASE WHEN ?33 THEN excluded.cooling_system_json ELSE printers.cooling_system_json END,
-                     bambu_fun_bits = COALESCE(excluded.bambu_fun_bits, printers.bambu_fun_bits),
-                     bambu_fun_session_id = CASE
-                         WHEN excluded.bambu_fun_bits IS NULL THEN printers.bambu_fun_session_id
-                         ELSE excluded.bambu_fun_session_id
-                     END,
-                     bambu_nozzle_system_json = COALESCE(excluded.bambu_nozzle_system_json, printers.bambu_nozzle_system_json),
-                     bambu_nozzle_system_session_id = CASE
-                         WHEN excluded.bambu_nozzle_system_json IS NULL THEN printers.bambu_nozzle_system_session_id
-                         ELSE excluded.bambu_nozzle_system_session_id
-                     END,
-                     mqtt_presence_session_id = COALESCE(excluded.mqtt_presence_session_id, printers.mqtt_presence_session_id),
-                     state_revision = printers.state_revision + 1",
-                    vec![
-                        printer_id.clone().into(),
-                        tenant_id.to_string().into(),
-                        agent_id.to_string().into(),
-                        snapshot.serial_number.clone().into(),
-                        snapshot.host.clone().into(),
-                        access_code_encrypted.map(str::to_owned).into(),
-                        snapshot.name.clone().into(),
-                        snapshot.model.clone().into(),
-                        status.clone().into(),
-                        snapshot.observed_at.clone().into(),
-                        nozzle_temperatures_json.into(),
-                        snapshot.active_nozzle.clone().into(),
-                        snapshot.bed_temperature_celsius.clone().into(),
-                        snapshot.bed_target_temperature_celsius.clone().into(),
-                        snapshot.chamber_temperature_celsius.clone().into(),
-                        snapshot.chamber_target_temperature_celsius.clone().into(),
-                        snapshot.chamber_light_on.into(),
-                        cooling_system_json.clone().into(),
-                        bambu_fun_bits.clone().into(),
-                        bambu_fun_session_id.clone().into(),
-                        bambu_nozzle_system_json.clone().into(),
-                        bambu_nozzle_system_session_id.clone().into(),
-                        mqtt_presence_session_id.clone().into(),
-                        snapshot.connection_authoritative.into(),
-                        telemetry_write.status.into(),
-                        telemetry_write.nozzle_temperatures.into(),
-                        telemetry_write.active_nozzle.into(),
-                        telemetry_write.bed_temperature.into(),
-                        telemetry_write.bed_target_temperature.into(),
-                        telemetry_write.chamber_temperature.into(),
-                        telemetry_write.chamber_target_temperature.into(),
-                        telemetry_write.chamber_light.into(),
-                        telemetry_write.cooling_system.into(),
-                    ],
-                ))
-                .await
-                .context("failed to upsert SQLite printer snapshot")?;
-        }
-        DatabaseBackend::Postgres => {
-            let nozzle_temperatures_json = serde_json::to_string(&snapshot.nozzle_temperatures)
-                .context("failed to serialize nozzle temperatures")?;
-            transaction
-                .execute_raw(Statement::from_sql_and_values(
-                    DatabaseBackend::Postgres,
-                    "INSERT INTO printers (
-                     id, tenant_id, agent_id, serial_number, host, access_code,
-                     access_code_encrypted, name, model, status,
-                     last_seen_at, created_at, nozzle_temperatures_json,
-                     active_nozzle, bed_temperature_celsius, bed_target_temperature_celsius,
-                     chamber_temperature_celsius, chamber_target_temperature_celsius,
-                     chamber_light_on, cooling_system_json, bambu_fun_bits,
-                     bambu_fun_session_id, bambu_nozzle_system_json,
-                     bambu_nozzle_system_session_id, mqtt_presence_session_id, state_revision
-                  )
-                 VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $8, $9, $10, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 1)
-                 ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
-                     agent_id = excluded.agent_id,
-                     host = CASE
-                         WHEN $24 THEN excluded.host
-                         ELSE COALESCE(printers.host, excluded.host)
-                     END,
-                     access_code = NULL,
-                     access_code_encrypted = CASE
-                         WHEN $24 THEN excluded.access_code_encrypted
-                         ELSE COALESCE(printers.access_code_encrypted, excluded.access_code_encrypted)
-                     END,
-                     model = COALESCE(excluded.model, printers.model),
-                     status = CASE WHEN $25 THEN excluded.status ELSE printers.status END,
-                     last_seen_at = excluded.last_seen_at,
-                     nozzle_temperatures_json = CASE WHEN $26 THEN excluded.nozzle_temperatures_json ELSE printers.nozzle_temperatures_json END,
-                     active_nozzle = CASE WHEN $27 THEN excluded.active_nozzle ELSE printers.active_nozzle END,
-                     bed_temperature_celsius = CASE WHEN $28 THEN excluded.bed_temperature_celsius ELSE printers.bed_temperature_celsius END,
-                     bed_target_temperature_celsius = CASE WHEN $29 THEN excluded.bed_target_temperature_celsius ELSE printers.bed_target_temperature_celsius END,
-                     chamber_temperature_celsius = CASE WHEN $30 THEN excluded.chamber_temperature_celsius ELSE printers.chamber_temperature_celsius END,
-                     chamber_target_temperature_celsius = CASE WHEN $31 THEN excluded.chamber_target_temperature_celsius ELSE printers.chamber_target_temperature_celsius END,
-                     chamber_light_on = CASE WHEN $32 THEN excluded.chamber_light_on ELSE printers.chamber_light_on END,
-                     cooling_system_json = CASE WHEN $33 THEN excluded.cooling_system_json ELSE printers.cooling_system_json END,
-                     bambu_fun_bits = COALESCE(excluded.bambu_fun_bits, printers.bambu_fun_bits),
-                     bambu_fun_session_id = CASE
-                         WHEN excluded.bambu_fun_bits IS NULL THEN printers.bambu_fun_session_id
-                         ELSE excluded.bambu_fun_session_id
-                     END,
-                     bambu_nozzle_system_json = COALESCE(excluded.bambu_nozzle_system_json, printers.bambu_nozzle_system_json),
-                     bambu_nozzle_system_session_id = CASE
-                         WHEN excluded.bambu_nozzle_system_json IS NULL THEN printers.bambu_nozzle_system_session_id
-                         ELSE excluded.bambu_nozzle_system_session_id
-                     END,
-                     mqtt_presence_session_id = COALESCE(excluded.mqtt_presence_session_id, printers.mqtt_presence_session_id),
-                     state_revision = printers.state_revision + 1",
-                    vec![
-                        printer_id.into(),
-                        tenant_id.to_string().into(),
-                        agent_id.to_string().into(),
-                        snapshot.serial_number.clone().into(),
-                        snapshot.host.clone().into(),
-                        access_code_encrypted.map(str::to_owned).into(),
-                        snapshot.name.clone().into(),
-                        snapshot.model.clone().into(),
-                        status.into(),
-                        snapshot.observed_at.clone().into(),
-                        nozzle_temperatures_json.into(),
-                        snapshot.active_nozzle.clone().into(),
-                        snapshot.bed_temperature_celsius.clone().into(),
-                        snapshot.bed_target_temperature_celsius.clone().into(),
-                        snapshot.chamber_temperature_celsius.clone().into(),
-                        snapshot.chamber_target_temperature_celsius.clone().into(),
-                        snapshot.chamber_light_on.into(),
-                        cooling_system_json.into(),
-                        bambu_fun_bits.into(),
-                        bambu_fun_session_id.into(),
-                        bambu_nozzle_system_json.into(),
-                        bambu_nozzle_system_session_id.into(),
-                        mqtt_presence_session_id.into(),
-                        snapshot.connection_authoritative.into(),
-                        telemetry_write.status.into(),
-                        telemetry_write.nozzle_temperatures.into(),
-                        telemetry_write.active_nozzle.into(),
-                        telemetry_write.bed_temperature.into(),
-                        telemetry_write.bed_target_temperature.into(),
-                        telemetry_write.chamber_temperature.into(),
-                        telemetry_write.chamber_target_temperature.into(),
-                        telemetry_write.chamber_light.into(),
-                        telemetry_write.cooling_system.into(),
-                    ],
-                ))
-                .await
-                .context("failed to upsert PostgreSQL printer snapshot")?;
-        }
-        backend => unreachable!("unsupported printer snapshot backend {backend:?}"),
-    }
 
+    let excluded = |column| Expr::col((Alias::new("excluded"), column));
+    let stored = |column| Expr::col((Alias::new("printers"), column));
+    let selected = |write, column| {
+        if write {
+            excluded(column)
+        } else {
+            stored(column)
+        }
+    };
+    let connection_value = |column| {
+        if snapshot.connection_authoritative {
+            excluded(column)
+        } else {
+            stored(column).if_null(excluded(column))
+        }
+    };
+
+    let mut query = Query::insert();
+    query
+        .into_table(printers::Entity)
+        .columns([
+            printers::Column::Id,
+            printers::Column::TenantId,
+            printers::Column::AgentId,
+            printers::Column::SerialNumber,
+            printers::Column::Host,
+            printers::Column::AccessCode,
+            printers::Column::AccessCodeEncrypted,
+            printers::Column::Name,
+            printers::Column::Model,
+            printers::Column::Status,
+            printers::Column::LastSeenAt,
+            printers::Column::CreatedAt,
+            printers::Column::NozzleTemperaturesJson,
+            printers::Column::ActiveNozzle,
+            printers::Column::BedTemperatureCelsius,
+            printers::Column::BedTargetTemperatureCelsius,
+            printers::Column::ChamberTemperatureCelsius,
+            printers::Column::ChamberTargetTemperatureCelsius,
+            printers::Column::ChamberLightOn,
+            printers::Column::CoolingSystemJson,
+            printers::Column::BambuFunBits,
+            printers::Column::BambuFunSessionId,
+            printers::Column::BambuNozzleSystemJson,
+            printers::Column::BambuNozzleSystemSessionId,
+            printers::Column::MqttPresenceSessionId,
+            printers::Column::StateRevision,
+        ])
+        .values_panic([
+            Expr::val(uuid::Uuid::new_v4().to_string()),
+            Expr::val(tenant_id.to_string()),
+            Expr::val(agent_id.to_string()),
+            Expr::val(snapshot.serial_number.clone()),
+            Expr::val(snapshot.host.clone()),
+            Expr::val(Option::<String>::None),
+            Expr::val(access_code_encrypted.map(str::to_owned)),
+            Expr::val(snapshot.name.clone()),
+            Expr::val(snapshot.model.clone()),
+            Expr::val(status),
+            Expr::val(snapshot.observed_at.clone()),
+            Expr::val(snapshot.observed_at.clone()),
+            Expr::val(nozzle_temperatures_json),
+            Expr::val(snapshot.active_nozzle.clone()),
+            Expr::val(snapshot.bed_temperature_celsius.clone()),
+            Expr::val(snapshot.bed_target_temperature_celsius.clone()),
+            Expr::val(snapshot.chamber_temperature_celsius.clone()),
+            Expr::val(snapshot.chamber_target_temperature_celsius.clone()),
+            Expr::val(snapshot.chamber_light_on),
+            Expr::val(cooling_system_json),
+            Expr::val(bambu_fun_bits),
+            Expr::val(session_state.device_features_session_id.map(str::to_owned)),
+            Expr::val(bambu_nozzle_system_json),
+            Expr::val(session_state.nozzle_system_session_id.map(str::to_owned)),
+            Expr::val(session_state.mqtt_presence_session_id.map(str::to_owned)),
+            Expr::val(1_i64),
+        ])
+        .on_conflict(
+            OnConflict::columns([printers::Column::TenantId, printers::Column::SerialNumber])
+                .values([
+                    (
+                        printers::Column::AgentId,
+                        excluded(printers::Column::AgentId),
+                    ),
+                    (
+                        printers::Column::Host,
+                        connection_value(printers::Column::Host),
+                    ),
+                    (
+                        printers::Column::AccessCode,
+                        Expr::val(Option::<String>::None),
+                    ),
+                    (
+                        printers::Column::AccessCodeEncrypted,
+                        connection_value(printers::Column::AccessCodeEncrypted),
+                    ),
+                    (
+                        printers::Column::Model,
+                        excluded(printers::Column::Model).if_null(stored(printers::Column::Model)),
+                    ),
+                    (
+                        printers::Column::Status,
+                        selected(telemetry_write.status, printers::Column::Status),
+                    ),
+                    (
+                        printers::Column::LastSeenAt,
+                        excluded(printers::Column::LastSeenAt),
+                    ),
+                    (
+                        printers::Column::NozzleTemperaturesJson,
+                        selected(
+                            telemetry_write.nozzle_temperatures,
+                            printers::Column::NozzleTemperaturesJson,
+                        ),
+                    ),
+                    (
+                        printers::Column::ActiveNozzle,
+                        selected(
+                            telemetry_write.active_nozzle,
+                            printers::Column::ActiveNozzle,
+                        ),
+                    ),
+                    (
+                        printers::Column::BedTemperatureCelsius,
+                        selected(
+                            telemetry_write.bed_temperature,
+                            printers::Column::BedTemperatureCelsius,
+                        ),
+                    ),
+                    (
+                        printers::Column::BedTargetTemperatureCelsius,
+                        selected(
+                            telemetry_write.bed_target_temperature,
+                            printers::Column::BedTargetTemperatureCelsius,
+                        ),
+                    ),
+                    (
+                        printers::Column::ChamberTemperatureCelsius,
+                        selected(
+                            telemetry_write.chamber_temperature,
+                            printers::Column::ChamberTemperatureCelsius,
+                        ),
+                    ),
+                    (
+                        printers::Column::ChamberTargetTemperatureCelsius,
+                        selected(
+                            telemetry_write.chamber_target_temperature,
+                            printers::Column::ChamberTargetTemperatureCelsius,
+                        ),
+                    ),
+                    (
+                        printers::Column::ChamberLightOn,
+                        selected(
+                            telemetry_write.chamber_light,
+                            printers::Column::ChamberLightOn,
+                        ),
+                    ),
+                    (
+                        printers::Column::CoolingSystemJson,
+                        selected(
+                            telemetry_write.cooling_system,
+                            printers::Column::CoolingSystemJson,
+                        ),
+                    ),
+                    (
+                        printers::Column::BambuFunBits,
+                        excluded(printers::Column::BambuFunBits)
+                            .if_null(stored(printers::Column::BambuFunBits)),
+                    ),
+                    (
+                        printers::Column::BambuFunSessionId,
+                        Expr::case(
+                            excluded(printers::Column::BambuFunBits).is_null(),
+                            stored(printers::Column::BambuFunSessionId),
+                        )
+                        .finally(excluded(printers::Column::BambuFunSessionId))
+                        .into(),
+                    ),
+                    (
+                        printers::Column::BambuNozzleSystemJson,
+                        excluded(printers::Column::BambuNozzleSystemJson)
+                            .if_null(stored(printers::Column::BambuNozzleSystemJson)),
+                    ),
+                    (
+                        printers::Column::BambuNozzleSystemSessionId,
+                        Expr::case(
+                            excluded(printers::Column::BambuNozzleSystemJson).is_null(),
+                            stored(printers::Column::BambuNozzleSystemSessionId),
+                        )
+                        .finally(excluded(printers::Column::BambuNozzleSystemSessionId))
+                        .into(),
+                    ),
+                    (
+                        printers::Column::MqttPresenceSessionId,
+                        excluded(printers::Column::MqttPresenceSessionId)
+                            .if_null(stored(printers::Column::MqttPresenceSessionId)),
+                    ),
+                    (
+                        printers::Column::StateRevision,
+                        stored(printers::Column::StateRevision).add(1),
+                    ),
+                ])
+                .to_owned(),
+        );
+
+    transaction
+        .execute(&query)
+        .await
+        .context("failed to upsert printer snapshot")?;
     Ok(())
 }

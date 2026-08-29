@@ -4,12 +4,15 @@ use sea_orm::{ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 
 use super::sqlite_database;
 use crate::{
+    db::Database,
     entities::personal_presets,
     repositories::{
         AuditActor, AuditEventRepository, AuthRepository, CreatePersonalPreset,
         PersonalPresetRepository, PersonalPresetType, RepositoryError, TenantRepository, UserRole,
     },
 };
+
+mod rollback;
 
 pub(super) fn input(kind: PersonalPresetType, name: &str) -> CreatePersonalPreset {
     CreatePersonalPreset {
@@ -330,86 +333,6 @@ async fn deleting_a_user_cascades_personal_presets_and_owner_clock() {
             .unwrap()
             .is_empty()
     );
-}
-
-#[tokio::test]
-async fn invalid_and_malformed_personal_presets_preserve_stable_errors_and_causes() {
-    let database = sqlite_database().await;
-    let tenants = TenantRepository::new(database.clone());
-    let auth = AuthRepository::new(database.clone());
-    let presets = PersonalPresetRepository::new(database.clone());
-    let tenant = tenants.create("preset-invalid", "Presets").await.unwrap();
-    let user = auth
-        .create_user(tenant.id, "owner@test", "Owner", UserRole::Operator)
-        .await
-        .unwrap();
-    let mut invalid = input(PersonalPresetType::Print, "");
-    assert!(matches!(
-        presets
-            .create_with_audit(
-                tenant.id,
-                &user.id,
-                invalid.clone(),
-                AuditActor::user(&user.id)
-            )
-            .await
-            .unwrap_err(),
-        RepositoryError::InvalidPersonalPreset
-    ));
-    invalid.name = "Large".into();
-    invalid
-        .options
-        .insert("gcode".into(), "x".repeat(64 * 1024 + 1));
-    assert!(matches!(
-        presets
-            .create_with_audit(tenant.id, &user.id, invalid, AuditActor::user(&user.id))
-            .await
-            .unwrap_err(),
-        RepositoryError::InvalidPersonalPreset
-    ));
-
-    let created = presets
-        .create_with_audit(
-            tenant.id,
-            &user.id,
-            input(PersonalPresetType::Print, "Broken"),
-            AuditActor::user(&user.id),
-        )
-        .await
-        .unwrap();
-    personal_presets::Entity::update_many()
-        .filter(personal_presets::Column::Id.eq(&created.id))
-        .set(personal_presets::ActiveModel {
-            options_json: Set("{".into()),
-            ..Default::default()
-        })
-        .exec(&database.sea_orm_connection())
-        .await
-        .unwrap();
-    let error = presets
-        .get(tenant.id, &user.id, &created.id)
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        error,
-        RepositoryError::InvalidPersistedPersonalPreset(_)
-    ));
-    assert!(format!("{error:#}").contains("failed to decode persisted personal preset options"));
-
-    let mut invalid_filament_metadata = input(PersonalPresetType::Print, "Bad Metadata");
-    invalid_filament_metadata.filament_id = Some("P123".to_owned());
-    assert!(matches!(
-        presets
-            .create_with_audit(
-                tenant.id,
-                &user.id,
-                invalid_filament_metadata,
-                AuditActor::user(&user.id),
-            )
-            .await
-            .unwrap_err(),
-        RepositoryError::InvalidPersonalPreset
-    ));
 }
 
 #[tokio::test]

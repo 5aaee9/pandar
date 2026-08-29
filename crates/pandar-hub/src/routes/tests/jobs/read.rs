@@ -56,6 +56,46 @@ async fn job_list_and_detail_return_tenant_jobs() {
 }
 
 #[tokio::test]
+async fn printer_event_job_projection_matches_the_job_route_shape() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "event-job-projection-operator",
+    )
+    .await;
+    let agent = state.agents().create(tenant_id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
+        .await
+        .unwrap();
+    let (_, created) = multipart_request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
+        &token,
+    )
+    .await;
+    let job_id = pandar_core::JobId::parse(created["id"].as_str().unwrap()).unwrap();
+    let job = state
+        .jobs()
+        .get_for_tenant(tenant_id, job_id)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let event_projection =
+        serde_json::to_value(crate::printer_events::PrinterEventJob::try_from(job).unwrap())
+            .unwrap();
+
+    assert_eq!(event_projection, created);
+}
+
+#[tokio::test]
 async fn job_detail_returns_internal_error_for_corrupt_persisted_mapping_json() {
     let state = state().await;
     let app = router(state.clone());

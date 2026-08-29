@@ -143,3 +143,44 @@ async fn invalid_persisted_printer_device_features_are_reported_with_context() {
     assert!(chain.contains("failed to rehydrate printer Bambu device features"));
     assert!(chain.contains("device feature bitmap contains non-hexadecimal characters"));
 }
+
+#[tokio::test]
+async fn sqlite_snapshot_upsert_preserves_fields_omitted_by_partial_telemetry() {
+    let (_, tenants, agents, printers, _, _) = repositories().await;
+    let tenant = tenants
+        .create("sqlite-partial", "SQLite Partial")
+        .await
+        .unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let mut initial = snapshot(
+        "SQLITE-PARTIAL",
+        "Printer",
+        Some("X1C"),
+        "printing",
+        "2026-06-21T00:00:00Z",
+    );
+    initial.active_nozzle = Some("L".to_owned());
+    initial.bed_temperature_celsius = Some("60".to_owned());
+    printers
+        .upsert_snapshot(tenant.id, agent.id, initial)
+        .await
+        .unwrap();
+    let mut partial = telemetry_snapshot_without_connection(
+        "SQLITE-PARTIAL",
+        "Printer",
+        Some("X1C"),
+        "ignored",
+        "2026-06-21T00:01:00Z",
+    );
+    partial.status = None;
+    partial.telemetry_authoritative = false;
+
+    let updated = printers
+        .upsert_snapshot(tenant.id, agent.id, partial)
+        .await
+        .unwrap();
+
+    assert_eq!(updated.status, "printing");
+    assert_eq!(updated.active_nozzle.as_deref(), Some("L"));
+    assert_eq!(updated.bed_temperature_celsius.as_deref(), Some("60"));
+}

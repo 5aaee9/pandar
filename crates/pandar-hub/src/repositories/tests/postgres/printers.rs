@@ -116,7 +116,7 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
                 observed_at: "2026-06-21T00:10:00Z".to_string(),
                 nozzle_temperatures: Vec::new(),
                 active_nozzle: None,
-                bed_temperature_celsius: None,
+                bed_temperature_celsius: Some("60".to_owned()),
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
                 chamber_target_temperature_celsius: None,
@@ -134,8 +134,37 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
         authoritative.access_code.as_deref(),
         Some("reloaded-access-code")
     );
+    let partial = printers
+        .upsert_snapshot(
+            tenant.id,
+            agent.id,
+            PrinterSnapshotUpsert {
+                serial_number: "SN-001".to_string(),
+                host: None,
+                access_code: None,
+                name: "Ignored Snapshot Name".to_string(),
+                model: None,
+                status: None,
+                observed_at: "2026-06-21T00:15:00Z".to_string(),
+                nozzle_temperatures: Vec::new(),
+                active_nozzle: None,
+                bed_temperature_celsius: None,
+                bed_target_temperature_celsius: None,
+                chamber_temperature_celsius: None,
+                chamber_target_temperature_celsius: None,
+                chamber_light_on: None,
+                cooling_system: None,
+                nozzle_system: None,
+                connection_authoritative: false,
+                telemetry_authoritative: false,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(partial.status, "idle");
+    assert_eq!(partial.bed_temperature_celsius.as_deref(), Some("60"));
     assert_eq!(
         printers.list_for_tenant(tenant.id).await.unwrap(),
-        vec![authoritative]
+        vec![partial]
     );
 }

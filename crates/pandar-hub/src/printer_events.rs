@@ -13,7 +13,6 @@ use tokio::sync::{Mutex, broadcast, watch};
 use crate::{
     metrics::{MetricsState, SubscriptionGuard},
     repositories::{MaterialSnapshot, PrinterHms, PrinterWithLiveStatus},
-    routes::jobs::JobResponse,
     sessions::SessionRegistry,
 };
 use pandar_protocol::agent::v1::AgentCapability;
@@ -21,6 +20,7 @@ use pandar_protocol::agent::v1::AgentCapability;
 mod materials;
 mod projection;
 
+pub use crate::job_projection::JobProjection as PrinterEventJob;
 pub use projection::PrinterProjectionChange;
 pub(crate) use projection::ProjectionSubscription;
 
@@ -32,7 +32,7 @@ pub enum PrinterEvent {
     #[serde(rename = "printer_snapshot")]
     PrinterSnapshot { printer: Box<PrinterEventPrinter> },
     #[serde(rename = "job_progress")]
-    JobProgress { job: Box<JobResponse> },
+    JobProgress { job: Box<PrinterEventJob> },
     #[serde(rename = "command_result")]
     CommandResult { command: Box<PrinterEventCommand> },
 }
