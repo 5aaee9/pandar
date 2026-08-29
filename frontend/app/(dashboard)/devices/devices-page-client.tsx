@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 
 import {
   computeAttention,
@@ -9,7 +9,7 @@ import {
 } from "../../dashboard-attention";
 import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
-import { devicesRouteQuery } from "../../route-data";
+import { devicesRouteQueries } from "../../route-data";
 import type { AuthMetadata, Printer, Tenant } from "../../dashboard-types";
 import { useDashboardClock } from "../../use-dashboard-clock";
 
@@ -22,10 +22,14 @@ export function DevicesPageClient({
   auth: AuthMetadata;
   selectedTenant: Tenant;
 }) {
-  const { data, isLoading, error } = useQuery(
-    devicesRouteQuery(selectedTenant.id),
+  const [printersQuery, agentsQuery, jobsQuery] = useQueries({
+    queries: devicesRouteQueries(selectedTenant.id),
+  });
+  const nowMs = useDashboardClock(printersQuery.data ?? EMPTY_PRINTERS);
+  const isLoading = [printersQuery, agentsQuery, jobsQuery].some(
+    (query) => query.isLoading,
   );
-  const nowMs = useDashboardClock(data?.printers ?? EMPTY_PRINTERS);
+  const error = printersQuery.error ?? agentsQuery.error ?? jobsQuery.error;
 
   if (isLoading) {
     return (
@@ -44,11 +48,9 @@ export function DevicesPageClient({
     );
   }
 
-  const { printers, agents, jobs } = data ?? {
-    printers: [],
-    agents: [],
-    jobs: [],
-  };
+  const printers = printersQuery.data ?? [];
+  const agents = agentsQuery.data ?? [];
+  const jobs = jobsQuery.data ?? [];
   const health = computeHealth(agents, printers, jobs);
   const attentionItems = computeAttention({ agents, printers, jobs, nowMs });
 

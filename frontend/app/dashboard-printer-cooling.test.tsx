@@ -1,4 +1,6 @@
 import { NextIntlClientProvider } from "next-intl";
+
+import { QueryClientTestProvider } from "./query-client.test-utils";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -31,9 +33,11 @@ const printer: Printer = {
 
 function renderCooling(value: Printer) {
   return render(
-    <NextIntlClientProvider locale="en" messages={en}>
-      <PrinterCoolingSystem printer={value} />
-    </NextIntlClientProvider>,
+    <QueryClientTestProvider>
+      <NextIntlClientProvider locale="en" messages={en}>
+        <PrinterCoolingSystem printer={value} />
+      </NextIntlClientProvider>
+    </QueryClientTestProvider>,
   );
 }
 

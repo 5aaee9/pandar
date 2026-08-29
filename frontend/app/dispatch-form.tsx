@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { inputClasses } from '@/lib/utils'
 import type { Job, Printer } from './dashboard-types'
 import { apiIdSegment } from './api-path'
-import { routeDataKeys } from './route-data'
+import { invalidateTenantResources, mutationResources } from './mutation-invalidation'
 import { ConfirmDialog } from './confirm-dialog'
 import { DispatchArtifactField } from './dispatch-artifact-field'
 import { DispatchMaterialMappingFields } from './dispatch-material-mapping-fields'
@@ -71,8 +71,12 @@ export function DispatchForm({
       }
       return response
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
+    onSuccess: async () => {
+      await invalidateTenantResources(
+        queryClient,
+        selectedTenant!.id,
+        mutationResources.job,
+      )
       onRedirect(
         `/jobs?status=${encodeURIComponent(
           sourceJob ? 'reprint_queued' : 'job_created',

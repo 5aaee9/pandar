@@ -3,7 +3,6 @@
 import { useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import dynamic from 'next/dynamic'
-import { useQueryClient } from '@tanstack/react-query'
 import {
   BoxIcon,
   BotIcon,
@@ -34,7 +33,7 @@ import { inputClasses } from '@/lib/utils'
 import { deletePrinter, refreshPrinterMaterials, updatePrinter } from './actions'
 import type { Printer } from './dashboard-types'
 import { useActionStatusFeedback } from './mutation-feedback'
-import { routeDataKeys } from './route-data'
+import { mutationResources } from './mutation-invalidation'
 import { PrinterAxisControls } from './dashboard-printer-axis-controls'
 import { PrinterCoolingSystem } from './dashboard-printer-cooling'
 import { PrinterHmsPanel } from './dashboard-printer-hms'
@@ -168,23 +167,18 @@ function PrinterActions({ printer }: { printer: Printer }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
-  const queryClient = useQueryClient()
-
   const refreshAction = useActionStatusFeedback(
     refreshPrinterMaterials,
     'materials_refresh_queued',
+    { invalidate: mutationResources.printer },
   )
-  const deleteAction = useActionStatusFeedback(deletePrinter, 'printer_deleted', () => {
-    setConfirmOpen(false)
-    void queryClient.invalidateQueries({
-      queryKey: routeDataKeys.devices(printer.tenant_id),
-    })
+  const deleteAction = useActionStatusFeedback(deletePrinter, 'printer_deleted', {
+    invalidate: mutationResources.printer,
+    onSuccess: () => setConfirmOpen(false),
   })
-  const editAction = useActionStatusFeedback(updatePrinter, 'printer_updated', () => {
-    setEditOpen(false)
-    void queryClient.invalidateQueries({
-      queryKey: routeDataKeys.devices(printer.tenant_id),
-    })
+  const editAction = useActionStatusFeedback(updatePrinter, 'printer_updated', {
+    invalidate: mutationResources.printer,
+    onSuccess: () => setEditOpen(false),
   })
 
   return (

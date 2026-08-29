@@ -181,7 +181,7 @@ describe("PrinterCard mutations", () => {
     );
     expect(toast.success).toHaveBeenCalledWith("Printer deleted");
     expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: ["route", "devices", "tenant-1"],
+      queryKey: ["tenant", "tenant-1", "printers"],
     });
   });
 
@@ -241,7 +241,7 @@ describe("PrinterCard mutations", () => {
     );
     expect(toast.success).toHaveBeenCalledWith("Printer updated");
     expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: ["route", "devices", "tenant-1"],
+      queryKey: ["tenant", "tenant-1", "printers"],
     });
   });
 });

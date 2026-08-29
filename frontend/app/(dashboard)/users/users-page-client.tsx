@@ -1,9 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 
 import { QueryErrorBoundary } from "../../query-error-boundary";
-import { usersRouteQuery } from "../../route-data";
+import { usersRouteQueries } from "../../route-data";
 import type { Tenant } from "../../dashboard-types";
 import { UsersDashboard } from "../../users-dashboard";
 
@@ -18,10 +18,15 @@ export function UsersPageClient({
   adminLoadError: boolean;
   meEmail: string | null;
 }) {
-  const { data, isLoading, error } = useQuery({
-    ...usersRouteQuery(selectedTenant.id),
-    enabled: !adminUnavailable,
+  const [usersOptions, joinLinksOptions] = usersRouteQueries(selectedTenant.id);
+  const [usersQuery, joinLinksQuery] = useQueries({
+    queries: [
+      { ...usersOptions, enabled: !adminUnavailable },
+      { ...joinLinksOptions, enabled: !adminUnavailable },
+    ] as const,
   });
+  const isLoading = usersQuery.isLoading || joinLinksQuery.isLoading;
+  const error = usersQuery.error ?? joinLinksQuery.error;
 
   if (adminUnavailable) {
     return (
@@ -56,11 +61,11 @@ export function UsersPageClient({
     );
   }
 
-  const { users, identities, joinLinks } = data ?? {
+  const { users, identities } = usersQuery.data ?? {
     users: [],
     identities: [],
-    joinLinks: [],
   };
+  const joinLinks = joinLinksQuery.data ?? [];
 
   return (
     <QueryErrorBoundary>

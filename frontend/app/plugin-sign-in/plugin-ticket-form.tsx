@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
@@ -14,20 +14,6 @@ type PluginTicketFormProps = {
   selectedTenant: Tenant;
 };
 
-type StudioWindow = Window & {
-  wx?: {
-    postMessage?: (message: string) => void;
-  };
-};
-
-type StudioLocalhostMessage = {
-  command?: string;
-  response?: {
-    base_url?: string;
-  };
-  sequence_id?: string;
-};
-
 export function PluginTicketForm({
   action,
   autoSelectedTenant,
@@ -35,55 +21,10 @@ export function PluginTicketForm({
   selectedTenant,
 }: PluginTicketFormProps) {
   const t = useTranslations("signIn");
-  const [studioCallbackUrl, setStudioCallbackUrl] = useState<string | null>(
-    null,
-  );
   const [customCallbackUrl, setCustomCallbackUrl] = useState<string | null>(
     null,
   );
-  const [callbackSource, setCallbackSource] = useState<"default" | "studio">(
-    "default",
-  );
-
-  useEffect(() => {
-    const studioWindow = window as StudioWindow;
-    const sequenceId = `pandar-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-    function handleMessage(event: MessageEvent) {
-      let data: StudioLocalhostMessage;
-      try {
-        data =
-          typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-      } catch {
-        return;
-      }
-      if (!data || typeof data !== "object") {
-        return;
-      }
-      if (
-        data.command === "get_localhost_url" &&
-        data.sequence_id === sequenceId &&
-        data.response?.base_url
-      ) {
-        setStudioCallbackUrl(data.response.base_url);
-        setCustomCallbackUrl(null);
-        setCallbackSource("studio");
-      }
-    }
-
-    window.addEventListener("message", handleMessage);
-    studioWindow.wx?.postMessage?.(
-      JSON.stringify({
-        command: "get_localhost_url",
-        sequence_id: sequenceId,
-      }),
-    );
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
-
-  const callbackSourceLabel =
-    callbackSource === "studio" ? t("callbackDetected") : t("callbackDefault");
-  const callbackUrl = customCallbackUrl ?? studioCallbackUrl ?? redirectUrl;
+  const callbackUrl = customCallbackUrl ?? redirectUrl;
 
   return (
     <form action={action} className="grid gap-4 px-4 py-4">
@@ -94,7 +35,7 @@ export function PluginTicketForm({
             {t("callbackUrl")}
           </span>
           <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
-            {callbackSourceLabel}
+            {t("callbackDefault")}
           </span>
         </span>
         <input
@@ -102,7 +43,6 @@ export function PluginTicketForm({
           name="redirect_url"
           onChange={(event) => {
             setCustomCallbackUrl(event.currentTarget.value);
-            setCallbackSource("default");
           }}
           required
           type="url"

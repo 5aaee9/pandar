@@ -1,11 +1,14 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { QueryErrorBoundary } from "../../query-error-boundary";
-import { settingsAdminRouteQuery, settingsRouteQuery } from "../../route-data";
+import {
+  settingsAdminRouteQueries,
+  settingsRouteQueries,
+} from "../../route-data";
 import { SettingsDashboard } from "../../settings-dashboard";
 import type { AuthMetadata, Tenant } from "../../dashboard-types";
 
@@ -27,17 +30,26 @@ export function SettingsPageClient({
   const canAdmin =
     auth.provider === "none" ||
     (membership.role === "tenant_admin" && membership.error === null);
-  const workspaceQuery = useQuery(settingsRouteQuery(selectedTenant.id));
-  const adminQuery = useQuery({
-    ...settingsAdminRouteQuery(selectedTenant.id),
-    enabled: canAdmin,
+  const [agentsQuery, printersQuery] = useQueries({
+    queries: settingsRouteQueries(selectedTenant.id),
   });
+  const [tokenOptions, auditOptions] = settingsAdminRouteQueries(
+    selectedTenant.id,
+  );
+  const [tokensQuery, auditQuery] = useQueries({
+    queries: [
+      { ...tokenOptions, enabled: canAdmin },
+      { ...auditOptions, enabled: canAdmin },
+    ] as const,
+  });
+  const workspaceLoading = agentsQuery.isLoading || printersQuery.isLoading;
+  const workspaceError = agentsQuery.error ?? printersQuery.error;
 
-  if (workspaceQuery.isLoading) {
+  if (workspaceLoading) {
     return <SettingsLoading />;
   }
 
-  if (workspaceQuery.error) {
+  if (workspaceError) {
     return (
       <div
         className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
@@ -50,39 +62,41 @@ export function SettingsPageClient({
             {t("errorDetails")}
           </summary>
           <div className="mt-1 break-all">
-            {workspaceQuery.error instanceof Error
-              ? workspaceQuery.error.message
-              : String(workspaceQuery.error)}
+            {workspaceError instanceof Error
+              ? workspaceError.message
+              : String(workspaceError)}
           </div>
         </details>
       </div>
     );
   }
 
-  const workspace = workspaceQuery.data ?? { agents: [], printers: [] };
   const adminUnavailable =
     auth.provider !== "none" &&
     membership.error === null &&
     membership.role !== "tenant_admin";
   const adminLoadError =
     (auth.provider !== "none" && membership.error !== null) ||
-    adminQuery.error !== null;
+    tokensQuery.error !== null ||
+    auditQuery.error !== null;
 
   return (
     <QueryErrorBoundary>
       <SettingsDashboard
         adminLoadError={adminLoadError}
-        adminLoading={canAdmin && adminQuery.isLoading}
+        adminLoading={
+          canAdmin && (tokensQuery.isLoading || auditQuery.isLoading)
+        }
         adminUnavailable={adminUnavailable}
-        agents={workspace.agents}
-        auditEvents={adminQuery.data?.auditEvents ?? []}
+        agents={agentsQuery.data ?? []}
+        auditEvents={auditQuery.data ?? []}
         auth={auth}
         canAdmin={canAdmin}
         membershipRole={membership.role}
         nowMs={nowMs}
-        printers={workspace.printers}
+        printers={printersQuery.data ?? []}
         selectedTenant={selectedTenant}
-        tenantTokens={adminQuery.data?.tenantTokens ?? []}
+        tenantTokens={tokensQuery.data ?? []}
       />
     </QueryErrorBoundary>
   );

@@ -1,16 +1,9 @@
 import {
-  getAuthForRequest,
-  getIdentityForRequest,
-  getTenantsForRequest,
+  getDashboardRequestContext,
   getMembershipForRequest,
-  getSelectedTenantId,
-  resolveEffectiveTenants,
-  resolveSelectedTenant,
 } from "../../dashboard-data";
 import { adminAccessUnavailable } from "../../membership-policy";
 import { AgentsPageClient } from "./agents-page-client";
-
-const configuredTenantId = process.env.APP_TENANT_ID;
 
 export default async function AgentsPage({
   searchParams,
@@ -20,21 +13,11 @@ export default async function AgentsPage({
     discovery?: string | string[];
   }>;
 }) {
-  const [params, tenantId, auth, identity, tenantsResult] = await Promise.all([
+  const [params, context] = await Promise.all([
     searchParams,
-    getSelectedTenantId(),
-    getAuthForRequest(),
-    getIdentityForRequest(),
-    getTenantsForRequest(),
+    getDashboardRequestContext(),
   ]);
-
-  const effectiveTenants = resolveEffectiveTenants(
-    tenantsResult.tenants,
-    identity.me,
-    configuredTenantId,
-    auth.provider,
-  );
-  const selectedTenant = resolveSelectedTenant(tenantId, effectiveTenants);
+  const { auth, selectedTenant } = context;
 
   if (!selectedTenant) {
     return <div>No tenant selected</div>;

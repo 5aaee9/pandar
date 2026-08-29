@@ -122,7 +122,14 @@ export async function updatePrinter(
   return { ok: true };
 }
 
-export async function deleteAgent(formData: FormData) {
+export type AgentDeleteResult = {
+  ok: boolean;
+  redirectUrl: string;
+};
+
+export async function deleteAgent(
+  formData: FormData,
+): Promise<AgentDeleteResult> {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const agentId = stringField(formData, "agent_id");
@@ -133,9 +140,12 @@ export async function deleteAgent(formData: FormData) {
       headers: await apiHeaders("application/json"),
     },
   );
-  redirect(
-    agentsStatusUrl(response.ok ? "agent_deleted" : await errorCode(response)),
-  );
+  return {
+    ok: response.ok,
+    redirectUrl: agentsStatusUrl(
+      response.ok ? "agent_deleted" : await errorCode(response),
+    ),
+  };
 }
 
 export async function diagnosePrinter(formData: FormData) {

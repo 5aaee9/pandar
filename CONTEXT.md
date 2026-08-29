@@ -18,7 +18,7 @@ The Next.js route surface under `frontend/app/api/tenants/[tenantId]/` and the m
 
 ## Route data
 
-The dashboard's per-view React Query data, owned by `frontend/app/route-data.ts`. The module exports `routeDataKeys` (per-view, tenant-scoped key prefixes), per-view query factories (`devicesRouteQuery`, `jobsRouteQuery`, `agentsRouteQuery`, `usersRouteQuery`, `settingsRouteQuery`, `agentSettingsRouteQuery`) carrying the fetch composition and cache policy, and the route-data types. Readers use the factories with `useQuery`; queryFns fetch same-origin through the Hub proxy. Mutations invalidate through `routeDataKeys` — never hand-written key literals.
+The dashboard's mutable React Query resources are owned by `frontend/app/route-data.ts`. The module exports `resourceDataKeys` and one tenant-scoped query factory for each authoritative resource (printers, agents, jobs, users/join links, tenant tokens, and audit events). Per-view query composition consumes those factories with `useQueries`; it never fetches the same resource into a second route-owned cache. Command context may remain route-scoped because it is selected by route parameters. Query functions fetch same-origin through the Hub proxy, and mutation completion invalidates canonical resource keys through `frontend/app/mutation-invalidation.ts` rather than hand-written route keys.
 
 ## Printer control
 

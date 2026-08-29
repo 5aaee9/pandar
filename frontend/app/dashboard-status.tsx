@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 
 import { refreshPrinters } from './actions'
 import { retryDispatchJob } from './job-actions'
+import { JobMutationForm } from './job-mutation-form'
 import { dashboardSidebarHref } from './dashboard-shell'
 import { Button } from '@/components/ui/button'
 import type { AttentionItem, Severity, TextKey } from './dashboard-attention'
@@ -204,7 +205,7 @@ function AttentionAction({
 
   if (item.kind === 'job' && item.reason === 'job_dispatch_failed') {
     return (
-      <form action={retryDispatchJob}>
+      <JobMutationForm action={retryDispatchJob} tenantId={tenant.id}>
         <input name="tenant_id" type="hidden" value={tenant.id} />
         <input name="job_id" type="hidden" value={item.mono} />
         <Button
@@ -213,7 +214,7 @@ function AttentionAction({
         >
           {tAct('retryDispatch')}
         </Button>
-      </form>
+      </JobMutationForm>
     )
   }
 

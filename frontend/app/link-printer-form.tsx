@@ -13,7 +13,7 @@ import { apiIdSegment } from './api-path'
 import { isTerminalCommandStatus } from './command-status'
 import type { Agent, Command, Tenant } from './dashboard-types'
 import { EmptyState } from './dashboard-ui'
-import { routeDataKeys } from './route-data'
+import { invalidateTenantResources, mutationResources } from './mutation-invalidation'
 
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS = 90_000
@@ -82,14 +82,11 @@ export function LinkPrinterMachineForm({
             handledCommandRef.current = commandId
             if (command.status === 'succeeded') {
               toast.success(t('linked'))
-              await Promise.all([
-                queryClient.invalidateQueries({
-                  queryKey: routeDataKeys.devices(tenantId),
-                }),
-                queryClient.invalidateQueries({
-                  queryKey: routeDataKeys.agents(tenantId),
-                }),
-              ])
+              await invalidateTenantResources(
+                queryClient,
+                tenantId,
+                mutationResources.printerLink,
+              )
               if (!active) {
                 return
               }

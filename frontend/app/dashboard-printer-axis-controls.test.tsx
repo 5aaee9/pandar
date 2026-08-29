@@ -1,4 +1,6 @@
 import { NextIntlClientProvider } from "next-intl";
+
+import { QueryClientTestProvider } from "./query-client.test-utils";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,9 +28,11 @@ vi.mock("sonner", () => ({
 
 function renderWithMessages(children: React.ReactNode, locale = "en") {
   return render(
-    <NextIntlClientProvider locale={locale} messages={locale === "zh" ? zh : en}>
-      {children}
-    </NextIntlClientProvider>,
+    <QueryClientTestProvider>
+      <NextIntlClientProvider locale={locale} messages={locale === "zh" ? zh : en}>
+        {children}
+      </NextIntlClientProvider>
+    </QueryClientTestProvider>,
   );
 }
 

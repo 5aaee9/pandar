@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 
 import { Button } from '@/components/ui/button'
 import { retryDispatchJob } from './job-actions'
+import { JobMutationForm } from './job-mutation-form'
 
 const REPRINTABLE_PRINT_STATUSES = new Set([
   'stalled',
@@ -43,7 +44,10 @@ export function JobRowActions({
   return (
     <>
       {canRetryDispatch ? (
-        <form action={retryDispatchJob}>
+        <JobMutationForm
+          action={retryDispatchJob}
+          tenantId={job.artifact.tenant_id}
+        >
           <input name="tenant_id" type="hidden" value={job.artifact.tenant_id} />
           <input name="job_id" type="hidden" value={job.id} />
           <input name="return_to" type="hidden" value="jobs" />
@@ -58,7 +62,7 @@ export function JobRowActions({
             <RefreshCwIcon aria-hidden="true" />
             {t('retryDispatchJob')}
           </Button>
-        </form>
+        </JobMutationForm>
       ) : null}
       {canReprint ? (
         <Button

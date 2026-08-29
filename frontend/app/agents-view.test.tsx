@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
+import { QueryClientTestProvider } from "./query-client.test-utils";
 import {
   DashboardViewContent,
   type DashboardViewContentProps,
@@ -32,9 +33,11 @@ vi.mock("sonner", () => ({
 
 function renderWithMessages(children: React.ReactNode) {
   return render(
-    <NextIntlClientProvider locale="en" messages={en}>
-      {children}
-    </NextIntlClientProvider>,
+    <QueryClientTestProvider>
+      <NextIntlClientProvider locale="en" messages={en}>
+        {children}
+      </NextIntlClientProvider>
+    </QueryClientTestProvider>,
   );
 }
 

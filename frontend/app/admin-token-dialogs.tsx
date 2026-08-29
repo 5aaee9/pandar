@@ -1,4 +1,5 @@
 import { useActionState, useId, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { PlusIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -20,6 +21,11 @@ import {
 } from "./admin-actions";
 import { Input, PrimaryButton, SecretActionResult } from "./admin-panel-shared";
 import type { TenantToken } from "./dashboard-types";
+import {
+  mutationResources,
+  useInvalidateOnSuccess,
+} from "./mutation-invalidation";
+import { useActionStatusFeedback } from "./mutation-feedback";
 
 type TokenStatus = "active" | "expired" | "revoked";
 export function CreateTenantTokenDialog({ tenantId }: { tenantId: string }) {
@@ -44,7 +50,14 @@ function CreateTenantTokenDialogSession({
   const t = useTranslations("admin");
   const helpId = useId();
   const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
   const [state, formAction, pending] = useActionState(createTenantToken, null);
+  useInvalidateOnSuccess(
+    state,
+    queryClient,
+    tenantId,
+    mutationResources.token,
+  );
   const completed = state?.ok && state.kind === "tenant_token";
 
   return (
@@ -171,7 +184,14 @@ function RotateTenantTokenDialogSession({
 }) {
   const t = useTranslations("admin");
   const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
   const [state, formAction, pending] = useActionState(rotateTenantToken, null);
+  useInvalidateOnSuccess(
+    state,
+    queryClient,
+    tenantId,
+    mutationResources.token,
+  );
   const completed = state?.ok && state.kind === "tenant_token";
 
   return (
@@ -272,13 +292,20 @@ export function RevokeTenantTokenDialog({
 }) {
   const t = useTranslations("admin");
   const [open, setOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const revokeAction = useActionStatusFeedback(
+    revokeTenantToken,
+    "tenant_token_revoked",
+    {
+      invalidate: mutationResources.token,
+      onSuccess: () => setOpen(false),
+    },
+  );
 
   return (
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (nextOpen || !submitting) {
+        if (nextOpen || !revokeAction.pending) {
           setOpen(nextOpen);
         }
       }}
@@ -298,7 +325,7 @@ export function RevokeTenantTokenDialog({
       <DialogContent
         className="sm:max-w-lg"
         closeLabel={t("close")}
-        showCloseButton={!submitting}
+        showCloseButton={!revokeAction.pending}
       >
         <DialogHeader>
           <DialogTitle>{t("revokeTokenTitle")}</DialogTitle>
@@ -306,24 +333,19 @@ export function RevokeTenantTokenDialog({
             {t("revokeTokenMessage", { name: token.name })}
           </DialogDescription>
         </DialogHeader>
-        <form
-          action={revokeTenantToken}
-          className="grid gap-4"
-          onSubmit={() => setSubmitting(true)}
-        >
+        <form action={revokeAction.formAction} className="grid gap-4">
           <input name="tenant_id" type="hidden" value={tenantId} />
           <input name="token_id" type="hidden" value={token.id} />
-          <input name="return_to" type="hidden" value="settings" />
           <DialogFooter>
             <DialogClose
               render={
-                <Button disabled={submitting} type="button" variant="outline" />
+                <Button disabled={revokeAction.pending} type="button" variant="outline" />
               }
             >
               {t("cancel")}
             </DialogClose>
-            <Button disabled={submitting} type="submit" variant="destructive">
-              {submitting ? t("revoking") : t("revokeTokenConfirm")}
+            <Button disabled={revokeAction.pending} type="submit" variant="destructive">
+              {revokeAction.pending ? t("revoking") : t("revokeTokenConfirm")}
             </Button>
           </DialogFooter>
         </form>

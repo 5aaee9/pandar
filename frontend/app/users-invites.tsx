@@ -31,7 +31,10 @@ import {
   sortJoinLinks,
 } from "./users-model";
 import { useMutationFeedback } from "./mutation-feedback";
-import { routeDataKeys } from "./route-data";
+import {
+  invalidateTenantResources,
+  mutationResources,
+} from "./mutation-invalidation";
 import { useQueryClient } from "@tanstack/react-query";
 import { InviteStatusChip, useNowMs } from "./users-shared";
 
@@ -167,9 +170,11 @@ function RevokeInviteButton({
   useMutationFeedback(state, {
     successMessage: t("inviteRevoked"),
     onSuccess: () =>
-      void queryClient.invalidateQueries({
-        queryKey: routeDataKeys.users(tenant.id),
-      }),
+      void invalidateTenantResources(
+        queryClient,
+        tenant.id,
+        mutationResources.joinLink,
+      ),
   });
 
   return (
@@ -244,9 +249,11 @@ function CreateInviteForm({
   useMutationFeedback(state, {
     silentError: true,
     onSuccess: () =>
-      void queryClient.invalidateQueries({
-        queryKey: routeDataKeys.users(tenant.id),
-      }),
+      void invalidateTenantResources(
+        queryClient,
+        tenant.id,
+        mutationResources.joinLink,
+      ),
   });
 
   return (

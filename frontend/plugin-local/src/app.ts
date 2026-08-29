@@ -1,3 +1,5 @@
+export {};
+
 type Config = {
   webUrl: string;
   hubUrl: string;
@@ -10,20 +12,6 @@ type Config = {
 
 type DiscoveryConfig = {
   hubUrl: string;
-};
-
-type StudioWindow = Window & {
-  wx?: {
-    postMessage?: (message: string) => void;
-  };
-};
-
-type StudioLocalhostMessage = {
-  command?: string;
-  response?: {
-    base_url?: string;
-  };
-  sequence_id?: string;
 };
 
 const form = document.querySelector<HTMLFormElement>("#target-form")!;
@@ -67,49 +55,6 @@ const buildSignInUrl = (redirectUrl: string) => {
   url.searchParams.set("redirect_url", redirectUrl);
   return url.toString();
 };
-
-const requestStudioCallbackUrl = () =>
-  new Promise<string | null>((resolve) => {
-    const studioWindow = window as StudioWindow;
-    if (typeof studioWindow.wx?.postMessage !== "function") {
-      resolve(null);
-      return;
-    }
-
-    const sequenceId = `pandar-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const timeout = window.setTimeout(() => {
-      window.removeEventListener("message", handleMessage);
-      resolve(null);
-    }, 2000);
-
-    function handleMessage(event: MessageEvent) {
-      let data: StudioLocalhostMessage;
-      try {
-        data =
-          typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-      } catch {
-        return;
-      }
-
-      if (
-        data?.command === "get_localhost_url" &&
-        data.sequence_id === sequenceId &&
-        data.response?.base_url
-      ) {
-        window.clearTimeout(timeout);
-        window.removeEventListener("message", handleMessage);
-        resolve(`${data.response.base_url}/callback`);
-      }
-    }
-
-    window.addEventListener("message", handleMessage);
-    studioWindow.wx.postMessage(
-      JSON.stringify({
-        command: "get_localhost_url",
-        sequence_id: sequenceId,
-      }),
-    );
-  });
 
 const markDirty = () => {
   isDirty = true;
@@ -202,11 +147,6 @@ const loadConfig = async () => {
   applyConfig((await response.json()) as Config);
   markDirty();
   await saveTargetServer("Discovering Hub URL...", "Target server ready.");
-  const studioCallbackUrl = await requestStudioCallbackUrl();
-  if (studioCallbackUrl) {
-    callbackUrl = studioCallbackUrl;
-    updateContinueLink();
-  }
 };
 
 form.addEventListener("submit", async (event) => {
@@ -214,7 +154,7 @@ form.addEventListener("submit", async (event) => {
   await saveTargetServer("Discovering Hub URL...", "Target server updated.");
 });
 
-continueLink.addEventListener("click", async (event) => {
+continueLink.addEventListener("click", (event) => {
   if (isDirty || !savedWebUrl || !callbackUrl) {
     event.preventDefault();
     setStatus("Switch Target server before continuing.", true);
@@ -222,8 +162,7 @@ continueLink.addEventListener("click", async (event) => {
   }
 
   event.preventDefault();
-  const studioCallbackUrl = await requestStudioCallbackUrl();
-  window.location.href = buildSignInUrl(studioCallbackUrl ?? callbackUrl);
+  window.location.href = buildSignInUrl(callbackUrl);
 });
 
 webUrlInput.addEventListener("input", markDirty);

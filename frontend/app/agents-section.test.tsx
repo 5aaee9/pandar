@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
 import { AgentsSection } from "./agents-section";
+import { QueryClientTestProvider } from "./query-client.test-utils";
 import type { Agent, Printer, Tenant } from "./dashboard-types";
 
 vi.mock("./actions", () => ({
@@ -27,9 +28,11 @@ vi.mock("sonner", () => ({
 
 function renderWithMessages(children: React.ReactNode) {
   return render(
-    <NextIntlClientProvider locale="en" messages={en}>
-      {children}
-    </NextIntlClientProvider>,
+    <QueryClientTestProvider>
+      <NextIntlClientProvider locale="en" messages={en}>
+        {children}
+      </NextIntlClientProvider>
+    </QueryClientTestProvider>,
   );
 }
 

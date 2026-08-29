@@ -1,7 +1,6 @@
 'use client'
 
-import { useMemo, type ReactNode } from 'react'
-import { useDashboardFilterStore } from './dashboard-filter-store'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
 import { PlusIcon, PrinterIcon } from 'lucide-react'
 
@@ -32,6 +31,8 @@ function useLocaleDate() {
   }
 }
 
+type PrinterFilterStatus = 'all' | 'online' | 'attention'
+
 export function PrinterInventory({
   selectedTenant,
   printers,
@@ -47,10 +48,8 @@ export function PrinterInventory({
   const tLink = useTranslations('linkPrinter')
   const tMat = useTranslations('material')
   const formatDate = useLocaleDate()
-  const query = useDashboardFilterStore((state) => state.query)
-  const status = useDashboardFilterStore((state) => state.status)
-  const setQuery = useDashboardFilterStore((state) => state.setQuery)
-  const setStatus = useDashboardFilterStore((state) => state.setStatus)
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState<PrinterFilterStatus>('all')
   const normalizedQuery = query.trim().toLowerCase()
   const filtered = useMemo(
     () =>

@@ -1,14 +1,14 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { useDashboardFilterStore } from './dashboard-filter-store'
 import { useTranslations } from 'next-intl'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
 import { apiIdSegment } from './api-path'
-import { JobsRouteData, routeDataKeys } from './route-data'
+import { resourceDataKeys } from './route-data'
+import { invalidateTenantResources, mutationResources } from './mutation-invalidation'
 import { FilterBar } from './dashboard-filter-bar'
 import {
   isClearableJob,
@@ -19,6 +19,8 @@ import { EmptyState, SectionHeader } from './dashboard-ui'
 import { JobRow } from './dashboard-job-row'
 import { ClearJobsDialog } from './clear-jobs-dialog'
 import { DeleteJobDialog } from './delete-job-dialog'
+
+type JobFilterStatus = 'all' | 'active' | 'failed' | 'completed'
 
 export function JobHistory({
   selectedTenant,
@@ -44,11 +46,12 @@ export function JobHistory({
 }) {
   const t = useTranslations('inventory')
   const queryClient = useQueryClient()
-  const query = useDashboardFilterStore((state) => state.query)
-  const status = useDashboardFilterStore((state) => state.status)
-  const setQuery = useDashboardFilterStore((state) => state.setQuery)
-  const setStatus = useDashboardFilterStore((state) => state.setStatus)
-  const reset = useDashboardFilterStore((state) => state.reset)
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState<JobFilterStatus>('all')
+  const reset = () => {
+    setQuery('')
+    setStatus('all')
+  }
   const [clearOpen, setClearOpen] = useState(false)
   const [clearError, setClearError] = useState<'generic' | 'permission' | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null)
@@ -66,24 +69,31 @@ export function JobHistory({
       return response
     },
     onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
-      const previousData = queryClient.getQueryData(routeDataKeys.jobs(selectedTenant!.id))
-      queryClient.setQueryData(routeDataKeys.jobs(selectedTenant!.id), (old: JobsRouteData | undefined) => {
-        if (!old) return old
-        return { ...old, jobs: old.jobs.filter((job) => !isClearableJob(job)) }
-      })
+      const queryKey = resourceDataKeys.jobs(selectedTenant!.id)
+      await queryClient.cancelQueries({ queryKey })
+      const previousData = queryClient.getQueryData<Job[]>(queryKey)
+      queryClient.setQueryData<Job[]>(queryKey, (old) =>
+        old?.filter((job) => !isClearableJob(job)),
+      )
       return { previousData }
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       setClearOpen(false)
-      queryClient.invalidateQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
+      await invalidateTenantResources(
+        queryClient,
+        selectedTenant!.id,
+        mutationResources.job,
+      )
       onClearRedirect(
         `/jobs?status=jobs_cleared`,
       )
     },
     onError: (error: { status?: number }, _variables, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(routeDataKeys.jobs(selectedTenant!.id), context.previousData)
+        queryClient.setQueryData(
+          resourceDataKeys.jobs(selectedTenant!.id),
+          context.previousData,
+        )
       }
       setClearError(
         error.status === 401 || error.status === 403 ? 'permission' : 'generic',
@@ -103,24 +113,31 @@ export function JobHistory({
       return response
     },
     onMutate: async (jobId) => {
-      await queryClient.cancelQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
-      const previousData = queryClient.getQueryData(routeDataKeys.jobs(selectedTenant!.id))
-      queryClient.setQueryData(routeDataKeys.jobs(selectedTenant!.id), (old: JobsRouteData | undefined) => {
-        if (!old) return old
-        return { ...old, jobs: old.jobs.filter((job) => job.id !== jobId) }
-      })
+      const queryKey = resourceDataKeys.jobs(selectedTenant!.id)
+      await queryClient.cancelQueries({ queryKey })
+      const previousData = queryClient.getQueryData<Job[]>(queryKey)
+      queryClient.setQueryData<Job[]>(queryKey, (old) =>
+        old?.filter((job) => job.id !== jobId),
+      )
       return { previousData }
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       setDeleteTarget(null)
-      queryClient.invalidateQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
+      await invalidateTenantResources(
+        queryClient,
+        selectedTenant!.id,
+        mutationResources.job,
+      )
       onDeleteRedirect(
         `/jobs?status=job_deleted`,
       )
     },
     onError: (_error, _jobId, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(routeDataKeys.jobs(selectedTenant!.id), context.previousData)
+        queryClient.setQueryData(
+          resourceDataKeys.jobs(selectedTenant!.id),
+          context.previousData,
+        )
       }
       setDeleteError(true)
     },

@@ -20,7 +20,10 @@ import {
 } from "@/components/ui/dialog";
 import { isLastTenantAdmin, isSelf } from "./users-model";
 import { useMutationFeedback } from "./mutation-feedback";
-import { routeDataKeys } from "./route-data";
+import {
+  invalidateTenantResources,
+  mutationResources,
+} from "./mutation-invalidation";
 import { useQueryClient } from "@tanstack/react-query";
 import { UserAvatar, YouBadge } from "./users-shared";
 
@@ -103,9 +106,11 @@ function RoleForm({ tenant, user }: { tenant: Tenant; user: User }) {
   useMutationFeedback(state, {
     successMessage: t("roleUpdated"),
     onSuccess: () =>
-      void queryClient.invalidateQueries({
-        queryKey: routeDataKeys.users(tenant.id),
-      }),
+      void invalidateTenantResources(
+        queryClient,
+        tenant.id,
+        mutationResources.user,
+      ),
   });
 
   return (
@@ -199,9 +204,11 @@ function RemoveMemberSection({
       t.has(`removeError.${code}`) ? t(`removeError.${code}`) : code,
     onSuccess: () => {
       onRemoved();
-      void queryClient.invalidateQueries({
-        queryKey: routeDataKeys.users(tenant.id),
-      });
+      void invalidateTenantResources(
+        queryClient,
+        tenant.id,
+        mutationResources.user,
+      );
     },
   });
 

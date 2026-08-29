@@ -3,9 +3,12 @@
 import { controlPrinter } from './actions'
 import type { Printer } from './dashboard-types'
 import { useActionStatusFeedback } from './mutation-feedback'
+import { mutationResources } from './mutation-invalidation'
 
 export function usePrinterControl() {
-  return useActionStatusFeedback(controlPrinter, 'printer_control_queued')
+  return useActionStatusFeedback(controlPrinter, 'printer_control_queued', {
+    invalidate: mutationResources.printer,
+  })
 }
 
 /** Field names for user-editable inputs; hidden contract fields stay inside PrinterControlFields. */

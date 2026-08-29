@@ -209,6 +209,7 @@ function AgentRow({
         </Link>
         <AgentDeleteForm
           action={deleteAgent}
+          tenantId={selectedTenant.id}
           buttonAriaLabel={t('deleteFor', { name: agent.name })}
           buttonLabel={t('delete')}
           disabled={online}

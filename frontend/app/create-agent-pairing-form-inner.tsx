@@ -2,10 +2,12 @@
 
 import { useActionState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useQueryClient } from '@tanstack/react-query'
 import { UserPlusIcon } from 'lucide-react'
 
 import { createAgentPairing } from './admin-actions'
 import { Button } from '@/components/ui/button'
+import { mutationResources, useInvalidateOnSuccess } from './mutation-invalidation'
 import {
   Input,
   PrimaryButton,
@@ -20,7 +22,9 @@ export function CreateAgentPairingFormInner({
   onCreateAnother: () => void
 }) {
   const t = useTranslations('admin')
+  const queryClient = useQueryClient()
   const [state, formAction, pending] = useActionState(createAgentPairing, null)
+  useInvalidateOnSuccess(state, queryClient, tenantId, mutationResources.agent)
   const locked = pending || state?.ok === true
 
   return (

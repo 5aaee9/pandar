@@ -10,7 +10,6 @@ import {
   nullableField,
   numberOrNull,
   postJson,
-  statusUrlForForm,
   stringField,
 } from "./action-helpers";
 import type { MutationActionState, SecretActionState } from "./action-state";
@@ -64,7 +63,10 @@ export async function createTenantToken(
   };
 }
 
-export async function revokeTenantToken(formData: FormData) {
+export async function revokeTenantToken(
+  _previousState: MutationActionState,
+  formData: FormData,
+): Promise<MutationActionState> {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const tokenId = stringField(formData, "token_id");
@@ -75,12 +77,10 @@ export async function revokeTenantToken(formData: FormData) {
       headers: await apiHeaders("application/json"),
     },
   );
-  redirect(
-    statusUrlForForm(
-      formData,
-      response.ok ? "tenant_token_revoked" : await errorCode(response),
-    ),
-  );
+  if (!response.ok) {
+    return { ok: false, error: await errorCode(response) };
+  }
+  return { ok: true };
 }
 
 export async function rotateTenantToken(

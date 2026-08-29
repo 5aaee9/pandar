@@ -1,11 +1,16 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useCallback, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import type { MutationActionState } from "./action-state";
 import { formatActionStatus } from "./action-status";
+import {
+  invalidateTenantResources,
+  type MutableResource,
+} from "./mutation-invalidation";
 
 export function useMutationFeedback(
   state: MutationActionState,
@@ -41,10 +46,27 @@ export function useActionStatusFeedback(
     formData: FormData,
   ) => Promise<MutationActionState>,
   successStatus: string,
-  onSuccess?: () => void,
+  options?: {
+    invalidate?: readonly MutableResource[];
+    onSuccess?: () => void;
+  },
 ) {
   const tStatus = useTranslations("runtime.actionStatus");
-  const [state, formAction, pending] = useActionState(action, null);
+  const queryClient = useQueryClient();
+  const invalidate = options?.invalidate;
+  const onSuccess = options?.onSuccess;
+  const invalidatingAction = useCallback(
+    async (state: MutationActionState, formData: FormData) => {
+      const result = await action(state, formData);
+      const tenantId = formData.get("tenant_id");
+      if (result?.ok && typeof tenantId === "string" && invalidate) {
+        await invalidateTenantResources(queryClient, tenantId, invalidate);
+      }
+      return result;
+    },
+    [action, invalidate, queryClient],
+  );
+  const [state, formAction, pending] = useActionState(invalidatingAction, null);
 
   useMutationFeedback(state, {
     successMessage: formatActionStatus(successStatus, tStatus),

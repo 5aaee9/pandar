@@ -13,7 +13,14 @@ import {
 import { requireAuth } from "./api-auth";
 import { apiIdSegment } from "./api-path";
 
-export async function retryDispatchJob(formData: FormData) {
+export type JobMutationResult = {
+  ok: boolean;
+  redirectUrl: string;
+};
+
+export async function retryDispatchJob(
+  formData: FormData,
+): Promise<JobMutationResult> {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const jobId = stringField(formData, "job_id");
@@ -23,12 +30,13 @@ export async function retryDispatchJob(formData: FormData) {
       reason: nullableField(formData, "reason"),
     },
   );
-  redirect(
-    statusUrlForForm(
+  return {
+    ok: response.ok,
+    redirectUrl: statusUrlForForm(
       formData,
       response.ok ? "retry_queued" : await errorCode(response),
     ),
-  );
+  };
 }
 
 export async function retryDispatchJobs(formData: FormData) {

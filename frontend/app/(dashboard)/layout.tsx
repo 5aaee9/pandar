@@ -1,12 +1,7 @@
 import { redirect } from "next/navigation";
 
 import {
-  getAuthForRequest,
-  getIdentityForRequest,
-  getTenantsForRequest,
-  getSelectedTenantId,
-  resolveEffectiveTenants,
-  resolveSelectedTenant,
+  getDashboardRequestContext,
   dashboardSidebarDefaultOpen,
 } from "../dashboard-data";
 import { dashboardAuthRedirectTarget } from "../auth-redirect";
@@ -15,18 +10,13 @@ import { DashboardShellProvider } from "../dashboard-shell-provider";
 import { DashboardShellLayout } from "../dashboard-shell-layout";
 import { OnboardingPanel } from "../onboarding-panel";
 
-const configuredTenantId = process.env.APP_TENANT_ID;
-
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [auth, identity, tenantsResult] = await Promise.all([
-    getAuthForRequest(),
-    getIdentityForRequest(),
-    getTenantsForRequest(),
-  ]);
+  const { auth, identity, effectiveTenants, selectedTenant } =
+    await getDashboardRequestContext();
 
   const authProvider = authProviderConfig();
   const redirectTarget = dashboardAuthRedirectTarget({
@@ -38,13 +28,6 @@ export default async function DashboardLayout({
     redirect(redirectTarget);
   }
 
-  const effectiveTenants = resolveEffectiveTenants(
-    tenantsResult.tenants,
-    identity.me,
-    configuredTenantId,
-    auth.provider,
-  );
-
   if (
     effectiveTenants.length === 0 &&
     auth.provider !== "none" &&
@@ -53,10 +36,6 @@ export default async function DashboardLayout({
     return <OnboardingPanel me={identity.me} />;
   }
 
-  const selectedTenant = resolveSelectedTenant(
-    await getSelectedTenantId(),
-    effectiveTenants,
-  );
   const sidebarDefaultOpen = await dashboardSidebarDefaultOpen();
 
   return (

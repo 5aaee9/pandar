@@ -1,11 +1,6 @@
 import {
-  getAuthForRequest,
-  getIdentityForRequest,
-  getTenantsForRequest,
+  getDashboardRequestContext,
   getMembershipForRequest,
-  getSelectedTenantId,
-  resolveEffectiveTenants,
-  resolveSelectedTenant,
 } from "../../dashboard-data";
 import {
   adminAccessLoadError,
@@ -13,23 +8,8 @@ import {
 } from "../../membership-policy";
 import { UsersPageClient } from "./users-page-client";
 
-const configuredTenantId = process.env.APP_TENANT_ID;
-
 export default async function UsersPage() {
-  const [tenantId, auth, identity, tenantsResult] = await Promise.all([
-    getSelectedTenantId(),
-    getAuthForRequest(),
-    getIdentityForRequest(),
-    getTenantsForRequest(),
-  ]);
-
-  const effectiveTenants = resolveEffectiveTenants(
-    tenantsResult.tenants,
-    identity.me,
-    configuredTenantId,
-    auth.provider,
-  );
-  const selectedTenant = resolveSelectedTenant(tenantId, effectiveTenants);
+  const { auth, identity, selectedTenant } = await getDashboardRequestContext();
 
   if (!selectedTenant) {
     return <div>No tenant selected</div>;

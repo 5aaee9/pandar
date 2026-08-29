@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 
 import {
   computeAttention,
@@ -9,7 +9,11 @@ import {
 } from "../../dashboard-attention";
 import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
-import { agentsRouteQuery } from "../../route-data";
+import {
+  agentsCommandRouteQuery,
+  agentsResourceQuery,
+  printersResourceQuery,
+} from "../../route-data";
 import type { AuthMetadata, Tenant } from "../../dashboard-types";
 
 export function AgentsPageClient({
@@ -25,9 +29,18 @@ export function AgentsPageClient({
   commandId: string | null;
   discoveryId: string | null;
 }) {
-  const { data, isLoading, error } = useQuery(
-    agentsRouteQuery(selectedTenant.id, commandId, discoveryId),
+  const [agentsQuery, printersQuery] = useQueries({
+    queries: [
+      agentsResourceQuery(selectedTenant.id),
+      printersResourceQuery(selectedTenant.id),
+    ] as const,
+  });
+  const commandQuery = useQuery(
+    agentsCommandRouteQuery(selectedTenant.id, commandId, discoveryId),
   );
+  const isLoading =
+    agentsQuery.isLoading || printersQuery.isLoading || commandQuery.isLoading;
+  const error = agentsQuery.error ?? printersQuery.error ?? commandQuery.error;
 
   if (isLoading) {
     return (
@@ -46,21 +59,15 @@ export function AgentsPageClient({
     );
   }
 
-  const {
-    agents,
-    printers,
-    command,
-    commandData,
-    discoveryCommand,
-    discoveryData,
-  } = data ?? {
-    agents: [],
-    printers: [],
-    command: null,
-    commandData: null,
-    discoveryCommand: null,
-    discoveryData: null,
-  };
+  const agents = agentsQuery.data ?? [];
+  const printers = printersQuery.data ?? [];
+  const { command, commandData, discoveryCommand, discoveryData } =
+    commandQuery.data ?? {
+      command: null,
+      commandData: null,
+      discoveryCommand: null,
+      discoveryData: null,
+    };
 
   const health = computeHealth(agents, printers, []);
   const attentionItems = computeAttention({

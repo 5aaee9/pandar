@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
+
+import { QueryClientTestProvider } from "./query-client.test-utils";
 import { describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
@@ -13,9 +15,11 @@ describe("A2L mixed AMS Lite controls", () => {
   it("loads a mixed AMS Lite slot with global tray id 24", async () => {
     const user = userEvent.setup();
     render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <PrinterMaterialsPanel printer={a2lPrinter()} />
-      </NextIntlClientProvider>,
+      <QueryClientTestProvider>
+        <NextIntlClientProvider locale="en" messages={en}>
+          <PrinterMaterialsPanel printer={a2lPrinter()} />
+        </NextIntlClientProvider>
+      </QueryClientTestProvider>,
     );
 
     await user.click(screen.getByRole("button", { name: "AMS-A slot 1, PLA, Active" }));

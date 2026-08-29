@@ -1,4 +1,6 @@
 import { NextIntlClientProvider } from "next-intl";
+
+import { QueryClientTestProvider } from "./query-client.test-utils";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,9 +27,11 @@ vi.mock("sonner", () => ({
 
 function renderWithMessages(children: React.ReactNode) {
   return render(
-    <NextIntlClientProvider locale="en" messages={en}>
-      <DashboardCameraProvider>{children}</DashboardCameraProvider>
-    </NextIntlClientProvider>,
+    <QueryClientTestProvider>
+      <NextIntlClientProvider locale="en" messages={en}>
+        <DashboardCameraProvider>{children}</DashboardCameraProvider>
+      </NextIntlClientProvider>
+    </QueryClientTestProvider>,
   );
 }
 

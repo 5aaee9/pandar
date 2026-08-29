@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 
 import {
   computeAttention,
@@ -9,7 +9,7 @@ import {
 } from "../../dashboard-attention";
 import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
-import { jobsRouteQuery } from "../../route-data";
+import { jobsRouteQueries } from "../../route-data";
 import type { AuthMetadata, Tenant } from "../../dashboard-types";
 
 export function JobsPageClient({
@@ -21,9 +21,13 @@ export function JobsPageClient({
   selectedTenant: Tenant;
   canManageJobs: boolean;
 }) {
-  const { data, isLoading, error } = useQuery(
-    jobsRouteQuery(selectedTenant.id),
+  const [jobsQuery, printersQuery, agentsQuery] = useQueries({
+    queries: jobsRouteQueries(selectedTenant.id),
+  });
+  const isLoading = [jobsQuery, printersQuery, agentsQuery].some(
+    (query) => query.isLoading,
   );
+  const error = jobsQuery.error ?? printersQuery.error ?? agentsQuery.error;
 
   if (isLoading) {
     return (
@@ -42,11 +46,9 @@ export function JobsPageClient({
     );
   }
 
-  const { jobs, printers, agents } = data ?? {
-    jobs: [],
-    printers: [],
-    agents: [],
-  };
+  const jobs = jobsQuery.data ?? [];
+  const printers = printersQuery.data ?? [];
+  const agents = agentsQuery.data ?? [];
   const health = computeHealth(agents, printers, jobs);
   const attentionItems = computeAttention({ agents, printers, jobs, nowMs: 0 });
 

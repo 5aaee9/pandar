@@ -103,6 +103,43 @@ export function resolveSelectedTenant(
   return effectiveTenants[0] ?? null;
 }
 
+export async function getSignInTenantContext(authProvider: string) {
+  const [tenantResult, identityResult] = await Promise.all([
+    getTenantsForRequest(),
+    getIdentityForRequest(),
+  ]);
+  return {
+    tenants: resolveEffectiveTenants(
+      tenantResult.tenants,
+      identityResult.me,
+      configuredTenantId,
+      authProvider,
+    ),
+    error: tenantResult.error ?? identityResult.error,
+  };
+}
+
+export const getDashboardRequestContext = cache(async () => {
+  const [tenantId, auth, identity, tenantsResult] = await Promise.all([
+    getSelectedTenantId(),
+    getAuthForRequest(),
+    getIdentityForRequest(),
+    getTenantsForRequest(),
+  ]);
+  const effectiveTenants = resolveEffectiveTenants(
+    tenantsResult.tenants,
+    identity.me,
+    configuredTenantId,
+    auth.provider,
+  );
+  return {
+    auth,
+    identity,
+    effectiveTenants,
+    selectedTenant: resolveSelectedTenant(tenantId, effectiveTenants),
+  };
+});
+
 export type DashboardPageProps = {
   searchParams?: Promise<{
     command?: string | string[];

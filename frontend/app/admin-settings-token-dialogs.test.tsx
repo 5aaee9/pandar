@@ -1,5 +1,6 @@
 import { act } from "react";
 import { NextIntlClientProvider } from "next-intl";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
   render,
@@ -11,7 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
-import type { SecretActionState } from "./action-state";
+import type { MutationActionState, SecretActionState } from "./action-state";
 import { SecretActionResult } from "./admin-panel-shared";
 import { TenantSecretsPanel } from "./tenant-secrets-panel";
 import type { Tenant, TenantToken } from "./dashboard-types";
@@ -60,15 +61,25 @@ function deferred<T>() {
   return { promise, reject, resolve };
 }
 
-function TokenPanel({ tokens }: { tokens: TenantToken[] }) {
+function TokenPanel({
+  tokens,
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  }),
+}: {
+  tokens: TenantToken[];
+  queryClient?: QueryClient;
+}) {
   return (
-    <NextIntlClientProvider locale="en" messages={en}>
-      <TenantSecretsPanel
-        selectedTenant={tenant}
-        tenantTokens={tokens}
-        nowMs={nowMs}
-      />
-    </NextIntlClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <NextIntlClientProvider locale="en" messages={en}>
+        <TenantSecretsPanel
+          selectedTenant={tenant}
+          tenantTokens={tokens}
+          nowMs={nowMs}
+        />
+      </NextIntlClientProvider>
+    </QueryClientProvider>
   );
 }
 
@@ -77,11 +88,13 @@ describe("tenant token dialogs", () => {
     vi.clearAllMocks();
   });
 
-  it("locks creation while pending and clears the one-time secret after closing", async () => {
+  it("locks creation, invalidates token siblings, and clears the one-time secret after closing", async () => {
     const user = userEvent.setup();
     const request = deferred<SecretActionState>();
+    const queryClient = new QueryClient();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     actionMocks.createTenantToken.mockImplementation(() => request.promise);
-    render(<TokenPanel tokens={[activeToken]} />);
+    render(<TokenPanel queryClient={queryClient} tokens={[activeToken]} />);
 
     await user.click(screen.getByRole("button", { name: "Create token" }));
     const dialog = screen.getByRole("dialog", {
@@ -120,6 +133,13 @@ describe("tenant token dialogs", () => {
       await request.promise;
     });
     expect(screen.getByText("pandar_tenant_create-once")).toBeVisible();
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["tenant", tenant.id, "tenant-tokens"],
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["tenant", tenant.id, "audit-events"],
+    });
     expect(
       screen.getByText("pandar_tenant_create-once").closest('[data-motion="secret-result"]'),
     ).toBeVisible();
@@ -158,11 +178,15 @@ describe("tenant token dialogs", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the rotated secret visible when refreshed props revoke the old token", async () => {
+  it("invalidates token siblings and keeps the rotated secret visible when refreshed props revoke the old token", async () => {
     const user = userEvent.setup();
     const request = deferred<SecretActionState>();
+    const queryClient = new QueryClient();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     actionMocks.rotateTenantToken.mockImplementation(() => request.promise);
-    const view = render(<TokenPanel tokens={[activeToken]} />);
+    const view = render(
+      <TokenPanel queryClient={queryClient} tokens={[activeToken]} />,
+    );
     const row = screen.getByText("Studio token").closest("article")!;
 
     await user.click(within(row).getByRole("button", { name: "Rotate token Studio token" }));
@@ -198,6 +222,7 @@ describe("tenant token dialogs", () => {
       await request.promise;
     });
     expect(screen.getByText("pandar_tenant_rotate-once")).toBeVisible();
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
     expect(
       screen.getByText("pandar_tenant_rotate-once").closest('[data-motion="secret-result"]'),
     ).toBeVisible();
@@ -222,6 +247,7 @@ describe("tenant token dialogs", () => {
 
     view.rerender(
       <TokenPanel
+        queryClient={queryClient}
         tokens={[
           rotatedToken,
           { ...activeToken, revoked_at: "2026-07-17T00:00:00Z" },
@@ -255,11 +281,13 @@ describe("tenant token dialogs", () => {
     expect(error.closest("[data-motion]")).toBeNull();
   });
 
-  it("locks revoke confirmation while its redirecting action is pending", async () => {
+  it("locks revoke confirmation and invalidates token siblings on completion", async () => {
     const user = userEvent.setup();
-    const request = deferred<void>();
+    const request = deferred<MutationActionState>();
+    const queryClient = new QueryClient();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     actionMocks.revokeTenantToken.mockImplementation(() => request.promise);
-    render(<TokenPanel tokens={[activeToken]} />);
+    render(<TokenPanel queryClient={queryClient} tokens={[activeToken]} />);
     const row = screen.getByText("Studio token").closest("article")!;
 
     await user.click(within(row).getByRole("button", { name: "Revoke token Studio token" }));
@@ -285,8 +313,15 @@ describe("tenant token dialogs", () => {
     expect(dialog).toBeVisible();
 
     await act(async () => {
-      request.resolve();
+      request.resolve({ ok: true });
       await request.promise;
+    });
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["tenant", tenant.id, "tenant-tokens"],
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["tenant", tenant.id, "audit-events"],
     });
   });
 });

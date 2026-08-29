@@ -39,7 +39,7 @@ export function AgentSettingsPageClient({
     );
   }
 
-  if (!data?.agent) {
+  if (!data) {
     return (
       <EmptyState title={t("notFoundTitle")} message={t("notFoundMessage")} />
     );
@@ -47,7 +47,7 @@ export function AgentSettingsPageClient({
 
   return (
     <QueryErrorBoundary>
-      <AgentSettingsPanel agent={data.agent} />
+      <AgentSettingsPanel agent={data} />
     </QueryErrorBoundary>
   );
 }

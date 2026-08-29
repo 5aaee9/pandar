@@ -1,4 +1,6 @@
 import { NextIntlClientProvider } from "next-intl";
+
+import { QueryClientTestProvider } from "./query-client.test-utils";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -13,9 +15,11 @@ vi.mock("./actions", () => ({
 
 function renderWithMessages(children: React.ReactNode) {
   return render(
-    <NextIntlClientProvider locale="en" messages={en}>
-      {children}
-    </NextIntlClientProvider>,
+    <QueryClientTestProvider>
+      <NextIntlClientProvider locale="en" messages={en}>
+        {children}
+      </NextIntlClientProvider>
+    </QueryClientTestProvider>,
   );
 }
 

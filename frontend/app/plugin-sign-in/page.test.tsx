@@ -114,6 +114,63 @@ describe("PluginSignInPage", () => {
     );
   });
 
+  it("preserves the callback while selecting among identity tenants", async () => {
+    fetchMock.mockImplementation(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.endsWith("/api/v1/me")) {
+        return new Response(
+          JSON.stringify({
+            identity: {
+              provider: "betterauth",
+              subject: "user-1",
+              email: "user@example.com",
+              email_verified: true,
+              display_name: "User",
+            },
+            tenants: [
+              {
+                tenant_id: "tenant-1",
+                tenant_slug: "acme",
+                display_name: "Acme Labs",
+                role: "tenant_admin",
+              },
+              {
+                tenant_id: "tenant-2",
+                tenant_slug: "workshop",
+                display_name: "Workshop",
+                role: "operator",
+              },
+            ],
+            can_self_create_tenant: true,
+          }),
+          { status: 200 },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const { default: PluginSignInPage } = await import("./page");
+
+    const view = render(
+      await PluginSignInPage({
+        searchParams: Promise.resolve({
+          redirect_url: "http://127.0.0.1:13618/callback",
+        }),
+      }),
+    );
+
+    expect(screen.getByRole("combobox", { name: "tenant" })).toHaveValue(
+      "tenant-1",
+    );
+    expect(
+      screen.getByRole("option", { name: "Workshop" }),
+    ).toBeInTheDocument();
+    expect(
+      view.container.querySelector<HTMLInputElement>(
+        'input[name="redirect_url"]',
+      ),
+    ).toHaveValue("http://127.0.0.1:13618/callback");
+  });
+
   it("uses identity memberships for mobile sign-in too", async () => {
     const { default: MobileSignInPage } =
       await import("../mobile-sign-in/page");

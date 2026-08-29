@@ -1,4 +1,3 @@
-"use strict";
 const form = document.querySelector("#target-form");
 const webUrlInput = document.querySelector("#web-url");
 const noticeList = document.querySelector("#notice-list");
@@ -28,40 +27,6 @@ const buildSignInUrl = (redirectUrl) => {
     url.searchParams.set("redirect_url", redirectUrl);
     return url.toString();
 };
-const requestStudioCallbackUrl = () => new Promise((resolve) => {
-    const studioWindow = window;
-    if (typeof studioWindow.wx?.postMessage !== "function") {
-        resolve(null);
-        return;
-    }
-    const sequenceId = `pandar-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const timeout = window.setTimeout(() => {
-        window.removeEventListener("message", handleMessage);
-        resolve(null);
-    }, 2000);
-    function handleMessage(event) {
-        let data;
-        try {
-            data =
-                typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-        }
-        catch {
-            return;
-        }
-        if (data?.command === "get_localhost_url" &&
-            data.sequence_id === sequenceId &&
-            data.response?.base_url) {
-            window.clearTimeout(timeout);
-            window.removeEventListener("message", handleMessage);
-            resolve(`${data.response.base_url}/callback`);
-        }
-    }
-    window.addEventListener("message", handleMessage);
-    studioWindow.wx.postMessage(JSON.stringify({
-        command: "get_localhost_url",
-        sequence_id: sequenceId,
-    }));
-});
 const markDirty = () => {
     isDirty = true;
     renderNotices();
@@ -135,28 +100,23 @@ const loadConfig = async () => {
     applyConfig((await response.json()));
     markDirty();
     await saveTargetServer("Discovering Hub URL...", "Target server ready.");
-    const studioCallbackUrl = await requestStudioCallbackUrl();
-    if (studioCallbackUrl) {
-        callbackUrl = studioCallbackUrl;
-        updateContinueLink();
-    }
 };
 form.addEventListener("submit", async (event) => {
     event.preventDefault();
     await saveTargetServer("Discovering Hub URL...", "Target server updated.");
 });
-continueLink.addEventListener("click", async (event) => {
+continueLink.addEventListener("click", (event) => {
     if (isDirty || !savedWebUrl || !callbackUrl) {
         event.preventDefault();
         setStatus("Switch Target server before continuing.", true);
         return;
     }
     event.preventDefault();
-    const studioCallbackUrl = await requestStudioCallbackUrl();
-    window.location.href = buildSignInUrl(studioCallbackUrl ?? callbackUrl);
+    window.location.href = buildSignInUrl(callbackUrl);
 });
 webUrlInput.addEventListener("input", markDirty);
 loadConfig().catch((error) => {
     setStatus(error instanceof Error ? error.message : "Could not load target server.", true);
     updateContinueLink();
 });
+export {};

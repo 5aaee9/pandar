@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 
-export function FilterBar({
+export function FilterBar<Status extends string>({
   query,
   onQueryChange,
   queryPlaceholder,
@@ -13,9 +13,9 @@ export function FilterBar({
   query: string
   onQueryChange: (value: string) => void
   queryPlaceholder: string
-  status: string
-  onStatusChange: (value: string) => void
-  statusOptions: Array<{ value: string; label: string }>
+  status: Status
+  onStatusChange: (value: Status) => void
+  statusOptions: Array<{ value: Status; label: string }>
 }) {
   const t = useTranslations('inventory')
   return (
@@ -31,7 +31,7 @@ export function FilterBar({
       <select
         aria-label={t('filterStatusAria')}
         className="rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground"
-        onChange={(event) => onStatusChange(event.target.value)}
+        onChange={(event) => onStatusChange(event.target.value as Status)}
         value={status}
       >
         {statusOptions.map((option) => (
