@@ -29,7 +29,7 @@ impl FirmwareMqttSession {
             Err(anyhow!("firmware MQTT pump ended before shutdown request"))
         } else {
             match completed.await {
-                Ok(result) => result.map_err(anyhow::Error::msg),
+                Ok(result) => result.map_err(anyhow::Error::new),
                 Err(error) => Err(anyhow::Error::new(error)
                     .context("firmware MQTT pump dropped shutdown completion")),
             }

@@ -1,13 +1,87 @@
 use std::{
-    ffi::{CString, c_void},
-    io::{Read, Write},
+    ffi::{CStr, CString, c_void},
+    io::{self, Read, Write},
     net::TcpListener,
     ptr,
+    sync::{Arc, Barrier, Mutex},
     time::{Duration, Instant},
 };
 
 use super::*;
-use crate::abi::{BAMBU_WOULD_BLOCK, VIDEO_JPEG, VIDEO_MJPG, VIDEO_STREAM};
+use crate::{
+    abi::{BAMBU_WOULD_BLOCK, PlatformChar, VIDEO_JPEG, VIDEO_MJPG, VIDEO_STREAM},
+    tunnel::send_relay_handshake,
+};
+
+mod error;
+
+static ERROR_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+unsafe extern "C" fn collect_log(context: *mut c_void, _level: i32, message: *const PlatformChar) {
+    #[cfg(not(target_os = "windows"))]
+    let text = unsafe { CStr::from_ptr(message) }
+        .to_string_lossy()
+        .into_owned();
+    #[cfg(target_os = "windows")]
+    let text = {
+        let mut length = 0;
+        while unsafe { *message.add(length) } != 0 {
+            length += 1;
+        }
+        String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(message, length) })
+    };
+    unsafe { &*(context.cast::<Mutex<Vec<String>>>()) }
+        .lock()
+        .unwrap()
+        .push(text);
+    unsafe { Bambu_FreeLogMsg(message) };
+}
+
+unsafe extern "C" fn retain_log_pointer(
+    context: *mut c_void,
+    _level: i32,
+    message: *const PlatformChar,
+) {
+    *unsafe { &*(context.cast::<Mutex<Option<usize>>>()) }
+        .lock()
+        .unwrap() = Some(message as usize);
+}
+
+fn relay_url(port: u16, auth: &str) -> CString {
+    CString::new(format!(
+        "bambu:///local/127.0.0.1?port={port}&auth={auth}&device=SERIAL"
+    ))
+    .unwrap()
+}
+
+fn create_tunnel(url: &CString, logs: &Mutex<Vec<String>>) -> *mut c_void {
+    let mut tunnel = ptr::null_mut();
+    assert_eq!(
+        unsafe { Bambu_Create(&mut tunnel, url.as_ptr()) },
+        BAMBU_SUCCESS
+    );
+    unsafe {
+        Bambu_SetLogger(
+            tunnel,
+            Some(collect_log),
+            std::ptr::from_ref(logs).cast_mut().cast(),
+        );
+    }
+    tunnel
+}
+
+fn wait_for_sample_result(tunnel: *mut c_void) -> i32 {
+    let mut sample = std::mem::MaybeUninit::<BambuSample>::uninit();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        let result = unsafe { Bambu_ReadSample(tunnel, sample.as_mut_ptr()) };
+        if result != BAMBU_WOULD_BLOCK {
+            return result;
+        }
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
 
 #[test]
 fn sentinel_identifies_the_local_camera_source() {

@@ -22,6 +22,8 @@ mod connect_tests;
 mod drop_pause;
 mod owner;
 mod pump;
+#[cfg(test)]
+mod pump_tests;
 mod shutdown;
 #[cfg(test)]
 pub(crate) use connect::firmware_mqtt_options;
@@ -29,7 +31,10 @@ use owner::PumpOwner;
 pub(crate) use owner::{FirmwareMqttTaskSet, FirmwarePumpAbortHandle};
 #[cfg(test)]
 use pump::ShutdownCompletionMode;
-use pump::{AttemptEvent, FirmwareMqttAttemptFailure, PumpRequest, attempt_failure};
+use pump::{
+    AttemptEvent, FirmwareMqttAttemptFailure, FirmwareMqttOperationPhase, PumpRequest,
+    attempt_failure,
+};
 #[cfg(test)]
 use std::sync::atomic::Ordering;
 
@@ -132,10 +137,12 @@ impl FirmwareMqttSession {
                 transition: None,
             })
             .await
-            .map_err(|error| {
+            .map_err(|_| {
                 attempt_failure(
                     false,
-                    format!("send firmware publish request to MQTT pump: {error:#}"),
+                    FirmwareMqttOperationPhase::Send,
+                    anyhow::anyhow!("firmware MQTT pump request channel closed")
+                        .context("send firmware publish request to MQTT pump"),
                 )
             })?;
         Ok(FirmwareMqttAttempt {
@@ -161,7 +168,9 @@ impl FirmwareMqttSession {
             }),
             Err(mpsc::error::TrySendError::Closed(_)) => Err(attempt_failure(
                 false,
-                "send firmware publish request to ended MQTT pump".into(),
+                FirmwareMqttOperationPhase::Send,
+                anyhow::anyhow!("firmware MQTT pump request channel closed")
+                    .context("send firmware publish request to ended MQTT pump"),
             )),
             Err(mpsc::error::TrySendError::Full(_)) => {
                 unreachable!("fresh firmware MQTT session accepts exactly one publish request")
@@ -259,5 +268,9 @@ pub(crate) fn firmware_mqtt_failure_phase(error: &anyhow::Error) -> Option<bool>
 }
 
 pub(crate) fn firmware_mqtt_failure(after_publish: bool, message: String) -> anyhow::Error {
-    attempt_failure(after_publish, message)
+    attempt_failure(
+        after_publish,
+        FirmwareMqttOperationPhase::Session,
+        anyhow::Error::msg(message),
+    )
 }

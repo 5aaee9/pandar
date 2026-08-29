@@ -312,7 +312,8 @@ impl FirmwareMqttSession {
             Ok(Ok(Err(error))) => {
                 #[cfg(test)]
                 pause_connect_cleanup(&mut hooks.cleanup_pause).await;
-                let failure = anyhow!(error).context("subscribe fresh firmware MQTT session");
+                let failure =
+                    anyhow::Error::new(error).context("subscribe fresh firmware MQTT session");
                 Err(connect_failure_with_cleanup(
                     failure,
                     pump.abort_and_join().await,

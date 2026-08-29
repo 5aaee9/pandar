@@ -2,6 +2,8 @@
 
 mod abi;
 mod config;
+mod error;
+mod reader;
 mod tunnel;
 
 use std::ffi::{CStr, c_char, c_int, c_ulong, c_void};
@@ -11,6 +13,7 @@ use abi::{
     BambuStreamInfo, Logger, PlatformChar, StreamInfoCallback, TrackReporter,
 };
 use config::parse_relay_url;
+use error::last_error_message;
 use tunnel::Tunnel;
 
 #[unsafe(no_mangle)]
@@ -199,11 +202,34 @@ pub extern "C" fn Bambu_Deinit() {}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn Bambu_GetLastErrorMsg() -> *const c_char {
-    c"pandar local camera unavailable".as_ptr()
+    last_error_message()
 }
 
+#[cfg(not(target_os = "windows"))]
 #[unsafe(no_mangle)]
-pub extern "C" fn Bambu_FreeLogMsg(_message: *const PlatformChar) {}
+/// # Safety
+/// `message` must be null or a pointer passed to the logger callback by this library exactly once.
+pub unsafe extern "C" fn Bambu_FreeLogMsg(message: *const PlatformChar) {
+    if !message.is_null() {
+        drop(unsafe { std::ffi::CString::from_raw(message.cast_mut()) });
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[unsafe(no_mangle)]
+/// # Safety
+/// `message` must be null or a pointer passed to the logger callback by this library exactly once.
+pub unsafe extern "C" fn Bambu_FreeLogMsg(message: *const PlatformChar) {
+    if message.is_null() {
+        return;
+    }
+    let mut len = 0;
+    while unsafe { *message.add(len) } != 0 {
+        len += 1;
+    }
+    let slice = std::ptr::slice_from_raw_parts_mut(message.cast_mut(), len + 1);
+    drop(unsafe { Box::from_raw(slice) });
+}
 
 unsafe fn tunnel_ref(tunnel: *mut c_void) -> Option<&'static Tunnel> {
     unsafe { tunnel.cast::<Tunnel>().as_ref() }

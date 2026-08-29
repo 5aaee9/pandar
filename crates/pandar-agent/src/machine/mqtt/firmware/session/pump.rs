@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     fmt,
     sync::{
         Arc,
@@ -6,7 +7,7 @@ use std::{
     },
 };
 
-use anyhow::{Context, anyhow};
+use anyhow::anyhow;
 use rumqttc::{AsyncClient, Event, EventLoop, Outgoing, Packet, QoS, SubscribeReasonCode};
 use tokio::sync::{mpsc, oneshot};
 
@@ -27,7 +28,7 @@ pub(super) enum PumpRequest {
         transition: Option<Box<FirmwarePublishTransition>>,
     },
     Shutdown {
-        done: oneshot::Sender<Result<(), String>>,
+        done: oneshot::Sender<Result<(), FirmwareMqttPumpFailure>>,
         #[cfg(test)]
         completion_mode: ShutdownCompletionMode,
     },
@@ -46,7 +47,10 @@ pub(super) enum ShutdownCompletionMode {
 pub(super) enum AttemptEvent {
     Published,
     Report(Box<FirmwareMqttReport>),
-    Failed { after_publish: bool, error: String },
+    Failed {
+        after_publish: bool,
+        error: FirmwareMqttPumpFailure,
+    },
 }
 
 struct ActiveCommand {
@@ -59,38 +63,82 @@ struct ActiveCommand {
     transition: Option<Box<FirmwarePublishTransition>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum FirmwareMqttOperationPhase {
+    Subscribe,
+    Send,
+    Receive,
+    Shutdown,
+    Session,
+}
+
+impl fmt::Display for FirmwareMqttOperationPhase {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Subscribe => "subscribe",
+            Self::Send => "send",
+            Self::Receive => "receive",
+            Self::Shutdown => "shutdown",
+            Self::Session => "session",
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct FirmwareMqttPumpFailure {
+    phase: FirmwareMqttOperationPhase,
+    source: Arc<anyhow::Error>,
+}
+
+impl FirmwareMqttPumpFailure {
+    fn new(phase: FirmwareMqttOperationPhase, source: anyhow::Error) -> Self {
+        Self {
+            phase,
+            source: Arc::new(source),
+        }
+    }
+}
+
+impl fmt::Display for FirmwareMqttPumpFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "firmware MQTT {} operation failed", self.phase)
+    }
+}
+
+impl Error for FirmwareMqttPumpFailure {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(self.source.as_ref().as_ref())
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct FirmwareMqttAttemptFailure {
     pub(super) after_publish: bool,
-    message: String,
+    source: FirmwareMqttPumpFailure,
 }
 
 impl fmt::Display for FirmwareMqttAttemptFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.after_publish {
-            write!(
-                formatter,
-                "firmware MQTT failed after publish; outcome unknown: {}",
-                self.message
-            )
+            formatter.write_str("firmware MQTT failed after publish; outcome unknown")
         } else {
-            write!(
-                formatter,
-                "firmware MQTT failed before publish: {}",
-                self.message
-            )
+            formatter.write_str("firmware MQTT failed before publish")
         }
     }
 }
 
-impl std::error::Error for FirmwareMqttAttemptFailure {}
+impl Error for FirmwareMqttAttemptFailure {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.source)
+    }
+}
 
 pub(super) async fn run_pump(
     client: AsyncClient,
     mut event_loop: EventLoop,
     request_topic: String,
     mut requests: mpsc::Receiver<PumpRequest>,
-    suback: oneshot::Sender<Result<(), String>>,
+    suback: oneshot::Sender<Result<(), FirmwareMqttPumpFailure>>,
     received_ordinal: Arc<AtomicU64>,
     mut barrier_pause: Option<FirmwareBarrierPause>,
 ) -> anyhow::Result<()> {
@@ -108,20 +156,24 @@ pub(super) async fn run_pump(
                     transition,
                 }) => {
                     if active.is_some() {
-                        let _ = events.send(AttemptEvent::Failed {
-                            after_publish: false,
-                            error: "fresh firmware MQTT session already has an attempt".into(),
-                        });
+                        send_attempt_failure(
+                            &events,
+                            false,
+                            FirmwareMqttOperationPhase::Session,
+                            anyhow!("fresh firmware MQTT session already has an attempt"),
+                        );
                         continue;
                     }
                     let barrier = received_ordinal.load(Ordering::SeqCst);
                     if let Some(pause) = barrier_pause.take() {
                         let _ = pause.reached.send(());
                         if pause.release.await.is_err() {
-                            let _ = events.send(AttemptEvent::Failed {
-                                after_publish: false,
-                                error: "firmware MQTT barrier pause was cancelled".into(),
-                            });
+                            send_attempt_failure(
+                                &events,
+                                false,
+                                FirmwareMqttOperationPhase::Send,
+                                anyhow!("firmware MQTT barrier pause was cancelled"),
+                            );
                             continue;
                         }
                     }
@@ -132,10 +184,12 @@ pub(super) async fn run_pump(
                         command.payload_bytes().to_vec(),
                     ).await;
                     if let Err(error) = publish {
-                        let _ = events.send(AttemptEvent::Failed {
-                            after_publish: false,
-                            error: format!("queue firmware MQTT publish: {error:#}"),
-                        });
+                        send_attempt_failure(
+                            &events,
+                            false,
+                            FirmwareMqttOperationPhase::Send,
+                            anyhow::Error::new(error).context("queue firmware MQTT publish"),
+                        );
                         continue;
                     }
                     active = Some(ActiveCommand {
@@ -157,9 +211,11 @@ pub(super) async fn run_pump(
                     match completion_mode {
                         ShutdownCompletionMode::Normal => {}
                         ShutdownCompletionMode::Error => {
-                            let _ = done.send(Err(
-                                "firmware shutdown completion error sentinel".into(),
-                            ));
+                            let failure = pump_failure(
+                                FirmwareMqttOperationPhase::Shutdown,
+                                anyhow!("firmware shutdown completion error sentinel"),
+                            );
+                            let _ = done.send(Err(failure));
                             return Err(anyhow!("firmware shutdown pump error sentinel"));
                         }
                         ShutdownCompletionMode::Drop => {
@@ -170,9 +226,13 @@ pub(super) async fn run_pump(
                     match client.disconnect().await {
                         Ok(()) => shutdown = Some(done),
                         Err(error) => {
-                            let message = format!("queue firmware MQTT disconnect: {error:#}");
-                            let _ = done.send(Err(message.clone()));
-                            return Err(anyhow!(message));
+                            let failure = pump_failure(
+                                FirmwareMqttOperationPhase::Shutdown,
+                                anyhow::Error::new(error)
+                                    .context("queue firmware MQTT disconnect"),
+                            );
+                            let _ = done.send(Err(failure.clone()));
+                            return Err(anyhow::Error::new(failure));
                         }
                     }
                 }
@@ -189,9 +249,15 @@ pub(super) async fn run_pump(
                 }
                 Ok(Event::Incoming(Packet::SubAck(ack))) => {
                     let result = if Some(ack.pkid) != subscribe_packet_id {
-                        Err(format!("unexpected firmware MQTT SUBACK packet id {}", ack.pkid))
+                        Err(pump_failure(
+                            FirmwareMqttOperationPhase::Subscribe,
+                            anyhow!("unexpected firmware MQTT SUBACK packet id {}", ack.pkid),
+                        ))
                     } else if ack.return_codes.contains(&SubscribeReasonCode::Failure) {
-                        Err("firmware MQTT subscription was rejected".into())
+                        Err(pump_failure(
+                            FirmwareMqttOperationPhase::Subscribe,
+                            anyhow!("firmware MQTT subscription was rejected"),
+                        ))
                     } else {
                         Ok(())
                     };
@@ -237,15 +303,18 @@ pub(super) async fn run_pump(
                             }
                             Ok((false, _)) => {}
                             Err(error) => {
-                                let message = format!("process firmware MQTT report: {error:#}");
+                                let failure = pump_failure(
+                                    FirmwareMqttOperationPhase::Receive,
+                                    error.context("process firmware MQTT report"),
+                                );
                                 let _ = active.events.send(AttemptEvent::Failed {
                                     after_publish: true,
-                                    error: message.clone(),
+                                    error: failure.clone(),
                                 });
                                 if let Some(done) = shutdown.take() {
-                                    let _ = done.send(Err(message));
+                                    let _ = done.send(Err(failure.clone()));
                                 }
-                                return Err(error).context("process firmware MQTT report");
+                                return Err(anyhow::Error::new(failure));
                             }
                         }
                     }
@@ -258,29 +327,69 @@ pub(super) async fn run_pump(
                 }
                 Ok(_) => {}
                 Err(error) => {
-                    let message = format!("poll firmware MQTT event loop: {error:#}");
+                    let phase = if suback.is_some() {
+                        FirmwareMqttOperationPhase::Subscribe
+                    } else if shutdown.is_some() {
+                        FirmwareMqttOperationPhase::Shutdown
+                    } else {
+                        FirmwareMqttOperationPhase::Receive
+                    };
+                    let failure = pump_failure(
+                        phase,
+                        anyhow::Error::new(error).context("poll firmware MQTT event loop"),
+                    );
                     if let Some(suback) = suback.take() {
-                        let _ = suback.send(Err(message.clone()));
+                        let _ = suback.send(Err(failure.clone()));
                     }
                     if let Some(active) = &active {
                         let _ = active.events.send(AttemptEvent::Failed {
                             after_publish: active.published,
-                            error: message.clone(),
+                            error: failure.clone(),
                         });
                     }
                     if let Some(done) = shutdown.take() {
-                        let _ = done.send(Err(message.clone()));
+                        let _ = done.send(Err(failure.clone()));
                     }
-                    return Err(anyhow!(message));
+                    return Err(anyhow::Error::new(failure));
                 }
             }
         }
     }
 }
 
-pub(super) fn attempt_failure(after_publish: bool, error: String) -> anyhow::Error {
+fn send_attempt_failure(
+    events: &mpsc::UnboundedSender<AttemptEvent>,
+    after_publish: bool,
+    phase: FirmwareMqttOperationPhase,
+    source: anyhow::Error,
+) {
+    let _ = events.send(AttemptEvent::Failed {
+        after_publish,
+        error: pump_failure(phase, source),
+    });
+}
+
+pub(super) fn pump_failure(
+    phase: FirmwareMqttOperationPhase,
+    source: anyhow::Error,
+) -> FirmwareMqttPumpFailure {
+    FirmwareMqttPumpFailure::new(phase, source)
+}
+
+pub(super) fn attempt_failure(
+    after_publish: bool,
+    phase: FirmwareMqttOperationPhase,
+    source: anyhow::Error,
+) -> anyhow::Error {
+    attempt_pump_failure(after_publish, pump_failure(phase, source))
+}
+
+pub(super) fn attempt_pump_failure(
+    after_publish: bool,
+    source: FirmwareMqttPumpFailure,
+) -> anyhow::Error {
     anyhow::Error::new(FirmwareMqttAttemptFailure {
         after_publish,
-        message: error,
+        source,
     })
 }

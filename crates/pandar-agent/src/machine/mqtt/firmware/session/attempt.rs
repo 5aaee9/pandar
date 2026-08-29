@@ -1,8 +1,13 @@
 use std::time::Duration;
 
+use anyhow::anyhow;
+
 use crate::machine::mqtt::transport::mqtt_report_idle_timeout;
 
-use super::{AttemptEvent, FirmwareMqttAttempt, FirmwareMqttReport, attempt_failure};
+use super::{
+    AttemptEvent, FirmwareMqttAttempt, FirmwareMqttReport,
+    pump::{FirmwareMqttOperationPhase, attempt_failure, attempt_pump_failure},
+};
 
 impl FirmwareMqttAttempt {
     pub(crate) async fn wait_published(&mut self) -> anyhow::Result<()> {
@@ -17,14 +22,16 @@ impl FirmwareMqttAttempt {
             Some(AttemptEvent::Failed {
                 after_publish,
                 error,
-            }) => Err(attempt_failure(after_publish, error)),
+            }) => Err(attempt_pump_failure(after_publish, error)),
             Some(AttemptEvent::Report(_)) => Err(attempt_failure(
                 false,
-                "firmware MQTT report preceded own outgoing publish".into(),
+                FirmwareMqttOperationPhase::Receive,
+                anyhow!("firmware MQTT report preceded own outgoing publish"),
             )),
             None => Err(attempt_failure(
                 false,
-                "firmware MQTT pump ended before own publish".into(),
+                FirmwareMqttOperationPhase::Send,
+                anyhow!("firmware MQTT pump ended before own publish"),
             )),
         }
     }
@@ -41,14 +48,16 @@ impl FirmwareMqttAttempt {
             Ok(Some(AttemptEvent::Failed {
                 after_publish,
                 error,
-            })) => Err(attempt_failure(after_publish, error)),
+            })) => Err(attempt_pump_failure(after_publish, error)),
             Ok(Some(AttemptEvent::Published)) => Err(attempt_failure(
                 true,
-                "firmware MQTT emitted duplicate outgoing publish".into(),
+                FirmwareMqttOperationPhase::Send,
+                anyhow!("firmware MQTT emitted duplicate outgoing publish"),
             )),
             Ok(None) => Err(attempt_failure(
                 true,
-                "firmware MQTT pump ended after publish".into(),
+                FirmwareMqttOperationPhase::Receive,
+                anyhow!("firmware MQTT pump ended after publish"),
             )),
             Err(_) => Err(mqtt_report_idle_timeout(report_timeout)),
         }
