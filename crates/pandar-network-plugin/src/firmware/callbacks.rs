@@ -26,6 +26,7 @@ pub struct FirmwareCallback {
 
 pub struct ReadyFirmwareCallback {
     pub token: u64,
+    pub generation: u64,
     pub origin_tick: u64,
     pub local_generation: u64,
     pub cache_generation: u64,
@@ -206,6 +207,7 @@ fn take_ready(state: &mut QueueState, now: Instant) -> Option<ReadyFirmwareCallb
     let handoff = pending.handoff?;
     Some(ReadyFirmwareCallback {
         token: pending.token,
+        generation: pending.generation,
         origin_tick: handoff.origin_tick,
         local_generation: handoff.local_generation,
         cache_generation: handoff.cache_generation,

@@ -3,7 +3,7 @@ mod commit;
 mod logout;
 mod persisted;
 mod recovery;
-mod transaction;
+pub(crate) mod transaction;
 
 #[cfg(test)]
 mod tests;

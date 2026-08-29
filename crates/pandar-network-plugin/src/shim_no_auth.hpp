@@ -19,22 +19,16 @@ bool try_no_auth_session(Agent* agent, bool initial_attempt) {
         );
         const auto status = lifecycle.http.status;
         const auto http_code = lifecycle.http.http_code;
-        auto body = body_from_result(lifecycle.http);
+        pandar_plugin_account_session_apply_lifecycle_result(
+            agent->account_session, &lifecycle
+        );
+        body_from_result(lifecycle.http);
         trace_plugin_event(
             agent,
             "no-auth response status=" + std::to_string(status)
                 + " http_code=" + std::to_string(http_code)
         );
         committed = lifecycle.account_event == kAccountEventLogin;
-        if (committed) {
-            enqueue_account_callback(agent, [agent] { dispatch_user_login(agent, true); });
-        } else if (status != 0) {
-            if (lifecycle.report_http_error != 0) {
-                enqueue_account_callback(agent, [agent, http_code, body] {
-                    dispatch_http_error(agent, http_code, body);
-                });
-            }
-        }
     }
     drain_account_callbacks(agent);
     return committed;

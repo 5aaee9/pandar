@@ -10,14 +10,14 @@ pub struct PluginAccountBytes {
 }
 
 impl PluginAccountBytes {
-    pub(super) fn from_str(value: &str) -> Self {
+    pub(crate) fn from_str(value: &str) -> Self {
         Self {
             ptr: value.as_ptr(),
             len: value.len(),
         }
     }
 
-    fn read(self, field: &'static str) -> anyhow::Result<String> {
+    pub(crate) fn read(self, field: &'static str) -> anyhow::Result<String> {
         ensure!(
             !self.ptr.is_null() || self.len == 0,
             "{field} pointer is null"
@@ -49,7 +49,7 @@ pub struct PluginAccountView {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PluginAccountNotification {
     Silent = 0,
     Logout = 2,
@@ -77,22 +77,22 @@ pub type PluginWithCurrentAccount =
     unsafe extern "C" fn(*mut c_void, *mut c_void, Option<PluginAccountTransaction>) -> i32;
 
 #[derive(Clone, Debug)]
-pub(super) struct AccountView {
-    pub(super) config_dir: String,
-    pub(super) hub_url: String,
-    pub(super) token: String,
-    pub(super) user_id: String,
-    pub(super) user_name: String,
-    pub(super) avatar: String,
-    pub(super) profile_json: String,
-    pub(super) account_epoch: u64,
-    pub(super) config_epoch: u64,
-    pub(super) session_kind: i32,
-    pub(super) transition_pending: bool,
+pub(crate) struct AccountView {
+    pub(crate) config_dir: String,
+    pub(crate) hub_url: String,
+    pub(crate) token: String,
+    pub(crate) user_id: String,
+    pub(crate) user_name: String,
+    pub(crate) avatar: String,
+    pub(crate) profile_json: String,
+    pub(crate) account_epoch: u64,
+    pub(crate) config_epoch: u64,
+    pub(crate) session_kind: i32,
+    pub(crate) transition_pending: bool,
 }
 
 impl AccountView {
-    pub(super) fn read(view: *const PluginAccountView) -> anyhow::Result<Self> {
+    pub(crate) fn read(view: *const PluginAccountView) -> anyhow::Result<Self> {
         let view = unsafe { view.as_ref() }.context("account view is missing")?;
         Ok(Self {
             config_dir: view.config_dir.read("account config directory")?,
@@ -135,7 +135,7 @@ unsafe extern "C" fn capture_transaction(
     }
 }
 
-pub(super) fn capture(
+pub(crate) fn capture(
     context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
 ) -> anyhow::Result<AccountView> {

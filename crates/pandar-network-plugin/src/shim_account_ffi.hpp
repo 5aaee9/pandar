@@ -52,6 +52,20 @@ extern "C" std::int32_t with_current_account(
 );
 using PluginAccountTenantVisitor = void (*)(void*, const uint8_t*, std::size_t);
 
+struct PluginAccountSessionBridge {
+    void (*replace)(
+        void*, PluginAccountBytes, PluginAccountBytes, PluginAccountBytes,
+        PluginAccountBytes, PluginAccountBytes, PluginAccountBytes, std::int32_t
+    );
+    void (*clear)(void*);
+    void (*set_hub_url)(void*, PluginAccountBytes);
+    void (*invoke_user_login)(void*, std::int32_t, bool);
+    void (*invoke_http_error)(void*, std::uint32_t, PluginAccountBytes);
+    void (*reset_personal_presets)(void*);
+};
+
+struct PluginDispatchBridge;
+
 struct PluginLifecycleResult {
     PluginHttpResult http;
     std::int32_t account_event;
@@ -124,6 +138,19 @@ enum class AccountPolicyAction : std::int32_t {
 };
 
 extern "C" {
+void* pandar_plugin_account_session_create();
+void pandar_plugin_account_session_destroy(void*);
+void pandar_plugin_account_session_apply_lifecycle_result(
+    void*, const PluginLifecycleResult*
+);
+int32_t pandar_plugin_account_session_apply(
+    void*, void*, void*, const PluginAccountSessionBridge*, void*,
+    const PluginAccountView*, const PluginAccountMutation*
+);
+void pandar_plugin_account_session_drain(
+    void*, void*, const PluginDispatchBridge*, const PluginAccountSessionBridge*,
+    void*, void*, PluginWithCurrentAccount
+);
 int32_t pandar_plugin_account_runtime_config(void*, PluginRuntimeConfigVisitor);
 int32_t pandar_plugin_account_profile_tenant_id(
     const uint8_t*, std::size_t, void*, PluginAccountTenantVisitor

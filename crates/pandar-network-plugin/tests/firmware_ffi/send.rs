@@ -140,6 +140,7 @@ fn firmware_ffi_acknowledged_send_handoff_returns_and_frees_callback_triples() {
 
     let callback = session.next_callback(1_800);
     assert_eq!(callback.status, 0);
+    assert_eq!(callback.generation, 3);
     assert_eq!(callback.local_generation, 91);
     assert_eq!(callback.cache_generation, 101);
     assert_eq!(callback.dev_id, "SERIAL");

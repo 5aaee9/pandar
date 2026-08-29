@@ -6,14 +6,12 @@ using namespace pandar::network_plugin;
 
 using session_create_fn = void* (*)(
     const std::uint8_t*, std::size_t,
-    const std::uint8_t*, std::size_t,
-    std::uint64_t
+    const std::uint8_t*, std::size_t
 );
-using session_update_fn = std::int32_t (*)(
+using session_update_fn = std::uint64_t (*)(
     void*,
     const std::uint8_t*, std::size_t,
-    const std::uint8_t*, std::size_t,
-    std::uint64_t
+    const std::uint8_t*, std::size_t
 );
 using catalog_fn = PluginHttpResult (*)(
     void*,
@@ -60,7 +58,7 @@ int main(int argc, char** argv) {
     }
 
     auto create = library.sym<session_create_fn>("pandar_plugin_firmware_session_create");
-    auto update = library.sym<session_update_fn>("pandar_plugin_firmware_session_update");
+    auto update = library.sym<session_update_fn>("pandar_plugin_firmware_session_sync_account");
     auto catalog = library.sym<catalog_fn>("pandar_plugin_firmware_catalog");
     auto refresh = library.sym<refresh_fn>("pandar_plugin_firmware_refresh_version");
     auto send = library.sym<send_fn>("pandar_plugin_firmware_send");
@@ -72,7 +70,7 @@ int main(int argc, char** argv) {
     const std::string token_a = "token-a";
     const std::string token_b = "token-b";
     void* session = create(
-        bytes(hub_a), hub_a.size(), bytes(token_a), token_a.size(), 1
+        bytes(hub_a), hub_a.size(), bytes(token_a), token_a.size()
     );
     if (!session) {
         std::cerr << "failed to create generation A session\n";
@@ -84,8 +82,8 @@ int main(int argc, char** argv) {
     snapshot.firmware_generation = 1;
     if (update(
             session,
-            bytes(hub_b), hub_b.size(), bytes(token_b), token_b.size(), 2
-        ) != 0) {
+            bytes(hub_b), hub_b.size(), bytes(token_b), token_b.size()
+        ) != 2) {
         destroy(session);
         std::cerr << "failed to rotate session to generation B\n";
         return 5;

@@ -1,8 +1,8 @@
 //! Coarse-grained Studio dispatch policy.
 //!
 //! The C++ shim keeps only the callback gates and STL adapters: it exposes the
-//! Studio `std::function` callbacks, the callback gate, the agent-owned
-//! firmware generation, and the clock sources through one flat
+//! Studio `std::function` callbacks, the callback gate, Rust-owned firmware
+//! generation checks, and the clock sources through one flat
 //! [`PluginDispatchBridge`] vtable. This module owns the routing and
 //! scheduling the shim used to sequence inline: which classified message
 //! reaches which session, HTTP, or firmware path; how a prepared delivery is
@@ -43,7 +43,6 @@ const NO_AUTH_RETRY_DELAY_MS: u32 = 2_000;
 #[repr(C)]
 pub struct PluginDispatchBridge {
     pub base: ShimCallbackBridge,
-    pub firmware_generation: extern "C" fn(*mut c_void) -> u64,
     pub firmware_generation_current: extern "C" fn(*mut c_void, u64) -> i32,
     pub gate_try_lock_until: extern "C" fn(*mut c_void, u64) -> i32,
     pub steady_tick_ns: extern "C" fn(*mut c_void) -> u64,
@@ -143,3 +142,5 @@ fn take_http(result: PluginHttpResult) -> (i32, u32, String) {
 
 mod message;
 mod pending;
+
+pub(crate) use pending::dispatch_transition_and_tickets;

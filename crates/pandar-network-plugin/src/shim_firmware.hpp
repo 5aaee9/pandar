@@ -2,7 +2,6 @@
 
 #include "shim_firmware_request.hpp"
 #include "shim_request_snapshot.hpp"
-#include "shim_session_sync.hpp"
 #include "shim_dispatch.hpp"
 
 namespace pandar::network_plugin {
@@ -16,10 +15,9 @@ std::string string_from_firmware_allocation(uint8_t* ptr, std::size_t len, std::
 
 FirmwareObservationTicket begin_firmware_observation(Agent* agent) {
     if (!agent) return {};
-    std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
     return {
-        agent->firmware_generation,
-        ++agent->firmware_observation_sequence,
+        pandar_plugin_firmware_session_generation(agent->firmware_session),
+        agent->firmware_observation_sequence.fetch_add(1, std::memory_order_relaxed) + 1,
     };
 }
 
@@ -28,10 +26,6 @@ void start_firmware_dispatcher(Agent* agent) {
     agent->firmware_thread_stop = false;
     agent->firmware_thread = std::thread([agent] {
         while (!agent->firmware_thread_stop.load()) {
-            if (agent->firmware_transition_pending.load()) {
-                std::this_thread::yield();
-                continue;
-            }
             const auto taken = dispatch_firmware_callback(agent);
             if (taken != 0) {
                 std::this_thread::yield();

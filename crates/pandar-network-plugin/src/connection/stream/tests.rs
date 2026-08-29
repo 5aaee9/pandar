@@ -2,6 +2,22 @@ use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 
 use super::*;
+
+#[test]
+fn printer_cache_snapshot_fence_includes_the_exact_printer_epoch() {
+    let session = ConnectionSession::new("https://hub.example".into(), "token".into());
+    {
+        let mut state = session.state.lock().unwrap();
+        state.account_epoch = 7;
+        state.printer_epoch = 11;
+        state.printers_fresh = true;
+    }
+    let projection = session.cached_printer_projection().unwrap();
+    assert!(session.printer_cache_snapshot_current(7, projection.printer_epoch));
+
+    session.state.lock().unwrap().printer_epoch += 1;
+    assert!(!session.printer_cache_snapshot_current(7, projection.printer_epoch));
+}
 use crate::{
     connection::{AuthDisposition, ConnectionSession, Reachability},
     studio_status::{PrinterObservation, project_stream_device},

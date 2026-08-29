@@ -2,7 +2,6 @@
 
 #include "shim_connection.hpp"
 #include "shim_account_ffi.hpp"
-#include "shim_account_callbacks.hpp"
 #include "shim_dispatch.hpp"
 
 namespace pandar::network_plugin {
@@ -63,8 +62,6 @@ void trace_plugin_event(const Agent* agent, const std::string& event, const std:
 
 std::string body_from_result(PluginHttpResult result);
 void refresh_local_webserver_config(Agent* agent);
-void sync_printer_refresh_session(Agent* agent);
-void invalidate_firmware_account_session(Agent* agent);
 bool try_no_auth_session(Agent* agent, bool initial_attempt);
 FirmwareObservationTicket begin_firmware_observation(Agent* agent);
 
@@ -97,10 +94,10 @@ extern "C" std::int32_t with_printer_refresh_firmware(
 ) noexcept {
     auto* adapter = static_cast<PrinterRefreshAdapterState*>(context);
     if (!adapter || !adapter->agent || !adapter->agent->firmware_session || !transaction) return 0;
-    std::lock_guard<std::recursive_mutex> transition(
-        adapter->agent->firmware_transition_mutex
-    );
-    if (adapter->observation.generation != adapter->agent->firmware_generation) {
+    if (pandar_plugin_firmware_session_generation_current(
+            adapter->agent->firmware_session,
+            adapter->observation.generation
+        ) == 0) {
         // The account/config transition that bumped the generation also
         // invalidated this reserved observation; skip the stale handoff.
         return 0;
@@ -134,99 +131,6 @@ PluginPrinterRefreshAdapter printer_refresh_adapter(PrinterRefreshAdapterState* 
         with_printer_refresh_firmware,
         collect_printer_refresh_offline,
     };
-}
-
-struct LocalLostDelivery {
-    std::uint64_t account_epoch = 0;
-};
-
-LocalLostDelivery reset_account_printer_state(Agent* agent) {
-    std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-    pandar_plugin_studio_begin_account_transition(agent->printer_refresh_session);
-    invalidate_firmware_account_session(agent);
-    return {studio_session_state(agent).account_epoch};
-}
-
-std::function<void()> finish_account_printer_transition(
-    Agent* agent,
-    const LocalLostDelivery& transition
-) {
-    std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-    std::vector<IssuedOfflineDelivery> offline;
-    pandar_plugin_connection_take_offline(
-        agent->printer_refresh_session,
-        &offline,
-        collect_offline_device
-    );
-    std::vector<std::uint64_t> tickets;
-    tickets.reserve(offline.size());
-    for (const auto& issued : offline) {
-        tickets.push_back(issued.ticket);
-    }
-    return [agent, account_epoch = transition.account_epoch,
-            tickets = std::move(tickets)]() mutable {
-        pandar_plugin_dispatch_refresh_drain(
-            &kDispatchBridge,
-            agent,
-            agent->printer_refresh_session,
-            {},
-            tickets.data(),
-            tickets.size()
-        );
-        std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-        pandar_plugin_studio_finish_account_transition(
-            agent->printer_refresh_session, account_epoch
-        );
-    };
-}
-
-std::string account_token_snapshot(const Agent* agent) {
-    std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-    return agent->token;
-}
-
-bool account_session_current(
-    const Agent* agent,
-    std::uint64_t expected_epoch,
-    const std::string& expected_token,
-    bool require_logged_out
-) {
-    std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-    const auto state = studio_session_state(agent);
-    return static_cast<AccountPolicyAction>(pandar_plugin_account_commit_action(
-        expected_epoch,
-        state.account_epoch,
-        reinterpret_cast<const uint8_t*>(expected_token.data()), expected_token.size(),
-        reinterpret_cast<const uint8_t*>(agent->token.data()), agent->token.size(),
-        require_logged_out
-    )) == AccountPolicyAction::Apply;
-}
-
-bool account_transition_current(
-    const Agent* agent,
-    const LocalLostDelivery& transition,
-    const std::string& expected_token,
-    bool require_logged_out
-) {
-    return account_session_current(
-        agent, transition.account_epoch, expected_token, require_logged_out
-    );
-}
-
-LocalLostDelivery clear_login_state(Agent* agent, bool sync_sessions = true) {
-    auto lost = reset_account_printer_state(agent);
-    std::unique_lock<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-    agent->token.clear();
-    agent->user_id.clear();
-    agent->user_name.clear();
-    agent->avatar.clear();
-    agent->profile_json.clear();
-    agent->tenant_id.clear();
-    agent->account_session_kind = 0;
-    if (sync_sessions) {
-        sync_printer_refresh_session(agent);
-    }
-    return lost;
 }
 
 std::string studio_dev_id(std::string dev_id) {

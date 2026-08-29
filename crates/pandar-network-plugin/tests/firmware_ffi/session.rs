@@ -127,7 +127,7 @@ fn firmware_ffi_observation_sequence_stays_monotonic_across_generation_update() 
     let hub = "http://127.0.0.1:1";
     let session = Session::create(hub, "token", 2);
     assert_eq!(session.observe(printer_batch(), 2, 10), 0);
-    assert_eq!(session.update(hub, "token", 3), 0);
+    assert_eq!(session.fence(hub, "token", 3), 0);
 
     assert_eq!(session.observe(printer_batch(), 3, 9), 0);
     let reset = session.next_status("SERIAL");

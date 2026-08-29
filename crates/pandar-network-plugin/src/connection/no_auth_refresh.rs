@@ -8,7 +8,10 @@ use crate::{
 use std::ffi::c_void;
 use std::time::Duration;
 
-use super::{ConnectionSession, PluginConnectionResult, PluginPrinterRefreshAdapter, ffi::session};
+use super::{
+    ConnectionSession, PluginConnectionResult, PluginPrinterRefreshAdapter, ffi::session,
+    projection::CachedPrinterProjection,
+};
 
 const STUDIO_PRINT_INFO: i32 = 1;
 const BACKGROUND_REFRESH: i32 = 2;
@@ -41,6 +44,7 @@ pub extern "C" fn pandar_plugin_printer_refresh_with_session(
     if !matches!(mode, STUDIO_PRINT_INFO | BACKGROUND_REFRESH)
         || adapter.with_refresh_lock.is_none()
         || adapter.collect_offline.is_none()
+        || adapter.reserve_observation.is_some() != adapter.with_firmware_observation.is_some()
     {
         return failure(invalid_input("invalid_printer_refresh_adapter"));
     }
@@ -70,20 +74,25 @@ pub extern "C" fn pandar_plugin_printer_refresh_with_session(
 
     let served = match mode {
         STUDIO_PRINT_INFO => {
-            session.wait_cached_print_info(expected.account_epoch, PRINT_INFO_CACHE_WAIT)
+            session.wait_cached_printer_projection(expected.account_epoch, PRINT_INFO_CACHE_WAIT)
         }
-        _ => session.cached_print_info(),
+        _ => session.cached_printer_projection(),
     };
-    let Some(body) = served else {
+    let Some(CachedPrinterProjection {
+        body,
+        firmware,
+        printer_epoch,
+    }) = served
+    else {
         return failure(result(1, 503, stable_error_body("cache_initializing")));
     };
-    let firmware = session.cached_firmware_projection();
 
     let mut finalized = Finalization {
         session,
         adapter,
         account_epoch: expected.account_epoch,
-        firmware: firmware.as_ref(),
+        printer_epoch,
+        firmware: Some(&firmware),
         connection: empty_connection_result(),
         snapshot_current: true,
     };
@@ -143,6 +152,7 @@ struct Finalization<'a> {
     session: &'a ConnectionSession,
     adapter: PluginPrinterRefreshAdapter,
     account_epoch: u64,
+    printer_epoch: u64,
     firmware: Option<&'a FirmwareProjection>,
     connection: PluginConnectionResult,
     snapshot_current: bool,
@@ -154,11 +164,13 @@ unsafe extern "C" fn finalize_serve(context: *mut c_void) -> i32 {
     };
     finalization.snapshot_current = finalization
         .session
-        .printer_cache_snapshot_current(finalization.account_epoch);
+        .printer_cache_snapshot_current(finalization.account_epoch, finalization.printer_epoch);
     if finalization.snapshot_current
         && let Some(projection) = finalization.firmware
+        && let Some(reserve_observation) = finalization.adapter.reserve_observation
         && let Some(with_firmware_observation) = finalization.adapter.with_firmware_observation
     {
+        reserve_observation(finalization.adapter.context);
         let status = unsafe {
             with_firmware_observation(
                 finalization.adapter.context,

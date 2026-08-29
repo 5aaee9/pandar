@@ -12,16 +12,21 @@ unsafe extern "C" {
         hub_url_len: usize,
         token_ptr: *const u8,
         token_len: usize,
-        generation: u64,
     ) -> *mut c_void;
-    fn pandar_plugin_firmware_session_update(
+    fn pandar_plugin_firmware_session_sync_account(
         session: *mut c_void,
         hub_url_ptr: *const u8,
         hub_url_len: usize,
         token_ptr: *const u8,
         token_len: usize,
-        generation: u64,
-    ) -> i32;
+    ) -> u64;
+    fn pandar_plugin_firmware_session_fence_account(
+        session: *mut c_void,
+        hub_url_ptr: *const u8,
+        hub_url_len: usize,
+        token_ptr: *const u8,
+        token_len: usize,
+    ) -> u64;
     fn pandar_plugin_firmware_catalog(
         session: *mut c_void,
         dev_id_ptr: *const u8,
@@ -86,6 +91,7 @@ pub(super) struct HttpOutput {
 
 pub(super) struct CallbackOutput {
     pub(super) status: i32,
+    pub(super) generation: u64,
     pub(super) local_generation: u64,
     pub(super) cache_generation: u64,
     pub(super) dev_id: String,
@@ -101,24 +107,40 @@ impl Session {
                 hub_url.len(),
                 token.as_ptr(),
                 token.len(),
-                generation,
             )
         };
         assert!(!raw.is_null());
-        Self { raw }
+        let session = Self { raw };
+        for next_generation in 2..=generation {
+            assert_eq!(session.fence(hub_url, token, next_generation), 0);
+        }
+        session
     }
 
     pub(super) fn update(&self, hub_url: &str, token: &str, generation: u64) -> i32 {
-        unsafe {
-            pandar_plugin_firmware_session_update(
+        let updated = unsafe {
+            pandar_plugin_firmware_session_sync_account(
                 self.raw,
                 hub_url.as_ptr(),
                 hub_url.len(),
                 token.as_ptr(),
                 token.len(),
-                generation,
             )
-        }
+        };
+        i32::from(updated != generation)
+    }
+
+    pub(super) fn fence(&self, hub_url: &str, token: &str, generation: u64) -> i32 {
+        let updated = unsafe {
+            pandar_plugin_firmware_session_fence_account(
+                self.raw,
+                hub_url.as_ptr(),
+                hub_url.len(),
+                token.as_ptr(),
+                token.len(),
+            )
+        };
+        i32::from(updated != generation)
     }
 
     pub(super) fn observe(&self, body: &str, generation: u64, observation_sequence: u64) -> i32 {
@@ -271,6 +293,7 @@ fn take_callback(result: PluginFirmwareCallbackResult) -> CallbackOutput {
     let message = copy_allocation(result.message_ptr, result.message_len, result.message_cap);
     CallbackOutput {
         status: result.status,
+        generation: result.generation,
         local_generation: result.local_generation,
         cache_generation: result.cache_generation,
         dev_id,

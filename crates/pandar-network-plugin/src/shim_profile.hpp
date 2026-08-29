@@ -4,33 +4,6 @@
 
 namespace pandar::network_plugin {
 
-struct AccountCopy {
-    std::string token;
-    std::string user_id;
-    std::string user_name;
-    std::string avatar;
-    std::string profile_json;
-    std::int32_t session_kind = 0;
-};
-
-extern "C" void copy_account(
-    void* context,
-    const uint8_t* token, std::size_t token_len,
-    const uint8_t* user_id, std::size_t user_id_len,
-    const uint8_t* user_name, std::size_t user_name_len,
-    const uint8_t* avatar, std::size_t avatar_len,
-    const uint8_t* profile, std::size_t profile_len,
-    std::int32_t session_kind
-) {
-    auto& copy = *static_cast<AccountCopy*>(context);
-    copy.token.assign(reinterpret_cast<const char*>(token), token_len);
-    copy.user_id.assign(reinterpret_cast<const char*>(user_id), user_id_len);
-    copy.user_name.assign(reinterpret_cast<const char*>(user_name), user_name_len);
-    copy.avatar.assign(reinterpret_cast<const char*>(avatar), avatar_len);
-    copy.profile_json.assign(reinterpret_cast<const char*>(profile), profile_len);
-    copy.session_kind = session_kind;
-}
-
 struct RuntimeConfigCopy {
     std::string hub_url;
     std::string frontend_url;
@@ -58,33 +31,6 @@ std::string body_from_result(PluginHttpResult result) {
     pandar_plugin_free_with_capacity(result.body_ptr, result.body_len, result.body_cap);
     return body;
 }
-extern "C" void copy_tenant_id(
-    void* context, const uint8_t* tenant_id, std::size_t tenant_id_len
-) {
-    static_cast<std::string*>(context)->assign(
-        reinterpret_cast<const char*>(tenant_id), tenant_id_len
-    );
-}
-
-
-void apply_account_copy_under_refresh(Agent* agent, AccountCopy copy) {
-    agent->token = std::move(copy.token);
-    agent->user_id = std::move(copy.user_id);
-    agent->user_name = std::move(copy.user_name);
-    agent->avatar = std::move(copy.avatar);
-    agent->profile_json = copy.profile_json;
-    agent->account_session_kind = copy.session_kind;
-    std::string tenant;
-    pandar_plugin_account_profile_tenant_id(
-        reinterpret_cast<const uint8_t*>(copy.profile_json.data()),
-        copy.profile_json.size(),
-        &tenant,
-        copy_tenant_id
-    );
-    agent->tenant_id = std::move(tenant);
-    sync_printer_refresh_session(agent);
-}
-
 std::string account_login_envelope(const Agent* agent, bool logout) {
     std::string token, user_id, user_name, avatar;
     if (agent) {
@@ -115,17 +61,6 @@ int studio_disposition(
     if (http_code) *http_code = result.http_code;
     if (body) *body = std::move(message);
     return result.status;
-}
-
-void dispatch_user_login(Agent* agent, bool login) {
-    if (!agent) return;
-    BBL::OnUserLoginFn callback;
-    {
-        std::lock_guard<std::mutex> lock(agent->status_mutex);
-        callback = agent->on_user_login;
-    }
-    std::lock_guard<std::recursive_timed_mutex> gate(agent->callback_mutex);
-    if (callback) callback(login ? 1 : 0, login);
 }
 
 void dispatch_http_error(Agent* agent, unsigned code, const std::string& body) {

@@ -34,10 +34,8 @@ PrinterRequestSnapshot printer_request_snapshot(
     snapshot.account_config_epoch = agent->account_config_epoch.load(std::memory_order_acquire);
     snapshot.session_kind = agent->account_session_kind;
     snapshot.cache_generation = state.cache_generation;
-    {
-        std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
-        snapshot.firmware_generation = agent->firmware_generation;
-    }
+    snapshot.firmware_generation =
+        pandar_plugin_firmware_session_generation(agent->firmware_session);
     return snapshot;
 }
 
@@ -64,8 +62,9 @@ bool printer_request_snapshot_current(
             snapshot.account_epoch,
             snapshot.cache_generation
         ) == 0) return false;
-    std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
-    return agent->firmware_generation == snapshot.firmware_generation;
+    return pandar_plugin_firmware_session_generation_current(
+        agent->firmware_session, snapshot.firmware_generation
+    ) != 0;
 }
 
 } // namespace pandar::network_plugin

@@ -124,8 +124,14 @@ PANDAR_ABI bool bambu_network_check_debug_consistent(bool studio_debug) {
 PANDAR_ABI void* bambu_network_create_agent(std::string log_dir) {
     auto* agent = new Agent(std::move(log_dir));
     agent->account_identity = pandar_plugin_account_identity_create();
+    agent->account_session = pandar_plugin_account_session_create();
+    if (!agent->account_session) {
+        delete agent;
+        return nullptr;
+    }
     RuntimeConfigCopy config;
     if (pandar_plugin_account_runtime_config(&config, copy_runtime_config) != 0) {
+        pandar_plugin_account_session_destroy(agent->account_session);
         delete agent;
         return nullptr;
     }
@@ -143,11 +149,8 @@ PANDAR_ABI void* bambu_network_create_agent(std::string log_dir) {
         reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
         agent->hub_url.size(),
         reinterpret_cast<const uint8_t*>(agent->token.data()),
-        agent->token.size(),
-        agent->firmware_generation
+        agent->token.size()
     );
-    agent->firmware_hub_url = agent->hub_url;
-    agent->firmware_token = agent->token;
     if (agent->printer_refresh_session) {
         pandar_plugin_connection_set_dispatch_waker(
             agent->printer_refresh_session, agent, shim_wake_status_dispatcher
@@ -181,6 +184,7 @@ PANDAR_ABI int bambu_network_destroy_agent(void* agent) {
         );
         pandar_plugin_firmware_session_destroy(a->firmware_session);
         pandar_plugin_printer_refresh_session_destroy(a->printer_refresh_session);
+        pandar_plugin_account_session_destroy(a->account_session);
         std::lock_guard<std::mutex> lock(a->status_mutex);
         a->on_message = {};
         a->on_local_message = {};

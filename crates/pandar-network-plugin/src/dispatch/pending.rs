@@ -77,7 +77,6 @@ pub unsafe extern "C" fn pandar_plugin_dispatch_firmware_callback(
     else {
         return 0;
     };
-    let firmware_generation = (bridge.firmware_generation)(agent);
     let tunnel = if matches!(callback.tunnel, FirmwareTunnel::Cloud) {
         CLOUD_TUNNEL
     } else {
@@ -90,7 +89,7 @@ pub unsafe extern "C" fn pandar_plugin_dispatch_firmware_callback(
         firmware_session: session_ptr,
         tunnel,
         local_generation: callback.local_generation,
-        firmware_generation,
+        firmware_generation: callback.generation,
     };
     let deadline_ns = callback
         .origin_tick
@@ -169,7 +168,7 @@ fn dispatch_pending_deliveries(
     dispatch_transition_and_tickets(bridge, agent, session_ptr, session, transition, &offline);
 }
 
-fn dispatch_transition_and_tickets(
+pub(crate) fn dispatch_transition_and_tickets(
     bridge: &PluginDispatchBridge,
     agent: *mut c_void,
     session_ptr: *mut c_void,

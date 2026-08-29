@@ -18,7 +18,9 @@ pub use ffi::{
     pandar_plugin_firmware_next_status_override, pandar_plugin_firmware_refresh_version,
     pandar_plugin_firmware_return_handoff, pandar_plugin_firmware_send,
     pandar_plugin_firmware_session_create, pandar_plugin_firmware_session_destroy,
-    pandar_plugin_firmware_session_update, pandar_plugin_firmware_stop,
+    pandar_plugin_firmware_session_fence_account, pandar_plugin_firmware_session_generation,
+    pandar_plugin_firmware_session_generation_current, pandar_plugin_firmware_session_sync_account,
+    pandar_plugin_firmware_stop,
 };
 pub use model::{
     FirmwareSendOutcome, FirmwareSendResult, StudioFirmwareCommand, StudioFirmwareParse,

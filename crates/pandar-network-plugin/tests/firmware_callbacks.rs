@@ -185,7 +185,7 @@ fn firmware_callback_session_generation_change_cancels_pending_token() {
     server.join().unwrap();
     let token = response.callback_token.unwrap();
 
-    session.update(hub, "new-token".into(), 2);
+    assert_eq!(session.sync_account(hub, "new-token".into()), 2);
 
     assert!(!session.return_handoff_at(token, 1, 0, 0, std::time::Instant::now()));
 }

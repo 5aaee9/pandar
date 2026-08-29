@@ -4,6 +4,7 @@ pub(crate) mod ffi;
 pub(crate) mod no_auth;
 pub(crate) mod no_auth_refresh;
 pub(crate) mod no_auth_rotation;
+mod projection;
 pub(crate) mod request;
 pub(crate) mod stream;
 mod studio;
@@ -23,11 +24,12 @@ use std::{
 
 use crate::{
     PluginHttpResult, invalid_input, normalize_hub_url, read_utf8, result, stable_error_body,
-    studio_status::{FirmwareObservation, FirmwareProjection, PrinterObservation},
+    studio_status::{FirmwareProjection, PrinterObservation},
 };
 pub(crate) use account_logout::AccountLogoutBegin;
 use account_logout::AccountLogoutCoordinator;
 use delivery::DeliveryState;
+use projection::{CachedPrinterProjection, cached_printer_projection};
 use request::RequestSnapshot;
 use stream::{StreamSignals, StreamWorker};
 use studio::StudioState;
@@ -265,24 +267,31 @@ impl ConnectionSession {
     }
 
     fn cached_print_info(&self) -> Option<String> {
-        let state = self.state.lock().expect("connection state");
-        state
-            .printers_fresh
-            .then(|| print_devices_envelope(&state.printers))
+        self.cached_printer_projection()
+            .map(|projection| projection.body)
     }
 
-    pub(super) fn wait_cached_print_info(
+    pub(in crate::connection) fn cached_printer_projection(
+        &self,
+    ) -> Option<CachedPrinterProjection> {
+        let state = self.state.lock().expect("connection state");
+        cached_printer_projection(&state)
+    }
+
+    pub(in crate::connection) fn wait_cached_printer_projection(
         &self,
         account_epoch: u64,
         timeout: Duration,
-    ) -> Option<String> {
+    ) -> Option<CachedPrinterProjection> {
         let deadline = Instant::now() + timeout;
         loop {
             self.wake_worker();
             {
                 let state = self.state.lock().expect("connection state");
-                if state.printers_fresh && state.account_epoch == account_epoch {
-                    return Some(print_devices_envelope(&state.printers));
+                if state.account_epoch == account_epoch
+                    && let Some(projection) = cached_printer_projection(&state)
+                {
+                    return Some(projection);
                 }
                 // A rejected stream can never commit a snapshot; waiting
                 // would only burn the caller's budget.
@@ -299,22 +308,8 @@ impl ConnectionSession {
     }
 
     pub(super) fn cached_firmware_projection(&self) -> Option<FirmwareProjection> {
-        let state = self.state.lock().expect("connection state");
-        if !state.printers_fresh {
-            return None;
-        }
-        let observations = state
-            .printers
-            .values()
-            .map(|printer| FirmwareObservation {
-                dev_id: printer.dev_id.clone(),
-                firmware: printer.firmware.clone(),
-            })
-            .collect();
-        Some(FirmwareProjection::from_observations(
-            state.printers.len(),
-            observations,
-        ))
+        self.cached_printer_projection()
+            .map(|projection| projection.firmware)
     }
 
     pub(crate) fn take_stream_error(&self) -> PluginHttpResult {

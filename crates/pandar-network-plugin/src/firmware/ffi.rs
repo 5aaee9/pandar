@@ -20,6 +20,7 @@ const CALLBACK_NONE: i32 = 1;
 #[repr(C)]
 pub struct PluginFirmwareCallbackResult {
     pub status: i32,
+    pub generation: u64,
     pub origin_tick: u64,
     pub local_generation: u64,
     pub cache_generation: u64,
@@ -45,7 +46,6 @@ pub unsafe extern "C" fn pandar_plugin_firmware_session_create(
     hub_url_len: usize,
     token_ptr: *const u8,
     token_len: usize,
-    generation: u64,
 ) -> *mut c_void {
     let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
         return std::ptr::null_mut();
@@ -53,34 +53,69 @@ pub unsafe extern "C" fn pandar_plugin_firmware_session_create(
     let Some(token) = read_utf8(token_ptr, token_len) else {
         return std::ptr::null_mut();
     };
-    Box::into_raw(Box::new(FirmwarePluginSession::new(
-        hub_url, token, generation,
-    )))
-    .cast()
+    Box::into_raw(Box::new(FirmwarePluginSession::new(hub_url, token, 1))).cast()
 }
 
 #[unsafe(no_mangle)]
 /// # Safety
 /// `session` must be live and string pointers valid for their lengths.
-pub unsafe extern "C" fn pandar_plugin_firmware_session_update(
+pub unsafe extern "C" fn pandar_plugin_firmware_session_sync_account(
     session: *mut c_void,
     hub_url_ptr: *const u8,
     hub_url_len: usize,
     token_ptr: *const u8,
     token_len: usize,
-    generation: u64,
-) -> i32 {
+) -> u64 {
     let Some(session) = (unsafe { session_ref(session) }) else {
-        return 1;
+        return 0;
     };
     let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
-        return 1;
+        return 0;
     };
     let Some(token) = read_utf8(token_ptr, token_len) else {
-        return 1;
+        return 0;
     };
-    session.update(hub_url, token, generation);
-    0
+    session.sync_account(hub_url, token)
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `session` must be live and string pointers valid for their lengths.
+pub unsafe extern "C" fn pandar_plugin_firmware_session_fence_account(
+    session: *mut c_void,
+    hub_url_ptr: *const u8,
+    hub_url_len: usize,
+    token_ptr: *const u8,
+    token_len: usize,
+) -> u64 {
+    let Some(session) = (unsafe { session_ref(session) }) else {
+        return 0;
+    };
+    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
+        return 0;
+    };
+    let Some(token) = read_utf8(token_ptr, token_len) else {
+        return 0;
+    };
+    session.fence_account(hub_url, token)
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `session` must point to a live firmware session.
+pub unsafe extern "C" fn pandar_plugin_firmware_session_generation(session: *mut c_void) -> u64 {
+    unsafe { session_ref(session) }.map_or(0, FirmwarePluginSession::generation)
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `session` must point to a live firmware session.
+pub unsafe extern "C" fn pandar_plugin_firmware_session_generation_current(
+    session: *mut c_void,
+    expected: u64,
+) -> i32 {
+    unsafe { session_ref(session) }.is_some_and(|session| session.generation_is_current(expected))
+        as i32
 }
 
 #[unsafe(no_mangle)]

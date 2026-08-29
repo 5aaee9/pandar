@@ -186,6 +186,7 @@ struct PluginHttpResult {
 
 struct PluginFirmwareCallbackResult {
     int32_t status;
+    uint64_t generation;
     uint64_t origin_tick;
     uint64_t local_generation;
     uint64_t cache_generation;
@@ -211,15 +212,20 @@ PluginHttpResult pandar_plugin_local_connect_json(
 PluginHttpResult pandar_plugin_exchange_ticket(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
 void* pandar_plugin_firmware_session_create(
     const uint8_t*, std::size_t,
-    const uint8_t*, std::size_t,
-    uint64_t
+    const uint8_t*, std::size_t
 );
-int32_t pandar_plugin_firmware_session_update(
+uint64_t pandar_plugin_firmware_session_sync_account(
     void*,
     const uint8_t*, std::size_t,
-    const uint8_t*, std::size_t,
-    uint64_t
+    const uint8_t*, std::size_t
 );
+uint64_t pandar_plugin_firmware_session_fence_account(
+    void*,
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t
+);
+uint64_t pandar_plugin_firmware_session_generation(void*);
+int32_t pandar_plugin_firmware_session_generation_current(void*, uint64_t);
 
 PluginHttpResult pandar_plugin_firmware_catalog(
     void*,
@@ -319,12 +325,10 @@ struct Agent {
     std::string hub_url = "http://127.0.0.1:8080";
     std::string frontend_url = "http://localhost:3000";
     std::uint64_t account_identity = 0;
+    void* account_session = nullptr;
     void* printer_refresh_session = nullptr;
     void* firmware_session = nullptr;
-    std::string firmware_hub_url;
-    std::string firmware_token;
-    std::uint64_t firmware_generation = 1;
-    std::uint64_t firmware_observation_sequence = 0;
+    std::atomic<std::uint64_t> firmware_observation_sequence = 0;
     mutable std::mutex trace_mutex;
     mutable std::mutex status_mutex;
     mutable std::mutex printer_refresh_request_mutex;
@@ -332,11 +336,7 @@ struct Agent {
     mutable std::recursive_mutex account_mutex;
     mutable std::mutex no_auth_refresh_mutex;
     std::atomic<std::uint64_t> account_config_epoch = 0;
-    mutable std::mutex account_callback_queue_mutex;
-    std::deque<std::function<void()>> account_callback_queue;
-    bool account_callback_draining = false;
     mutable std::recursive_timed_mutex callback_mutex;
-    mutable std::recursive_mutex firmware_transition_mutex;
     BBL::OnPrinterConnectedFn on_printer_connected;
     BBL::OnServerConnectedFn on_server_connected;
     BBL::OnLocalConnectedFn on_local_connect;
@@ -357,7 +357,6 @@ struct Agent {
     std::condition_variable status_thread_wake;
     std::thread firmware_thread;
     std::atomic<bool> firmware_thread_stop = false;
-    std::atomic<bool> firmware_transition_pending = false;
     std::thread model_task_thread;
     std::mutex model_task_mutex;
     std::condition_variable model_task_wake;

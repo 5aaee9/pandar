@@ -15,7 +15,6 @@ extern "C" {
 
 struct PluginDispatchBridge {
     PandarShimBridge base;
-    uint64_t (*firmware_generation)(void*);
     int32_t (*firmware_generation_current)(void*, uint64_t);
     int32_t (*gate_try_lock_until)(void*, uint64_t);
     uint64_t (*steady_tick_ns)(void*);
@@ -67,17 +66,11 @@ void pandar_plugin_dispatch_refresh_drain(
 
 } // extern "C"
 
-uint64_t shim_dispatch_firmware_generation(void* context) {
-    auto* agent = static_cast<Agent*>(context);
-    std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
-    return agent->firmware_generation;
-}
-
 int32_t shim_dispatch_firmware_generation_current(void* context, uint64_t expected) {
-    if (expected == 0) return 1;
     auto* agent = static_cast<Agent*>(context);
-    std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
-    return agent->firmware_generation == expected ? 1 : 0;
+    return pandar_plugin_firmware_session_generation_current(
+        agent->firmware_session, expected
+    );
 }
 
 int32_t shim_dispatch_gate_try_lock_until(void* context, uint64_t deadline_ns) {
@@ -133,12 +126,11 @@ int32_t shim_dispatch_sync_firmware(void* context, void*) {
     auto* agent = static_cast<Agent*>(context);
     if (!agent->firmware_session) return 0;
     std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-    std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
     pandar_plugin_connection_sync_firmware(
         agent->printer_refresh_session,
         agent->firmware_session,
-        agent->firmware_generation,
-        ++agent->firmware_observation_sequence
+        pandar_plugin_firmware_session_generation(agent->firmware_session),
+        agent->firmware_observation_sequence.fetch_add(1, std::memory_order_relaxed) + 1
     );
     return 0;
 }
@@ -172,7 +164,6 @@ int32_t shim_invoke_local_connected_with_body(
 
 const PluginDispatchBridge kDispatchBridge = {
     kShimBridge,
-    shim_dispatch_firmware_generation,
     shim_dispatch_firmware_generation_current,
     shim_dispatch_gate_try_lock_until,
     shim_dispatch_steady_tick_ns,
@@ -187,8 +178,7 @@ const PluginDispatchBridge kDispatchBridge = {
 };
 
 std::uint64_t current_firmware_generation(Agent* agent) {
-    std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
-    return agent->firmware_generation;
+    return pandar_plugin_firmware_session_generation(agent->firmware_session);
 }
 
 int dispatch_studio_message(

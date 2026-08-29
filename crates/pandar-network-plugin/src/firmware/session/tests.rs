@@ -44,7 +44,7 @@ fn firmware_callback_generation_update_cannot_race_between_validation_and_enqueu
     let updating = Arc::clone(&session);
     let (updated_tx, updated_rx) = mpsc::channel();
     let updater = thread::spawn(move || {
-        updating.update(hub, "new-token".into(), 2);
+        assert_eq!(updating.sync_account(hub, "new-token".into()), 2);
         updated_tx.send(()).unwrap();
     });
     let updated_before_release = updated_rx.recv_timeout(Duration::from_secs(1)).is_ok();

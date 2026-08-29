@@ -52,23 +52,34 @@ impl FirmwarePluginSession {
         }
     }
 
-    pub fn update(&self, hub_url: String, token: String, generation: u64) {
+    pub fn sync_account(&self, hub_url: String, token: String) -> u64 {
         let mut credentials = self
             .credentials
             .lock()
             .expect("firmware credentials poisoned");
-        let previous_generation = credentials.generation;
-        if previous_generation != generation {
-            self.callbacks.cancel_generation(previous_generation);
-            self.status
-                .lock()
-                .expect("firmware status cache poisoned")
-                .update_generation(generation, Instant::now());
-            credentials.cancelled = false;
+        if credentials.hub_url == hub_url && credentials.token == token && !credentials.cancelled {
+            return credentials.generation;
         }
-        credentials.hub_url = hub_url;
-        credentials.token = token;
-        credentials.generation = generation;
+        self.advance_generation(&mut credentials, hub_url, token)
+    }
+
+    pub fn fence_account(&self, hub_url: String, token: String) -> u64 {
+        let mut credentials = self
+            .credentials
+            .lock()
+            .expect("firmware credentials poisoned");
+        self.advance_generation(&mut credentials, hub_url, token)
+    }
+
+    pub fn generation(&self) -> u64 {
+        self.credentials
+            .lock()
+            .expect("firmware credentials poisoned")
+            .generation
+    }
+
+    pub fn generation_is_current(&self, expected: u64) -> bool {
+        expected == 0 || self.is_current(expected)
     }
 
     pub fn send(
@@ -258,6 +269,25 @@ impl FirmwarePluginSession {
 
     pub fn stop(&self) {
         self.callbacks.stop();
+    }
+
+    fn advance_generation(
+        &self,
+        credentials: &mut FirmwareCredentials,
+        hub_url: String,
+        token: String,
+    ) -> u64 {
+        let previous_generation = credentials.generation;
+        self.callbacks.cancel_generation(previous_generation);
+        credentials.generation = credentials.generation.wrapping_add(1);
+        credentials.hub_url = hub_url;
+        credentials.token = token;
+        credentials.cancelled = false;
+        self.status
+            .lock()
+            .expect("firmware status cache poisoned")
+            .update_generation(credentials.generation, Instant::now());
+        credentials.generation
     }
 
     fn claim(&self, expected_generation: u64) -> Option<CredentialsSnapshot> {

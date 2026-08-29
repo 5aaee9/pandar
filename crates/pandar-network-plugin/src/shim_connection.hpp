@@ -154,13 +154,9 @@ int32_t shim_invoke_firmware_status(
     void* context, int32_t kind, const uint8_t* dev_id, std::size_t dev_id_len
 ) {
     auto* agent = static_cast<Agent*>(context);
-    PluginHttpResult result{};
-    {
-        std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
-        result = pandar_plugin_firmware_next_status_override(
-            agent->firmware_session, dev_id, dev_id_len
-        );
-    }
+    auto result = pandar_plugin_firmware_next_status_override(
+        agent->firmware_session, dev_id, dev_id_len
+    );
     auto body = body_from_result(result);
     if (result.status != 0) return 0;
     return shim_invoke_message(

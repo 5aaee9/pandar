@@ -2,6 +2,7 @@ use super::{CALLBACK_NONE, PluginFirmwareCallbackResult};
 use crate::firmware::callbacks::{FirmwareTunnel, ReadyFirmwareCallback};
 
 pub(super) fn callback_result(callback: ReadyFirmwareCallback) -> PluginFirmwareCallbackResult {
+    let generation = callback.generation;
     let origin_tick = callback.origin_tick;
     let local_generation = callback.local_generation;
     let cache_generation = callback.cache_generation;
@@ -9,6 +10,7 @@ pub(super) fn callback_result(callback: ReadyFirmwareCallback) -> PluginFirmware
     let (message_ptr, message_len, message_cap) = allocation(callback.message);
     PluginFirmwareCallbackResult {
         status: 0,
+        generation,
         origin_tick,
         local_generation,
         cache_generation,
@@ -28,6 +30,7 @@ pub(super) fn callback_result(callback: ReadyFirmwareCallback) -> PluginFirmware
 pub(super) fn empty_callback() -> PluginFirmwareCallbackResult {
     PluginFirmwareCallbackResult {
         status: CALLBACK_NONE,
+        generation: 0,
         origin_tick: 0,
         local_generation: 0,
         cache_generation: 0,
