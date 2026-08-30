@@ -69,6 +69,6 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun signOut() {
-        container.auth.signOut()
+        viewModelScope.launch { container.auth.signOut() }
     }
 }

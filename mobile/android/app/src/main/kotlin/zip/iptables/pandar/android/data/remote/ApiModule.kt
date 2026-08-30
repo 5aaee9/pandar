@@ -34,6 +34,19 @@ object ApiModule {
         return builder.build()
     }
 
+    fun webSocketHttp(): OkHttpClient {
+        val builder = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+        if (BuildConfig.DEBUG) {
+            builder.addInterceptor(HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BASIC
+            })
+        }
+        return builder.build()
+    }
+
     fun retrofit(baseUrl: HttpUrl, client: OkHttpClient): Retrofit {
         val contentType = "application/json".toMediaType()
         return Retrofit.Builder()

@@ -27,7 +27,6 @@ class PandarRepository(
     val jobs: StateFlow<List<Job>> = store.jobs
     val latestCommandsByPrinter: StateFlow<Map<String, Command>> = store.latestCommandsByPrinter
     val liveState: StateFlow<LiveState> = ws.liveState
-    val needsReauth: StateFlow<Boolean> = ws.needsReauth
 
     private val api: PandarApi get() = apiProvider()
     private fun tenant(): String =
@@ -35,16 +34,18 @@ class PandarRepository(
 
     init {
         scope.launch {
-            ws.events.collect { event ->
-                val update = when (event) {
-                    is PrinterEventDto.PrinterSnapshot ->
-                        PrinterStateUpdate.PrinterSnapshot(event.printer.toDomain())
-                    is PrinterEventDto.JobProgress ->
-                        PrinterStateUpdate.JobProgress(event.job.toDomain())
-                    is PrinterEventDto.CommandResult ->
-                        PrinterStateUpdate.CommandResult(event.command.toDomain())
+            ws.events.collect { frame ->
+                ws.consumeIfCurrent(frame) { event ->
+                    val update = when (event) {
+                        is PrinterEventDto.PrinterSnapshot ->
+                            PrinterStateUpdate.PrinterSnapshot(event.printer.toDomain())
+                        is PrinterEventDto.JobProgress ->
+                            PrinterStateUpdate.JobProgress(event.job.toDomain())
+                        is PrinterEventDto.CommandResult ->
+                            PrinterStateUpdate.CommandResult(event.command.toDomain())
+                    }
+                    store.apply(update)
                 }
-                store.apply(update)
             }
         }
     }

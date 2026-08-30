@@ -121,10 +121,9 @@ class AuthRepository(
 
     fun endSessionUrl(): String? = null
 
-    fun signOut() {
-        scope.launch { settings.clearTokens() }
-        _identity.value = null
-        _state.value = AuthState.SIGNED_OUT
+    suspend fun signOut() {
+        pendingAuthorization = null
+        settings.clearTokens()
     }
 
     private suspend fun currentSettings(): zip.iptables.pandar.android.data.settings.SettingsSnapshot =

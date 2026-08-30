@@ -8,12 +8,15 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 import okhttp3.OkHttpClient
 import zip.iptables.pandar.android.core.util.Logger
 import zip.iptables.pandar.android.data.auth.AuthRepository
 import zip.iptables.pandar.android.data.remote.ApiModule
+import zip.iptables.pandar.android.data.remote.HubSession
 import zip.iptables.pandar.android.data.remote.secureHubHttpUrl
 import zip.iptables.pandar.android.data.remote.PandarApi
 import zip.iptables.pandar.android.data.remote.ws.PrinterEventsRepository
@@ -43,13 +46,18 @@ class AppContainer(context: Context) {
         )
     }
 
-    val printerEvents: PrinterEventsRepository = PrinterEventsRepository(
-        client = okHttpClient,
-        hubBaseUrl = { settings.currentHubBaseUrl() },
-        tenantId = { settings.currentTenant() },
-        tokenProvider = { settings.currentToken() },
+    private val printerEvents: PrinterEventsRepository = PrinterEventsRepository(
+        client = ApiModule.webSocketHttp(),
         tokenRefresher = { auth.refresh() },
+        invalidateSession = { session -> settings.clearSessionIfCurrent(session) },
         logger = logger,
+    )
+
+    val pandar: PandarRepository = PandarRepository(
+        apiProvider = { apiState.value ?: throw IllegalStateException("Hub base URL is not configured.") },
+        tenantProvider = { settings.currentTenant() },
+        ws = printerEvents,
+        scope = scope,
     )
 
     init {
@@ -64,15 +72,18 @@ class AppContainer(context: Context) {
                 }
             }
         }
-        // When the live WebSocket signals that re-authentication is required (refresh failed),
-        // discard tokens so AuthState flips to SIGNED_OUT and the sign-in gate reappears.
-        scope.launch {
-            printerEvents.needsReauth.collect { needsReauth ->
-                if (needsReauth && settings.currentToken() != null) {
-                    settings.clearTokens()
+        printerEvents.start(
+            scope,
+            settings.settings
+                .map { snapshot ->
+                    HubSession.create(
+                        snapshot.hubBaseUrl,
+                        snapshot.tenantId,
+                        snapshot.accessToken,
+                    )
                 }
-            }
-        }
+                .distinctUntilChanged(),
+        )
     }
 
     private fun rebuildApi(baseUrl: String?) {
@@ -80,25 +91,9 @@ class AppContainer(context: Context) {
         _apiState.value = httpUrl?.let { ApiModule.pandarApi(it, okHttpClient) }
     }
 
-    val pandar: PandarRepository = PandarRepository(
-        apiProvider = { apiState.value ?: throw IllegalStateException("Hub base URL is not configured.") },
-        tenantProvider = { settings.currentTenant() },
-        ws = printerEvents,
-        scope = scope,
-    )
-
-    fun startLiveUpdates() {
-        printerEvents.start(scope)
-    }
-
-    fun stopLiveUpdates() {
-        printerEvents.stop()
-    }
-
     /** Force the live WebSocket to reconnect (used by pull-to-refresh when the stream is down). */
     fun reconnectLiveUpdates() {
-        printerEvents.stop()
-        printerEvents.start(scope)
+        printerEvents.reconnect()
     }
 }
 

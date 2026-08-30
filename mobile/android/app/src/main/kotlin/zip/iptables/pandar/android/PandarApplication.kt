@@ -10,6 +10,5 @@ class PandarApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
-        container.startLiveUpdates()
     }
 }

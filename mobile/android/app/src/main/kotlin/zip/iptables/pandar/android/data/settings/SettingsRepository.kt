@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import zip.iptables.pandar.android.data.remote.HubSession
 import zip.iptables.pandar.android.data.remote.TokenProvider
 
 private val Context.pandarDataStore by preferencesDataStore(name = "pandar_settings")
@@ -73,6 +74,10 @@ class SettingsRepository(
         update { it.copy(accessToken = null, tokenExpiresAtEpochMillis = null) }
     }
 
+    suspend fun clearSessionIfCurrent(expected: HubSession) {
+        update { current -> current.clearSessionIfMatches(expected) }
+    }
+
     // Best-effort cache of the latest snapshot for synchronous token access from the
     // network interceptor. The OkHttp interceptor runs on non-suspend threads, so it
     // cannot read the Flow directly.
@@ -88,7 +93,6 @@ class SettingsRepository(
     override fun currentToken(): String? = lastSnapshot?.accessToken
 
     fun currentTenant(): String? = lastSnapshot?.tenantId
-    fun currentHubBaseUrl(): String? = lastSnapshot?.hubBaseUrl
 }
 
 private fun androidx.datastore.preferences.core.MutablePreferences.putOrRemove(

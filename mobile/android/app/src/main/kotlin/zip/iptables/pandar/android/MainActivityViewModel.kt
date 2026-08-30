@@ -61,11 +61,12 @@ class MainActivityViewModel(private val container: AppContainer) : ViewModel() {
 
     fun signOut() {
         val endSession = container.auth.endSessionUrl()
-        container.auth.signOut()
-        // Best-effort: open the provider's end-session endpoint so the browser session is also
-        // revoked. Tokens are already discarded regardless of whether this succeeds.
-        if (!endSession.isNullOrEmpty()) {
-            viewModelScope.launch { _openUrl.emit(endSession) }
+        viewModelScope.launch {
+            container.auth.signOut()
+            // Best-effort: open the provider's end-session endpoint after the local session ends.
+            if (!endSession.isNullOrEmpty()) {
+                _openUrl.emit(endSession)
+            }
         }
     }
 
