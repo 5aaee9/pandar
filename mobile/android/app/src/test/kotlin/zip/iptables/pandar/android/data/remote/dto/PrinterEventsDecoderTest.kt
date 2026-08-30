@@ -30,7 +30,7 @@ class PrinterEventsDecoderTest {
             "task_generation":3,"error_generation":9,"hms":[{"attr":1,"code":2}],
             "job_state":1,"gcode_state":"PAUSE","task_id":"task-1","subtask_id":"subtask-1",
             "subtask_name":"Benchy","gcode_file":"/cache/plate_1.gcode.3mf",
-            "progress_percent":42,"remaining_time_minutes":12,"current_layer":5,"total_layers":100,
+            "progress_percent":42,"speed_level":null,"remaining_time_minutes":12,"current_layer":5,"total_layers":100,
             "print_error":83918929,"printer_job_id":"native-job"
           }
         }}
@@ -47,10 +47,10 @@ class PrinterEventsDecoderTest {
         val json = """
         {"type":"job_progress","job":{
           "id":"j1","tenant_id":"t1","printer_id":"p1","agent_id":"a1","artifact_id":"art1","command_id":"c1",
-          "status":"acknowledged","created_at":"a","updated_at":"b",
-          "print":{"status":"running","progress_percent":10},
+          "status":"acknowledged","error":null,"created_at":"a","updated_at":"b",
+          "print":{"status":"running","printer_state":null,"progress_percent":10,"remaining_time_minutes":null,"current_layer":null,"total_layers":null,"active_file":null,"last_progress_percent":null,"last_layer":null,"error":null,"started_at":null,"finished_at":null,"updated_at":null},
           "command":{"id":"c1","kind":"print_project_file","status":"acknowledged"},
-          "artifact":{"id":"art1","tenant_id":"t1","filename":"f.3mf","content_type":"model/3mf","size_bytes":1,"created_at":"c"},
+          "artifact":{"id":"art1","tenant_id":"t1","filename":"f.3mf","content_type":"model/3mf","size_bytes":1,"metadata":null,"created_at":"c"},
           "material":{"ams_mapping":null,"ams_mapping2":null,"ams_mapping_info":null,"filament_usage":[]}}}
         """.trimIndent()
 
@@ -63,7 +63,7 @@ class PrinterEventsDecoderTest {
         val json = """
         {"type":"command_result","command":{
           "id":"c1","tenant_id":"t1","agent_id":"a1","printer_id":"p1","kind":"printer_operation",
-          "status":"succeeded","payload_json":"{}","created_at":"a","updated_at":"b"}}
+          "status":"succeeded","payload_json":"{}","error":null,"result_json":null,"created_at":"a","updated_at":"b"}}
         """.trimIndent()
 
         val event = appJson.decodeFromString<PrinterEventDto>(json)

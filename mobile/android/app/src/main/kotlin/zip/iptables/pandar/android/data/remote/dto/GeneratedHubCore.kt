@@ -1,6 +1,7 @@
 // Generated from contracts/hub-client.openapi.json. Do not edit.
 package zip.iptables.pandar.android.data.remote.dto
 
+import kotlinx.serialization.Required
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -76,14 +77,17 @@ data class CommandResponseDto(
     @SerialName("agent_id")
     val agentId: String,
     @SerialName("printer_id")
-    val printerId: String? = null,
+    @Required
+    val printerId: String?,
     val kind: String,
     val status: CommandStatusDto,
     @SerialName("payload_json")
     val payloadJson: String,
-    val error: String? = null,
+    @Required
+    val error: String?,
     @SerialName("result_json")
-    val resultJson: String? = null,
+    @Required
+    val resultJson: String?,
     @SerialName("created_at")
     val createdAt: String,
     @SerialName("updated_at")

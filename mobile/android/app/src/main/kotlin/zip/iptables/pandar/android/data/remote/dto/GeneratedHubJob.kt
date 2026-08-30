@@ -1,24 +1,30 @@
 // Generated from contracts/hub-client.openapi.json. Do not edit.
 package zip.iptables.pandar.android.data.remote.dto
 
+import kotlinx.serialization.Required
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class ArtifactFilamentDto(
     @SerialName("filament_id")
-    val filamentId: String? = null,
+    @Required
+    val filamentId: String?,
     @SerialName("tray_info_idx")
     val trayInfoIdx: String? = null,
     @SerialName("nozzle_id")
     val nozzleId: Int? = null,
     @SerialName("filament_type")
-    val filamentType: String? = null,
-    val color: String? = null,
+    @Required
+    val filamentType: String?,
+    @Required
+    val color: String?,
     @SerialName("used_grams")
-    val usedGrams: Double? = null,
+    @Required
+    val usedGrams: Double?,
     @SerialName("used_meters")
-    val usedMeters: Double? = null
+    @Required
+    val usedMeters: Double?
 )
 
 @Serializable
@@ -27,9 +33,11 @@ data class ArtifactPlateDto(
     val plateId: Int,
     val name: String,
     @SerialName("estimated_time_seconds")
-    val estimatedTimeSeconds: Int? = null,
+    @Required
+    val estimatedTimeSeconds: Int?,
     @SerialName("filament_weight_grams")
-    val filamentWeightGrams: Double? = null,
+    @Required
+    val filamentWeightGrams: Double?,
     @SerialName("object_count")
     val objectCount: Int,
     val objects: List<String>,
@@ -44,7 +52,8 @@ data class ArtifactMetadataDto(
     @SerialName("display_name")
     val displayName: String,
     @SerialName("default_plate_id")
-    val defaultPlateId: Int? = null,
+    @Required
+    val defaultPlateId: Int?,
     @SerialName("plate_count")
     val plateCount: Int,
     val plates: List<ArtifactPlateDto>,
@@ -55,28 +64,40 @@ data class ArtifactMetadataDto(
 data class JobPrintDto(
     val status: PrintStatusDto,
     @SerialName("printer_state")
-    val printerState: String? = null,
+    @Required
+    val printerState: String?,
     @SerialName("progress_percent")
-    val progressPercent: Int? = null,
+    @Required
+    val progressPercent: Int?,
     @SerialName("remaining_time_minutes")
-    val remainingTimeMinutes: Int? = null,
+    @Required
+    val remainingTimeMinutes: Int?,
     @SerialName("current_layer")
-    val currentLayer: Int? = null,
+    @Required
+    val currentLayer: Int?,
     @SerialName("total_layers")
-    val totalLayers: Int? = null,
+    @Required
+    val totalLayers: Int?,
     @SerialName("active_file")
-    val activeFile: String? = null,
+    @Required
+    val activeFile: String?,
     @SerialName("last_progress_percent")
-    val lastProgressPercent: Int? = null,
+    @Required
+    val lastProgressPercent: Int?,
     @SerialName("last_layer")
-    val lastLayer: Int? = null,
-    val error: String? = null,
+    @Required
+    val lastLayer: Int?,
+    @Required
+    val error: String?,
     @SerialName("started_at")
-    val startedAt: String? = null,
+    @Required
+    val startedAt: String?,
     @SerialName("finished_at")
-    val finishedAt: String? = null,
+    @Required
+    val finishedAt: String?,
     @SerialName("updated_at")
-    val updatedAt: String? = null
+    @Required
+    val updatedAt: String?
 )
 
 @Serializable
@@ -96,7 +117,8 @@ data class JobArtifactDto(
     val contentType: String,
     @SerialName("size_bytes")
     val sizeBytes: Long,
-    val metadata: ArtifactMetadataDto? = null,
+    @Required
+    val metadata: ArtifactMetadataDto?,
     @SerialName("created_at")
     val createdAt: String
 )
@@ -115,8 +137,10 @@ data class AmsMappingInfoDto(
     val targetColor: String,
     val filamentId: String,
     val filamentType: String,
-    val nozzleId: Int? = null,
-    val sourceColor: String? = null
+    @Required
+    val nozzleId: Int?,
+    @Required
+    val sourceColor: String?
 )
 
 @Serializable
@@ -125,35 +149,48 @@ data class FilamentUsageDto(
     val slotIndex: Int,
     val source: String,
     @SerialName("ams_id")
-    val amsId: String? = null,
+    @Required
+    val amsId: String?,
     @SerialName("tray_id")
-    val trayId: String? = null,
+    @Required
+    val trayId: String?,
     @SerialName("global_tray_id")
-    val globalTrayId: Int? = null,
+    @Required
+    val globalTrayId: Int?,
     @SerialName("external_id")
-    val externalId: String? = null,
+    @Required
+    val externalId: String?,
     @SerialName("filament_id")
-    val filamentId: String? = null,
+    @Required
+    val filamentId: String?,
     @SerialName("setting_id")
-    val settingId: String? = null,
+    @Required
+    val settingId: String?,
     @SerialName("filament_type")
-    val filamentType: String? = null,
-    val color: String? = null,
+    @Required
+    val filamentType: String?,
+    @Required
+    val color: String?,
     @SerialName("used_mm")
-    val usedMm: String? = null,
+    @Required
+    val usedMm: String?,
     @SerialName("used_grams")
-    val usedGrams: String? = null,
+    @Required
+    val usedGrams: String?,
     val confidence: String
 )
 
 @Serializable
 data class JobMaterialDto(
     @SerialName("ams_mapping")
-    val amsMapping: List<Int>? = null,
+    @Required
+    val amsMapping: List<Int>?,
     @SerialName("ams_mapping2")
-    val amsMapping2: List<AmsMapping2Dto>? = null,
+    @Required
+    val amsMapping2: List<AmsMapping2Dto>?,
     @SerialName("ams_mapping_info")
-    val amsMappingInfo: List<AmsMappingInfoDto>? = null,
+    @Required
+    val amsMappingInfo: List<AmsMappingInfoDto>?,
     @SerialName("filament_usage")
     val filamentUsage: List<FilamentUsageDto>
 )
@@ -172,7 +209,8 @@ data class JobDto(
     @SerialName("command_id")
     val commandId: String,
     val status: JobStatusDto,
-    val error: String? = null,
+    @Required
+    val error: String?,
     @SerialName("created_at")
     val createdAt: String,
     @SerialName("updated_at")

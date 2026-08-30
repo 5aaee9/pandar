@@ -208,15 +208,17 @@ function kotlinDefinition(name, schema) {
   const required = new Set(schema.required ?? []);
   const fields = Object.entries(schema.properties).map(([wireName, fieldSchema]) => {
     const propertyName = camelCase(wireName);
-    const annotation = propertyName === wireName ? "" : `@SerialName(${JSON.stringify(wireName)})\n    `;
     let type = kotlinType(fieldSchema);
+    const optional = !required.has(wireName) || fieldSchema["x-kotlin-optional"];
+    const annotations = [];
+    if (propertyName !== wireName) annotations.push(`@SerialName(${JSON.stringify(wireName)})`);
+    if (!optional && type.endsWith("?")) annotations.push("@Required");
     let defaultValue = "";
-    if (!required.has(wireName) || fieldSchema["x-kotlin-optional"]) {
+    if (optional) {
       if (!type.endsWith("?")) type += "?";
       defaultValue = " = null";
-    } else if (type.endsWith("?")) {
-      defaultValue = " = null";
     }
+    const annotation = annotations.map((value) => `${value}\n    `).join("");
     return `${annotation}val ${propertyName}: ${type}${defaultValue}`;
   });
   return `@Serializable\ndata class ${generatedName}(\n${fields.map((field) => `    ${field}`).join(",\n")}\n)\n`;
@@ -244,7 +246,7 @@ for (const group of config.typescriptGroups) {
   const body = names.map((name) => kotlinDefinition(name, schemas[name])).filter(Boolean).join("\n");
   outputs.set(
     path.join(root, `mobile/android/app/src/main/kotlin/zip/iptables/pandar/android/data/remote/dto/GeneratedHub${group[0].toUpperCase() + group.slice(1)}.kt`),
-    `// Generated from contracts/hub-client.openapi.json. Do not edit.\npackage zip.iptables.pandar.android.data.remote.dto\n\nimport kotlinx.serialization.SerialName\nimport kotlinx.serialization.Serializable\n${body.includes("JsonElement") ? "import kotlinx.serialization.json.JsonElement\n" : ""}\n${body}`,
+    `// Generated from contracts/hub-client.openapi.json. Do not edit.\npackage zip.iptables.pandar.android.data.remote.dto\n\n${body.includes("@Required") ? "import kotlinx.serialization.Required\n" : ""}import kotlinx.serialization.SerialName\nimport kotlinx.serialization.Serializable\n${body.includes("JsonElement") ? "import kotlinx.serialization.json.JsonElement\n" : ""}\n${body}`,
   );
 }
 

@@ -322,7 +322,7 @@ class PrinterEventsSessionLifecycleTest {
             {"type":"command_result","command":{
               "id":"command-1","tenant_id":"tenant-1","agent_id":"agent-1",
               "printer_id":"p1","kind":"printer_operation","status":"succeeded",
-              "payload_json":"{}","created_at":"created","updated_at":"updated"}}
+              "payload_json":"{}","error":null,"result_json":null,"created_at":"created","updated_at":"updated"}}
         """.trimIndent()
 
         private val PRINTER_EVENT = """

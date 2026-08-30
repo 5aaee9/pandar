@@ -1,6 +1,7 @@
 // Generated from contracts/hub-client.openapi.json. Do not edit.
 package zip.iptables.pandar.android.data.remote.dto
 
+import kotlinx.serialization.Required
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -100,17 +101,21 @@ data class CompatibilityFeaturesDto(
 data class PrintOptionCapabilitiesDto(
     val timelapse: Boolean,
     @SerialName("bed_leveling")
-    val bedLeveling: CalibrationOptionDto? = null,
+    @Required
+    val bedLeveling: CalibrationOptionDto?,
     @SerialName("flow_calibration")
-    val flowCalibration: CalibrationOptionDto? = null,
+    @Required
+    val flowCalibration: CalibrationOptionDto?,
     @SerialName("nozzle_offset_calibration")
-    val nozzleOffsetCalibration: CalibrationOptionDto? = null
+    @Required
+    val nozzleOffsetCalibration: CalibrationOptionDto?
 )
 
 @Serializable
 data class PrinterCompatibilityDto(
     @SerialName("normalized_model")
-    val normalizedModel: String? = null,
+    @Required
+    val normalizedModel: String?,
     @SerialName("external_storage")
     val externalStorage: CapabilityDto,
     @SerialName("ftps_tls_1_2_cap")
@@ -229,7 +234,8 @@ data class PrinterMaterialsDto(
     @SerialName("external_spools")
     val externalSpools: List<ExternalSpoolDto>,
     @SerialName("active_tray")
-    val activeTray: ActiveTrayDto? = null,
+    @Required
+    val activeTray: ActiveTrayDto?,
     @SerialName("observed_at")
     val observedAt: String
 )
@@ -287,31 +293,44 @@ data class PrinterPrintDto(
     val errorGeneration: Long,
     val hms: List<HmsDto>,
     @SerialName("job_state")
-    val jobState: Int? = null,
+    @Required
+    val jobState: Int?,
     @SerialName("gcode_state")
-    val gcodeState: String? = null,
+    @Required
+    val gcodeState: String?,
     @SerialName("task_id")
-    val taskId: String? = null,
+    @Required
+    val taskId: String?,
     @SerialName("subtask_id")
-    val subtaskId: String? = null,
+    @Required
+    val subtaskId: String?,
     @SerialName("subtask_name")
-    val subtaskName: String? = null,
+    @Required
+    val subtaskName: String?,
     @SerialName("gcode_file")
-    val gcodeFile: String? = null,
+    @Required
+    val gcodeFile: String?,
     @SerialName("progress_percent")
-    val progressPercent: Int? = null,
+    @Required
+    val progressPercent: Int?,
     @SerialName("speed_level")
-    val speedLevel: Int? = null,
+    @Required
+    val speedLevel: Int?,
     @SerialName("remaining_time_minutes")
-    val remainingTimeMinutes: Int? = null,
+    @Required
+    val remainingTimeMinutes: Int?,
     @SerialName("current_layer")
-    val currentLayer: Int? = null,
+    @Required
+    val currentLayer: Int?,
     @SerialName("total_layers")
-    val totalLayers: Int? = null,
+    @Required
+    val totalLayers: Int?,
     @SerialName("print_error")
-    val printError: Int? = null,
+    @Required
+    val printError: Int?,
     @SerialName("printer_job_id")
-    val printerJobId: String? = null
+    @Required
+    val printerJobId: String?
 )
 
 @Serializable
@@ -324,7 +343,8 @@ data class PrinterDto(
     @SerialName("serial_number")
     val serialNumber: String,
     val name: String,
-    val model: String? = null,
+    @Required
+    val model: String?,
     val compatibility: PrinterCompatibilityDto,
     val status: String,
     @SerialName("last_seen_at")
@@ -347,7 +367,8 @@ data class PrinterDto(
     val chamberLightOn: Boolean? = null,
     @SerialName("cooling_system")
     val coolingSystem: CoolingSystemDto? = null,
-    val materials: PrinterMaterialsDto? = null,
+    @Required
+    val materials: PrinterMaterialsDto?,
     @SerialName("nozzle_system")
     val nozzleSystem: NozzleSystemDto? = null,
     @SerialName("state_revision")
