@@ -44,6 +44,7 @@ pub(crate) async fn finalize_required_features_for_closing_session(
     {
         return Ok(());
     }
+    let session_id = token.persisted_id();
 
     let commands = state
         .commands()
@@ -55,31 +56,41 @@ pub(crate) async fn finalize_required_features_for_closing_session(
             Ok(Some(operation)) => operation,
             Ok(None) => continue,
             Err(err) => {
-                fail_queued_command(
+                if !fail_queued_command(
                     state,
                     tenant_id,
                     agent_id,
                     &command,
+                    &session_id,
+                    false,
                     format!(
                         "required device feature gate failed: persisted printer operation payload is invalid: {err:#}"
                     ),
                 )
-                .await?;
+                .await?
+                {
+                    return Ok(());
+                }
                 continue;
             }
         };
         if operation.operation.required_device_features().is_empty() {
             continue;
         }
-        fail_queued_command(
+        if !fail_queued_command(
             state,
             tenant_id,
             agent_id,
             &command,
+            &session_id,
+            false,
             "required device feature gate failed: exact agent session is no longer current"
                 .to_owned(),
         )
-        .await?;
+        .await?
+        {
+            return Ok(());
+        }
     }
     Ok(())
 }
@@ -96,6 +107,7 @@ pub(crate) async fn dispatch_next_queued_for_session(
         .sessions()
         .transition_lease_for_session(agent_id, token)
         .await;
+    let session_id = token.persisted_id();
     let current = state.sessions().is_current(agent_id, token).await;
     let Some(command) = state
         .commands()
@@ -121,16 +133,21 @@ pub(crate) async fn dispatch_next_queued_for_session(
                 error = %format!("{err:#}"),
                 "failed to deserialize queued printer operation command payload"
             );
-            fail_queued_command(
+            if !fail_queued_command(
                 state,
                 tenant_id,
                 agent_id,
                 &command,
+                &session_id,
+                current,
                 format!(
                     "required device feature gate failed: persisted printer operation payload is invalid: {err:#}"
                 ),
             )
-            .await?;
+            .await?
+            {
+                return Ok(SessionQueuedDispatch::SessionEnded);
+            }
             return Ok(SessionQueuedDispatch::FailedAndContinue);
         }
     };
@@ -162,7 +179,19 @@ pub(crate) async fn dispatch_next_queued_for_session(
     pause::wait(token, pause::Phase::AfterFeatureValidation).await;
 
     if let Some(failure) = failure {
-        fail_queued_command(state, tenant_id, agent_id, &command, failure).await?;
+        if !fail_queued_command(
+            state,
+            tenant_id,
+            agent_id,
+            &command,
+            &session_id,
+            current,
+            failure,
+        )
+        .await?
+        {
+            return Ok(SessionQueuedDispatch::SessionEnded);
+        }
         return Ok(SessionQueuedDispatch::FailedAndContinue);
     }
     if !current {
@@ -170,7 +199,12 @@ pub(crate) async fn dispatch_next_queued_for_session(
     }
 
     let hub_command = hub_command_from_record_with_options(command.clone(), options)?;
-    if let Err(status) = mark_sent_and_job(state, command.clone(), tenant_id, agent_id).await {
+    if let Err(status) =
+        mark_sent_and_job(state, command.clone(), tenant_id, agent_id, &session_id).await
+    {
+        if status.code() == tonic::Code::Aborted {
+            return Ok(SessionQueuedDispatch::SessionEnded);
+        }
         if print_command_was_cancelled(state, tenant_id, agent_id, &command).await? {
             tracing::debug!(
                 command_id = %command.id,
@@ -302,14 +336,38 @@ async fn fail_queued_command(
     tenant_id: TenantId,
     agent_id: AgentId,
     command: &CommandRecord,
+    session_id: &str,
+    current: bool,
     failure: String,
-) -> Result<(), Status> {
-    state
-        .commands()
-        .fail_queued_printer_operation(command.id, tenant_id, agent_id, failure)
+) -> Result<bool, Status> {
+    let result = if current {
+        crate::repositories::transition_current_session_command(
+            state.database(),
+            tenant_id,
+            agent_id,
+            session_id,
+            command.id,
+            crate::repositories::CurrentSessionCommandAction::FailQueued { error: failure },
+        )
         .await
-        .map_err(repository_status)?;
-    Ok(())
+        .map(|_| ())
+    } else {
+        crate::repositories::fail_queued_for_closing_session(
+            state.database(),
+            tenant_id,
+            agent_id,
+            session_id,
+            command.id,
+            failure,
+        )
+        .await
+        .map(|_| ())
+    };
+    match result {
+        Ok(()) => Ok(true),
+        Err(crate::repositories::RepositoryError::AgentSessionNotCurrent) => Ok(false),
+        Err(err) => Err(repository_status(err)),
+    }
 }
 
 #[cfg(test)]

@@ -4,13 +4,18 @@ use tonic::{Code, Status};
 use crate::{
     AppState,
     grpc::commands::{
-        handle_ack_and_job, handle_result_and_job, parse_command_id, repository_status,
+        CurrentAgentSession, handle_current_session_ack_and_job,
+        handle_current_session_result_and_job, handle_result_and_job, parse_command_id,
+        repository_status,
     },
     printer_events::{PrinterEvent, PrinterEventCommand},
     repositories::{PrinterOperationKind, PrinterOperationPayload},
     sessions::{LiveCommandClaimOutcome, SessionToken},
 };
 use pandar_protocol::agent::v1::{CommandAck, CommandResult};
+
+#[cfg(test)]
+use crate::grpc::commands::handle_ack_and_job;
 
 pub(super) async fn handle_command_ack(
     state: &AppState,
@@ -22,6 +27,8 @@ pub(super) async fn handle_command_ack(
     let command_id = parse_command_id(&ack.command_id)?;
     let accepted = ack.accepted;
     let error = ack.error;
+    let session_id = token.persisted_id();
+    let current_session = CurrentAgentSession::new(tenant_id, agent_id, &session_id);
     if super::super::printer_firmware::handle_command_ack(
         state, tenant_id, agent_id, token, command_id, accepted, &error,
     )
@@ -35,20 +42,25 @@ pub(super) async fn handle_command_ack(
         .await
     {
         LiveCommandClaimOutcome::Claim(claim) => {
-            let result = handle_ack_and_job(
+            match handle_current_session_ack_and_job(
                 state,
-                tenant_id,
-                agent_id,
+                current_session,
                 command_id,
                 accepted,
                 error,
                 claim.access_code(),
             )
-            .await;
-            if result.is_ok() && !accepted {
-                claim.remove_pending();
+            .await
+            {
+                Ok(()) => {
+                    if !accepted {
+                        claim.remove_pending();
+                    }
+                    Ok(())
+                }
+                Err(err) if err.code() == Code::Aborted => Ok(()),
+                Err(err) => Err(err),
             }
-            result
         }
         LiveCommandClaimOutcome::NotCurrent => Ok(()),
         LiveCommandClaimOutcome::NotPending => {
@@ -58,12 +70,18 @@ pub(super) async fn handle_command_ack(
             match state
                 .sessions()
                 .while_current(agent_id, token, || {
-                    handle_ack_and_job(
-                        state, tenant_id, agent_id, command_id, accepted, error, None,
+                    handle_current_session_ack_and_job(
+                        state,
+                        current_session,
+                        command_id,
+                        accepted,
+                        error,
+                        None,
                     )
                 })
                 .await
             {
+                Some(Err(err)) if err.code() == Code::Aborted => Ok(()),
                 Some(result) => result,
                 None => Ok(()),
             }
@@ -105,6 +123,8 @@ pub(super) async fn handle_command_result(
     }
     let result_error = result.error.clone();
     let result_json = result.result_json.clone();
+    let session_id = token.persisted_id();
+    let current_session = CurrentAgentSession::new(tenant_id, agent_id, &session_id);
     match state
         .sessions()
         .claim_current_live_command(tenant_id, agent_id, token, command_id)
@@ -128,6 +148,7 @@ pub(super) async fn handle_command_result(
                 state,
                 tenant_id,
                 agent_id,
+                Some(current_session),
                 command_id,
                 result,
                 claim.access_code(),
@@ -138,6 +159,7 @@ pub(super) async fn handle_command_result(
                     claim.remove_pending();
                     Ok(())
                 }
+                Err(err) if err.code() == Code::Aborted => Ok(()),
                 Err(err)
                     if err.code() == Code::FailedPrecondition && claim.access_code().is_some() =>
                 {
@@ -161,10 +183,19 @@ pub(super) async fn handle_command_result(
             match state
                 .sessions()
                 .while_current(agent_id, token, || {
-                    handle_result_for_command(state, tenant_id, agent_id, command_id, result, None)
+                    handle_result_for_command(
+                        state,
+                        tenant_id,
+                        agent_id,
+                        Some(current_session),
+                        command_id,
+                        result,
+                        None,
+                    )
                 })
                 .await
             {
+                Some(Err(err)) if err.code() == Code::Aborted => Ok(()),
                 Some(result) => result,
                 None => Ok(()),
             }
@@ -244,7 +275,7 @@ pub(in crate::grpc) async fn handle_result(
     result: CommandResult,
 ) -> Result<CommandId, Status> {
     let command_id = parse_command_id(&result.command_id)?;
-    handle_result_for_command(state, tenant_id, agent_id, command_id, result, None).await?;
+    handle_result_for_command(state, tenant_id, agent_id, None, command_id, result, None).await?;
     Ok(command_id)
 }
 
@@ -252,19 +283,31 @@ async fn handle_result_for_command(
     state: &AppState,
     tenant_id: TenantId,
     agent_id: AgentId,
+    session: Option<CurrentAgentSession<'_>>,
     command_id: CommandId,
     result: CommandResult,
     link_printer_access_code: Option<&str>,
 ) -> Result<(), Status> {
-    let command = handle_result_and_job(
-        state,
-        tenant_id,
-        agent_id,
-        command_id,
-        result,
-        link_printer_access_code,
-    )
-    .await?;
+    let command = if let Some(session) = session {
+        handle_current_session_result_and_job(
+            state,
+            session,
+            command_id,
+            result,
+            link_printer_access_code,
+        )
+        .await?
+    } else {
+        handle_result_and_job(
+            state,
+            tenant_id,
+            agent_id,
+            command_id,
+            result,
+            link_printer_access_code,
+        )
+        .await?
+    };
     if let Some(command) = command {
         state
             .publish_printer_event(

@@ -55,7 +55,7 @@ pub async fn update_status_if_current(
     update_status_if_current_on(&database.sea_orm_connection(), transition).await
 }
 
-pub(super) async fn update_status_if_current_on<C>(
+pub(crate) async fn update_status_if_current_on<C>(
     connection: &C,
     transition: StatusTransition<'_>,
 ) -> RepositoryResult<bool>
@@ -233,7 +233,7 @@ pub async fn fail_stale_unowned_live_commands(
     Ok(failed)
 }
 
-pub(super) fn invalid_transition(status: CommandStatus, action: &'static str) -> RepositoryError {
+pub(crate) fn invalid_transition(status: CommandStatus, action: &'static str) -> RepositoryError {
     RepositoryError::InvalidCommandTransition {
         from: status.as_str().to_string(),
         action,

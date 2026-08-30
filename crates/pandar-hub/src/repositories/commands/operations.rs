@@ -1,8 +1,5 @@
 pub use pandar_core::PrintErrorAction;
-use pandar_core::{
-    AgentId, CommandId, CommandRecord, CommandStatus, H2cAutoNozzleMappingRequest,
-    RequiredDeviceFeature, TenantId,
-};
+use pandar_core::{H2cAutoNozzleMappingRequest, RequiredDeviceFeature};
 use serde::{Deserialize, Serialize};
 
 mod audit;
@@ -10,10 +7,6 @@ mod validate;
 
 pub use audit::operation_audit_metadata;
 pub use validate::validate_printer_operation;
-
-use crate::repositories::{CommandRepository, RepositoryResult};
-
-use super::transitions::CommandTransition;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PrinterOperationPayload {
@@ -209,26 +202,5 @@ impl PrinterOperationKind {
             }
             _ => true,
         }
-    }
-}
-
-impl CommandRepository {
-    pub(crate) async fn fail_queued_printer_operation(
-        &self,
-        command_id: CommandId,
-        tenant_id: TenantId,
-        agent_id: AgentId,
-        error: impl Into<String>,
-    ) -> RepositoryResult<CommandRecord> {
-        self.guard_transition(CommandTransition {
-            command_id,
-            tenant_id,
-            agent_id,
-            next_status: CommandStatus::Failed,
-            error: Some(error.into()),
-            allowed_statuses: &[CommandStatus::Queued],
-            action: "fail",
-        })
-        .await
     }
 }

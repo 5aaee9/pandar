@@ -13,6 +13,7 @@ mod device_features_contract;
 mod enqueue;
 mod link;
 mod printer_ops;
+mod session_fence;
 
 #[tokio::test]
 async fn command_update_rejects_missing_command() {

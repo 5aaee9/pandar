@@ -11,7 +11,7 @@ mod ownership;
 mod query;
 pub(crate) mod rows;
 mod terminal;
-mod transitions;
+pub(crate) mod transitions;
 mod types;
 pub use firmware::{
     FirmwareCommandOwner, FirmwareControlPayload, FirmwarePersistedPhase, FirmwarePersistedResult,

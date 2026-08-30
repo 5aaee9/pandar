@@ -8,6 +8,7 @@ mod materials;
 mod personal_presets;
 pub(crate) mod printer_event_tickets;
 mod printers;
+mod session_commands;
 mod tenants;
 
 #[cfg(test)]
@@ -57,6 +58,10 @@ pub use printer_event_tickets::{
 pub use printers::{
     DeviceFeatureUpdateOutcome, PrinterFirmwareUpdateOutcome, PrinterHms, PrinterLiveStatus,
     PrinterRepository, PrinterSnapshotUpsert, PrinterWithLiveStatus,
+};
+pub(crate) use session_commands::{
+    CurrentSessionCommandAction, fail_queued_for_closing_session,
+    transition_current_session_command,
 };
 pub use tenants::TenantRepository;
 

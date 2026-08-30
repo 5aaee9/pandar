@@ -158,6 +158,28 @@ impl AgentControlService {
             )
             .await;
         }
+        if let Err(err) = self
+            .state
+            .control_plane()
+            .publish(crate::cluster::HubControlMessage::AgentClose {
+                tenant_id: tenant_id.to_string(),
+                agent_id: agent_id.to_string(),
+                source_instance_id: self.state.instance_id().to_string(),
+            })
+            .await
+        {
+            self.state
+                .metrics()
+                .record_control_plane(crate::metrics::ControlPlaneMetric::PublishFailed);
+            tracing::error!(
+                error = %format!("{err:#}"),
+                "failed to close replaced Agent session on sibling Hub instances"
+            );
+        } else {
+            self.state
+                .metrics()
+                .record_control_plane(crate::metrics::ControlPlaneMetric::PublishOk);
+        }
         self.state
             .publish_agent_printers_projection_changes(tenant_id, agent_id)
             .await;

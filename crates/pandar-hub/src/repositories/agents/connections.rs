@@ -206,6 +206,27 @@ pub async fn begin_current_agent_transaction(
     Ok(tx)
 }
 
+pub(crate) async fn begin_closing_agent_transaction(
+    database: &Database,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    closing_session_id: &str,
+) -> RepositoryResult<DatabaseTransaction> {
+    let tx = begin_agent_transaction(database).await?;
+    let agent = locked_agent(&tx, agent_id)
+        .await?
+        .ok_or(RepositoryError::MissingAgent)?;
+    if agent.tenant_id != tenant_id.to_string()
+        || agent
+            .current_session_id
+            .as_deref()
+            .is_some_and(|session_id| session_id != closing_session_id)
+    {
+        return Err(RepositoryError::AgentSessionNotCurrent);
+    }
+    Ok(tx)
+}
+
 pub(crate) async fn begin_stale_firmware_cleanup_transaction(
     database: &Database,
     tenant_id: TenantId,

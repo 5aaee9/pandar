@@ -19,7 +19,7 @@ pub mod rows;
 mod stalled;
 mod studio_ids;
 mod studio_tasks;
-mod transitions;
+pub(crate) mod transitions;
 mod write_transaction;
 
 use crate::{
