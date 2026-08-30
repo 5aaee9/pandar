@@ -26,7 +26,7 @@ async fn postgres_personal_preset_clock_serializes_concurrent_first_writes_when_
     };
     let tenants = TenantRepository::new(database.clone());
     let auth = AuthRepository::new(database.clone());
-    let repository = PersonalPresetRepository::new(database);
+    let repository = PersonalPresetRepository::new(database.clone());
     let tenant = tenants
         .create("pg-presets", "Postgres Presets")
         .await
@@ -104,7 +104,7 @@ async fn postgres_personal_preset_inner_failure_rolls_back_and_preserves_cause_w
         )
         .await
         .unwrap();
-    let crate::db::Database::Postgres(pool) = &database else {
+    let crate::db::Database::Postgres(pool) = &*database else {
         unreachable!();
     };
     let function = format!("fail_personal_preset_audit_{suffix}");

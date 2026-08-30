@@ -1,6 +1,6 @@
 [[profile.default.overrides]]
-filter = "test(/postgres_commands::print_error/)"
-test-group = "postgres-print-error"
+filter = "package(pandar-hub) & test(/postgres/)"
+test-group = "postgres"
 
 [[profile.default.overrides]]
 filter = "package(pandar-network-plugin) & binary(studio_abi_probe)"
@@ -32,8 +32,8 @@ filter = "package(pandar-network-plugin) & binary(studio_print_contract_red)"
 test-group = "studio-print-contract"
 threads-required = "num-test-threads"
 
-[test-groups.postgres-print-error]
-max-threads = 1
+[test-groups.postgres]
+max-threads = 8
 
 [test-groups.studio-abi-probe]
 max-threads = 1

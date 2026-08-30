@@ -56,7 +56,7 @@ async fn postgres_studio_ids_metadata_cancel_and_exhaustion_when_configured() {
         pandar_core::CommandStatus::Cancelled
     );
 
-    let Database::Postgres(pool) = &database else {
+    let Database::Postgres(pool) = &*database else {
         panic!("expected PostgreSQL database");
     };
     sqlx::query("UPDATE studio_submission_sequences SET last_id = 2147483647 WHERE tenant_id = $1")

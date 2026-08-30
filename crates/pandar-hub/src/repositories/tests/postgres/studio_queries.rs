@@ -52,7 +52,7 @@ async fn postgres_studio_filters_pagination_ids_and_tenant_isolation_survive_rec
         ))
         .await
         .unwrap();
-    let Database::Postgres(pool) = &database else {
+    let Database::Postgres(pool) = &*database else {
         panic!("expected PostgreSQL database");
     };
     for (job, created_at) in [
@@ -143,12 +143,8 @@ async fn postgres_studio_filters_pagination_ids_and_tenant_isolation_survive_rec
     drop(jobs);
     drop(agents);
     drop(tenants);
-    drop(database);
 
-    let url = std::env::var("PANDAR_TEST_POSTGRES_URL").unwrap();
-    let config = DatabaseConfig::from_url(url).unwrap();
-    let reconnected = Database::connect(&config).await.unwrap();
-    reconnected.migrate().await.unwrap();
+    let reconnected = database.reconnect().await;
     let jobs = JobRepository::new(reconnected);
     let after_restart = jobs
         .create_print_job(input(

@@ -86,7 +86,7 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
     assert_eq!(updated.access_code.as_deref(), Some("edited-access-code"));
     assert_eq!(updated.status, "printing");
     assert_eq!(updated.last_seen_at, "2026-06-21T00:05:00Z");
-    let Database::Postgres(pool) = &database else {
+    let Database::Postgres(pool) = &*database else {
         panic!("expected PostgreSQL database");
     };
     let (plaintext, encrypted): (Option<String>, Option<String>) =

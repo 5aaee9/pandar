@@ -31,19 +31,11 @@ async fn sqlite_agent_session_guards_all_agent_owned_mutations() {
 
 #[tokio::test]
 async fn postgres_agent_session_guards_and_lock_order_when_configured() {
-    let url = match std::env::var("PANDAR_TEST_POSTGRES_URL") {
-        Ok(url) => url,
-        Err(_) => {
-            eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
-            return;
-        }
-    };
     let Some(database) = super::postgres::postgres_database().await else {
-        unreachable!("PostgreSQL URL was read above")
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
     };
-    let sibling = Database::connect(&DatabaseConfig::from_url(url).unwrap())
-        .await
-        .unwrap();
+    let sibling = database.clone();
 
     exercise_exact_session_guards(database.clone(), sibling).await;
     for mutation in [

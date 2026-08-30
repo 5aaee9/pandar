@@ -13,7 +13,7 @@ async fn postgres_model_task_lookup_preserves_metadata_and_tenant_scope_when_con
         eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
         return;
     };
-    exercise_model_task_lookup(database, "postgres-model-task").await;
+    exercise_model_task_lookup(database.clone(), "postgres-model-task").await;
 }
 
 async fn exercise_model_task_lookup(database: Database, slug: &str) {

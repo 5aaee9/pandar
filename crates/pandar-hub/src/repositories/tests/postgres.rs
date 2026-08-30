@@ -18,28 +18,43 @@ mod studio_contract;
 mod studio_locking;
 mod studio_queries;
 
-pub(super) async fn postgres_database() -> Option<Database> {
-    let url = match std::env::var("PANDAR_TEST_POSTGRES_URL") {
-        Ok(url) => url,
-        Err(_) => return None,
-    };
-    let config = DatabaseConfig::from_url(url).unwrap();
-    let database = Database::connect(&config).await.unwrap();
-    database.migrate().await.unwrap();
-    clear_postgres(&database).await;
-    Some(database)
+pub(super) async fn postgres_database() -> Option<crate::test_support::PostgresTestDatabase> {
+    crate::test_support::PostgresTestDatabase::new().await
 }
 
-pub(super) async fn clear_postgres(database: &Database) {
-    let Database::Postgres(pool) = database else {
-        panic!("expected PostgreSQL database");
+#[tokio::test]
+async fn postgres_test_databases_are_isolated_when_configured() {
+    let (first, second) = tokio::join!(postgres_database(), postgres_database());
+    let (Some(first), Some(second)) = (first, second) else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
     };
-    sqlx::query(
-        "TRUNCATE artifact_deletions, artifact_quota_reservations, personal_presets, personal_preset_clocks, printer_event_tickets, audit_events, api_tokens, user_identities, join_links, tenant_tokens, plugin_login_tickets, job_filament_usages, printer_material_snapshots, machine_events, studio_submission_sequences, jobs, job_artifacts, commands, printers, agents, users, tenants",
-    )
-        .execute(pool)
+    let first_tenants = TenantRepository::new(first.clone());
+    let second_tenants = TenantRepository::new(second.clone());
+
+    first_tenants
+        .create("isolated-first", "Isolated First")
         .await
         .unwrap();
+
+    assert_eq!(first_tenants.count().await.unwrap(), 1);
+    assert_eq!(second_tenants.count().await.unwrap(), 0);
+
+    let first_schema = first.schema_name().to_owned();
+    let admin = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&std::env::var("PANDAR_TEST_POSTGRES_URL").unwrap())
+        .await
+        .unwrap();
+    drop(first_tenants);
+    drop(first);
+    let schema: Option<String> = sqlx::query_scalar("SELECT to_regnamespace($1)::text")
+        .bind(first_schema)
+        .fetch_one(&admin)
+        .await
+        .unwrap();
+    assert_eq!(schema, None);
+    admin.close().await;
 }
 
 #[tokio::test]
@@ -48,7 +63,7 @@ async fn postgres_tenant_identity_listing_matches_sqlite_when_configured() {
         return;
     };
     let tenants = TenantRepository::new(database.clone());
-    let auth = AuthRepository::new(database);
+    let auth = AuthRepository::new(database.clone());
     let tenant = tenants
         .create("identity-list", "Identity List")
         .await
@@ -246,7 +261,7 @@ async fn postgres_cleanup_when_configured() {
         TenantRepository::new(database.clone()),
         AgentRepository::new(database.clone()),
         CommandRepository::new(database.clone()),
-        JobRepository::new(database),
+        JobRepository::new(database.clone()),
     )
     .await;
 }
@@ -258,7 +273,7 @@ async fn postgres_partial_snapshot_preserves_absent_telemetry_fields_when_config
         return;
     };
 
-    super::printer_snapshot_presence::exercise_partial_snapshot_presence(database).await;
+    super::printer_snapshot_presence::exercise_partial_snapshot_presence(database.clone()).await;
 }
 
 #[tokio::test]
@@ -269,7 +284,7 @@ async fn postgres_mqtt_presence_requires_an_authoritative_current_session_snapsh
         return;
     };
 
-    super::printer_snapshot_presence::exercise_mqtt_presence_session(database).await;
+    super::printer_snapshot_presence::exercise_mqtt_presence_session(database.clone()).await;
 }
 
 #[tokio::test]
@@ -283,7 +298,7 @@ async fn postgres_print_reports_merge_printer_live_status_without_a_job_when_con
     super::printer_live_status::exercise_printer_live_status(database.clone()).await;
     super::printer_live_status::revisions::exercise_atomic_revisions(database.clone()).await;
     super::printer_live_status::revisions::exercise_concurrent_revision_writers(
-        database,
+        database.clone(),
         "postgres-revision-race",
     )
     .await;
@@ -306,7 +321,7 @@ async fn postgres_printer_access_code_migration_when_configured() {
     let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)
         .await
         .unwrap();
-    let Database::Postgres(pool) = &database else {
+    let Database::Postgres(pool) = &*database else {
         panic!("expected PostgreSQL database");
     };
     sqlx::query("UPDATE printers SET access_code = 'legacy-code' WHERE id = $1")
@@ -350,7 +365,7 @@ async fn printer_device_features_postgres_when_configured() {
         return;
     };
 
-    super::printer_device_features::exercise_printer_device_features(database).await;
+    super::printer_device_features::exercise_printer_device_features(database.clone()).await;
 }
 
 #[tokio::test]

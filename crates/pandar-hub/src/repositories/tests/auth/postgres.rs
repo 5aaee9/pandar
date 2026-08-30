@@ -9,7 +9,7 @@ async fn postgres_auth_and_audit_repository_behavior_when_configured() {
 
     let tenants = TenantRepository::new(database.clone());
     let auth = AuthRepository::new(database.clone());
-    let audit = AuditEventRepository::new(database);
+    let audit = AuditEventRepository::new(database.clone());
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
     let user = auth
         .create_user(
@@ -104,7 +104,7 @@ async fn postgres_external_identity_error_behavior_when_configured() {
     };
 
     let tenants = TenantRepository::new(database.clone());
-    let auth = AuthRepository::new(database);
+    let auth = AuthRepository::new(database.clone());
     let tenant = tenants
         .create("postgres-identity-duplicates", "Postgres Identity")
         .await

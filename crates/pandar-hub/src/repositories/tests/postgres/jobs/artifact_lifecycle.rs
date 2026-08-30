@@ -121,8 +121,10 @@ async fn postgres_expired_artifact_reservation_releases_before_admission_when_co
         return;
     };
 
-    crate::repositories::tests::jobs::reservations::exercise_expired_artifact_reservation(database)
-        .await;
+    crate::repositories::tests::jobs::reservations::exercise_expired_artifact_reservation(
+        database.clone(),
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -133,7 +135,7 @@ async fn postgres_committed_artifact_reservation_finalizes_when_configured() {
     };
 
     crate::repositories::tests::jobs::reservations::exercise_committed_artifact_reservation_finalization(
-        database,
+        database.clone(),
     )
     .await;
 }
@@ -156,7 +158,7 @@ async fn postgres_clear_terminal_and_stalled_jobs_when_configured() {
         TenantRepository::new(database.clone()),
         AgentRepository::new(database.clone()),
         CommandRepository::new(database.clone()),
-        JobRepository::new(database),
+        JobRepository::new(database.clone()),
         &storage,
     )
     .await;
@@ -169,7 +171,7 @@ async fn postgres_artifact_delete_failure_retries_after_job_clear_when_configure
     };
 
     crate::repositories::tests::jobs::clear::lifecycle::exercise_artifact_delete_failure_after_job_clear(
-        database,
+        database.clone(),
     )
     .await;
 }
@@ -181,8 +183,10 @@ async fn postgres_cleanup_deletion_failure_retries_when_configured() {
         return;
     };
 
-    crate::repositories::tests::cleanup::lifecycle::exercise_cleanup_deletion_failure(database)
-        .await;
+    crate::repositories::tests::cleanup::lifecycle::exercise_cleanup_deletion_failure(
+        database.clone(),
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -192,8 +196,10 @@ async fn postgres_deletion_drain_continues_after_failure_when_configured() {
         return;
     };
 
-    crate::repositories::tests::cleanup::lifecycle::exercise_deletion_drain_continues(database)
-        .await;
+    crate::repositories::tests::cleanup::lifecycle::exercise_deletion_drain_continues(
+        database.clone(),
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -203,6 +209,8 @@ async fn postgres_concurrent_deletion_drains_claim_once_when_configured() {
         return;
     };
 
-    crate::repositories::tests::cleanup::lifecycle::exercise_concurrent_deletion_drains(database)
-        .await;
+    crate::repositories::tests::cleanup::lifecycle::exercise_concurrent_deletion_drains(
+        database.clone(),
+    )
+    .await;
 }

@@ -360,14 +360,16 @@ async fn bootstrap_tenant_admin_rolls_back_on_late_failure() {
 
 #[tokio::test]
 async fn postgres_bootstrap_tenant_admin_transaction_when_configured() {
-    let Some(database) = postgres_database().await else {
+    let Some(database) = crate::test_support::PostgresTestDatabase::new().await else {
         eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
         return;
     };
-    let state =
-        AppState::from_database(database, crate::jobs::JobStorageConfig::from_env().unwrap())
-            .await
-            .unwrap();
+    let state = AppState::from_database(
+        database.clone(),
+        crate::jobs::JobStorageConfig::from_env().unwrap(),
+    )
+    .await
+    .unwrap();
 
     let bootstrapped = state
         .auth()
@@ -402,26 +404,6 @@ async fn postgres_bootstrap_tenant_admin_transaction_when_configured() {
     ));
     assert_eq!(state.tenants().count().await.unwrap(), before_tenants);
     assert_no_tenant_slug(&state, "postgres-rolled-back").await;
-}
-
-async fn postgres_database() -> Option<crate::db::Database> {
-    let url = match std::env::var("PANDAR_TEST_POSTGRES_URL") {
-        Ok(url) => url,
-        Err(_) => return None,
-    };
-    let config = crate::db::DatabaseConfig::from_url(url).unwrap();
-    let database = crate::db::Database::connect(&config).await.unwrap();
-    database.migrate().await.unwrap();
-    let crate::db::Database::Postgres(pool) = &database else {
-        panic!("expected PostgreSQL database");
-    };
-    sqlx::query(
-        "TRUNCATE printer_event_tickets, audit_events, api_tokens, user_identities, join_links, tenant_tokens, plugin_login_tickets, job_filament_usages, printer_material_snapshots, machine_events, studio_submission_sequences, jobs, job_artifacts, commands, printers, agents, users, tenants",
-    )
-    .execute(pool)
-    .await
-    .unwrap();
-    Some(database)
 }
 
 fn admin() -> crate::repositories::UserRole {

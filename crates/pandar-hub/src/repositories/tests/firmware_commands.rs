@@ -22,7 +22,7 @@ async fn firmware_command_repository_postgres_matches_sqlite_when_configured() {
         );
         return;
     };
-    verify_firmware_commands(database, "firmware-command-postgres").await;
+    verify_firmware_commands(database.clone(), "firmware-command-postgres").await;
 }
 
 #[tokio::test]
@@ -39,7 +39,7 @@ async fn firmware_command_cleanup_uses_authoritative_owner_liveness_on_postgres_
         );
         return;
     };
-    verify_firmware_cleanup_owner_liveness(database, "firmware-cleanup-postgres").await;
+    verify_firmware_cleanup_owner_liveness(database.clone(), "firmware-cleanup-postgres").await;
 }
 
 async fn verify_firmware_cleanup_owner_liveness(database: Database, slug: &str) {

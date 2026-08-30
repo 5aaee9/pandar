@@ -143,5 +143,5 @@ async fn postgres_ticket_repository_semantics() {
         return;
     };
 
-    ticket_repository_semantics(database).await;
+    ticket_repository_semantics(database.clone()).await;
 }

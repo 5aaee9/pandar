@@ -8,7 +8,7 @@ async fn postgres_external_onboarding_behavior_when_configured() {
     };
 
     let auth = AuthRepository::new(database.clone());
-    let audit = AuditEventRepository::new(database);
+    let audit = AuditEventRepository::new(database.clone());
     let admin = auth
         .self_create_tenant_for_external_identity(
             "pg-onboarding",

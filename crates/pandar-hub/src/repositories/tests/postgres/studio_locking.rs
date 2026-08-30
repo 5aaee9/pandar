@@ -27,7 +27,7 @@ async fn postgres_studio_cancel_and_dispatch_share_one_lock_order_when_configure
         .await
         .unwrap();
 
-    let Database::Postgres(pool) = &database else {
+    let Database::Postgres(pool) = &*database else {
         panic!("expected PostgreSQL database");
     };
     let mut blocker = pool.begin().await.unwrap();
@@ -110,7 +110,7 @@ async fn postgres_studio_clear_locks_commands_before_jobs_when_configured() {
         ))
         .await
         .unwrap();
-    let Database::Postgres(pool) = &database else {
+    let Database::Postgres(pool) = &*database else {
         panic!("expected PostgreSQL database");
     };
     let mut blocker = pool.begin().await.unwrap();

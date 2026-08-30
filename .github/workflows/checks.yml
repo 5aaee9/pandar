@@ -103,6 +103,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
+    services:
+      postgres:
+        image: postgres:17@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
+        env:
+          POSTGRES_DB: pandar_test
+          POSTGRES_PASSWORD: pandar_test
+          POSTGRES_USER: pandar_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pandar_test -d pandar_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -133,6 +148,16 @@ jobs:
             .#checks.x86_64-linux.pandar-nextest \
             .#checks.x86_64-linux.pandar-nixos-module \
             .#checks.x86_64-linux.pandar-nixos-options-doc
+
+      - name: Run PostgreSQL parity tests
+        env:
+          PANDAR_REQUIRE_POSTGRES_TESTS: "true"
+          PANDAR_TEST_POSTGRES_URL: "postgresql://pandar_test:pandar_test@127.0.0.1:5432/pandar_test"
+        run: >-
+          nix develop --command cargo nextest run
+          -p pandar-hub
+          -E 'test(/postgres/)'
+          --no-tests=fail
 
   nix-package-checks:
     name: Nix package checks (${{ matrix.system }})

@@ -16,7 +16,7 @@ async fn postgres_pending_print_jobs_become_stalled_when_configured() {
         database.clone(),
         TenantRepository::new(database.clone()),
         AgentRepository::new(database.clone()),
-        JobRepository::new(database),
+        JobRepository::new(database.clone()),
     )
     .await;
 }
@@ -32,7 +32,7 @@ async fn postgres_print_report_correlates_bambu_submission_id_when_configured() 
         database.clone(),
         TenantRepository::new(database.clone()),
         AgentRepository::new(database.clone()),
-        JobRepository::new(database),
+        JobRepository::new(database.clone()),
     )
     .await;
 }
@@ -55,7 +55,7 @@ async fn postgres_deletes_one_clearable_job_when_configured() {
         TenantRepository::new(database.clone()),
         AgentRepository::new(database.clone()),
         CommandRepository::new(database.clone()),
-        JobRepository::new(database),
+        JobRepository::new(database.clone()),
         &storage,
     )
     .await;
@@ -151,7 +151,7 @@ async fn postgres_job_repository_behavior_when_configured() {
     assert!(matches!(err, RepositoryError::Database(_)));
     assert_eq!(commands.count().await.unwrap(), 1);
 
-    let Database::Postgres(pool) = &database else {
+    let Database::Postgres(pool) = &*database else {
         panic!("expected PostgreSQL database");
     };
     sqlx::query("UPDATE jobs SET status = 'printing' WHERE id = $1")

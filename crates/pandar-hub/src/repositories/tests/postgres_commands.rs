@@ -2,6 +2,7 @@ use pandar_core::{AgentId, AgentStatus, CommandId, CommandStatus};
 use serde::Deserialize;
 
 mod print_error;
+mod session_fence;
 
 use super::*;
 use crate::repositories::tests::postgres::postgres_database;
@@ -19,7 +20,7 @@ async fn postgres_command_repository_behavior_when_configured() {
 
     let tenants = TenantRepository::new(database.clone());
     let agents = AgentRepository::new(database.clone());
-    let commands = CommandRepository::new(database);
+    let commands = CommandRepository::new(database.clone());
     let acme = tenants.create("acme", "Acme Labs").await.unwrap();
     let beta = tenants.create("beta", "Beta Labs").await.unwrap();
     let agent = agents.create(acme.id, "agent").await.unwrap();

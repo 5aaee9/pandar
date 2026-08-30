@@ -8,7 +8,7 @@ async fn printer_firmware_postgres_matches_sqlite_when_configured() {
         );
         return;
     };
-    let fixture = FirmwareFixture::new(database, "postgres-firmware").await;
+    let fixture = FirmwareFixture::new(database.clone(), "postgres-firmware").await;
     fixture.claim("postgres-session-one").await;
     assert_eq!(
         fixture
