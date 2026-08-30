@@ -91,7 +91,7 @@ impl ConnectionSession {
             && state.studio.cache_generation == cache_generation
     }
 
-    pub(super) fn studio_account_request_admitted(&self) -> bool {
+    pub(crate) fn studio_account_request_admitted(&self) -> bool {
         !self
             .state
             .lock()

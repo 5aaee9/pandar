@@ -159,6 +159,9 @@ fn dispatch_pending_deliveries(
     session_ptr: *mut c_void,
     session: &ConnectionSession,
 ) {
+    if !session.studio_account_request_admitted() {
+        return;
+    }
     let transition = session.take_transition();
     let offline: Vec<u64> = session
         .take_offline()

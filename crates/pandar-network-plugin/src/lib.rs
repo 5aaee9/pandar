@@ -14,6 +14,7 @@ pub mod installer;
 mod local_webserver;
 mod personal_presets;
 mod plugin_session;
+mod runtime;
 mod studio_abi;
 mod studio_disposition;
 mod studio_message;
@@ -82,6 +83,8 @@ pub use studio_print::{
 };
 
 use serde::{Serialize, de::DeserializeOwned};
+
+pub(crate) use runtime::runtime;
 
 use gcode::PrinterOperation;
 use http::{
@@ -344,13 +347,6 @@ fn result(status: i32, http_code: u32, body: impl Into<String>) -> PluginHttpRes
         body_len,
         body_cap,
     }
-}
-
-fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("plugin HTTP runtime can be created")
 }
 
 fn read_utf8(ptr: *const u8, len: usize) -> Option<String> {

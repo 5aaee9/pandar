@@ -15,9 +15,10 @@ use super::{
     diagnostics::diagnose_json,
     ffi::PluginStudioCallbacks,
 };
+use crate::http::{hub_client, read_bounded_response_body, send_hub_request};
 
 const UPLOAD_CHUNK_BYTES: usize = 64 * 1024;
-const HUB_RESPONSE_MAX_BYTES: usize = 1024 * 1024;
+const HUB_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
 pub(super) struct HttpReply {
     pub(super) status: u16,
@@ -30,13 +31,8 @@ struct HubError {
     error: String,
 }
 
-pub(super) fn client() -> Result<Client, PrintFailure> {
-    Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(15))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|error| diagnosed_failure(error.into(), "build Studio print HTTP client"))
+pub(super) fn client() -> Client {
+    hub_client().clone()
 }
 
 pub(super) async fn request(
@@ -45,14 +41,15 @@ pub(super) async fn request(
     url: String,
     token: &str,
 ) -> Result<HttpReply, PrintFailure> {
-    let response = client
-        .request(method, url)
-        .bearer_auth(token)
-        .send()
-        .await
-        .map_err(|error| {
-            diagnosed_failure(error.without_url().into(), "send Studio print Hub request")
-        })?;
+    let response = send_hub_request(
+        client
+            .request(method, url)
+            .bearer_auth(token)
+            .timeout(HUB_REQUEST_TIMEOUT),
+        "send Studio print Hub request",
+    )
+    .await
+    .map_err(|error| diagnosed_failure(error, "send Studio print Hub request"))?;
     reply(response).await
 }
 
@@ -127,18 +124,20 @@ async fn submit_inner(
     .mime_str("model/3mf")
     .map_err(|_| PrintFailure::simple("invalid_print_param"))?;
     let form = multipart_form(print).part("file", part);
-    let response = client
-        .post(format!("{}/api/v1/plugin/prints", print.hub_url))
-        .bearer_auth(&print.token)
-        .multipart(form)
-        .send()
-        .await;
+    let response = send_hub_request(
+        client
+            .post(format!("{}/api/v1/plugin/prints", print.hub_url))
+            .bearer_auth(&print.token)
+            .multipart(form)
+            .timeout(HUB_REQUEST_TIMEOUT),
+        "upload Studio print artifact",
+    )
+    .await;
     if cancelled.load(Ordering::Acquire) {
         return Err(PrintFailure::cancelled());
     }
-    let response = response.map_err(|error| {
-        diagnosed_failure(error.without_url().into(), "upload Studio print artifact")
-    })?;
+    let response =
+        response.map_err(|error| diagnosed_failure(error, "upload Studio print artifact"))?;
     reply(response).await
 }
 
@@ -198,31 +197,9 @@ fn multipart_form(print: &AdmittedPrint) -> multipart::Form {
 
 async fn reply(response: reqwest::Response) -> Result<HttpReply, PrintFailure> {
     let status = response.status().as_u16();
-    if response
-        .content_length()
-        .is_some_and(|length| length > HUB_RESPONSE_MAX_BYTES as u64)
-    {
-        return Err(diagnosed_failure(
-            anyhow::anyhow!("Studio print Hub response exceeds {HUB_RESPONSE_MAX_BYTES} bytes"),
-            "read Studio print Hub response",
-        ));
-    }
-    let mut body = Vec::new();
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|error| {
-            diagnosed_failure(error.without_url().into(), "read Studio print Hub response")
-        })?;
-        if body.len().saturating_add(chunk.len()) > HUB_RESPONSE_MAX_BYTES {
-            return Err(diagnosed_failure(
-                anyhow::anyhow!("Studio print Hub response exceeds {HUB_RESPONSE_MAX_BYTES} bytes"),
-                "read Studio print Hub response",
-            ));
-        }
-        body.extend_from_slice(&chunk);
-    }
-    let body = String::from_utf8(body)
-        .map_err(|error| diagnosed_failure(error.into(), "decode Studio print Hub response"))?;
+    let body = read_bounded_response_body(response)
+        .await
+        .map_err(|error| diagnosed_failure(error, "read Studio print Hub response"))?;
     Ok(HttpReply { status, body })
 }
 

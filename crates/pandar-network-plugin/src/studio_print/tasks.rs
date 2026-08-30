@@ -116,10 +116,7 @@ pub(super) fn get_tasks(
         return failure_result(400, "invalid_task_query");
     }
     crate::runtime().block_on(async move {
-        let client = match transport::client() {
-            Ok(client) => client,
-            Err(failure) => return print_failure_result(0, failure),
-        };
+        let client = transport::client();
         let mut url = match reqwest::Url::parse(&format!("{}/api/v1/plugin/jobs", account.hub_url))
         {
             Ok(url) => url,
@@ -146,15 +143,7 @@ pub(super) fn get_plate(account: StudioAccount, task_id: String) -> PluginStudio
         };
     };
     crate::runtime().block_on(async move {
-        let client = match transport::client() {
-            Ok(client) => client,
-            Err(failure) => {
-                return PluginStudioPlateResult {
-                    http: print_failure_result(0, failure),
-                    plate_index: -1,
-                };
-            }
-        };
+        let client = transport::client();
         let reply = transport::request(
             &client,
             Method::GET,
@@ -189,10 +178,7 @@ pub(super) fn get_subtask(account: StudioAccount, task_id: String) -> PluginHttp
         return failure_result(400, "invalid_task_id");
     };
     crate::runtime().block_on(async move {
-        let client = match transport::client() {
-            Ok(client) => client,
-            Err(failure) => return print_failure_result(0, failure),
-        };
+        let client = transport::client();
         let reply = transport::request(
             &client,
             Method::GET,

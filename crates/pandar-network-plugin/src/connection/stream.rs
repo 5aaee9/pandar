@@ -1,7 +1,7 @@
 //! Account-scoped Studio printer-event WebSocket lifecycle.
 
 use std::{
-    sync::{Arc, Condvar, Mutex, OnceLock},
+    sync::{Arc, Condvar, Mutex},
     time::{Duration, Instant},
 };
 
@@ -136,17 +136,6 @@ impl Outage {
     }
 }
 
-fn stream_runtime() -> &'static tokio::runtime::Runtime {
-    static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-    RUNTIME.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1)
-            .enable_all()
-            .build()
-            .expect("plugin stream runtime can be created")
-    })
-}
-
 pub(super) struct StreamWorker {
     cancel: CancellationToken,
     wake: Arc<Notify>,
@@ -161,7 +150,7 @@ impl StreamWorker {
     ) -> Self {
         let cancel = CancellationToken::new();
         let wake = Arc::new(Notify::new());
-        let join = stream_runtime().spawn(run_loop(
+        let join = crate::runtime().spawn(run_loop(
             state,
             signals,
             dispatcher,
@@ -183,7 +172,7 @@ impl StreamWorker {
         self.cancel.cancel();
         self.wake.notify_one();
         if let Some(join) = self.join.lock().expect("stream worker handle").take()
-            && let Err(error) = stream_runtime().block_on(join)
+            && let Err(error) = crate::runtime().block_on(join)
         {
             eprintln!("pandar printer event stream worker join failed: {error:#}");
         }

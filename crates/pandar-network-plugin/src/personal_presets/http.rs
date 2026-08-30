@@ -1,25 +1,16 @@
-use std::{sync::OnceLock, time::Duration};
+use std::time::Duration;
 
 use anyhow::Context;
 use reqwest::Method;
 use serde::{Serialize, de::DeserializeOwned};
 
 use super::model::{ErrorResponse, FullPreset, ListResponse, MutationResponse, PresetRequest};
-use crate::{http::read_bounded_response_body, normalize_hub_url};
+use crate::{
+    http::{hub_client, read_bounded_response_body, send_hub_request},
+    normalize_hub_url,
+};
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(15);
-
-fn client() -> &'static reqwest::Client {
-    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(5))
-            .timeout(HTTP_TIMEOUT)
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .expect("preset HTTP client")
-    })
-}
 
 pub(super) struct HttpFailure {
     pub(super) status: u32,
@@ -88,14 +79,15 @@ fn endpoint(hub: &str, parts: &[&str]) -> Result<reqwest::Url, HttpFailure> {
 
 fn send_empty(method: Method, url: reqwest::Url, token: &str) -> Result<(), HttpFailure> {
     crate::runtime().block_on(async {
-        let response = client()
-            .request(method, url)
-            .bearer_auth(token)
-            .send()
-            .await
-            .map_err(reqwest::Error::without_url)
-            .context("personal preset HTTP request")
-            .map_err(HttpFailure::transport)?;
+        let response = send_hub_request(
+            hub_client()
+                .request(method, url)
+                .bearer_auth(token)
+                .timeout(HTTP_TIMEOUT),
+            "personal preset HTTP request",
+        )
+        .await
+        .map_err(HttpFailure::transport)?;
         let status = response.status();
         let text = read_bounded_response_body(response)
             .await
@@ -124,17 +116,17 @@ fn send<T: DeserializeOwned, B: Serialize>(
     body: Option<&B>,
 ) -> Result<T, HttpFailure> {
     crate::runtime().block_on(async {
-        let request = client().request(method, url).bearer_auth(token);
+        let request = hub_client()
+            .request(method, url)
+            .bearer_auth(token)
+            .timeout(HTTP_TIMEOUT);
         let request = if let Some(body) = body {
             request.json(body)
         } else {
             request
         };
-        let response = request
-            .send()
+        let response = send_hub_request(request, "personal preset HTTP request")
             .await
-            .map_err(reqwest::Error::without_url)
-            .context("personal preset HTTP request")
             .map_err(HttpFailure::transport)?;
         let status = response.status();
         let text = read_bounded_response_body(response)

@@ -69,7 +69,7 @@ async fn poll_requests_and_sleeps_share_one_absolute_deadline() {
 
     let failure = poll_until_complete(
         &poller,
-        &transport::client().unwrap_or_else(|_| panic!("build test HTTP client")),
+        &transport::client(),
         &print(),
         callbacks(),
         42,
@@ -97,7 +97,7 @@ async fn poll_result_arriving_after_the_operation_deadline_is_rejected() {
 
     let failure = poll_until_complete(
         &poller,
-        &transport::client().unwrap_or_else(|_| panic!("build test HTTP client")),
+        &transport::client(),
         &print(),
         callbacks(),
         42,

@@ -107,10 +107,7 @@ pub(super) fn get_model_task(
     };
 
     crate::runtime().block_on(async move {
-        let client = match transport::client() {
-            Ok(client) => client,
-            Err(failure) => return tasks::print_failure_result(0, failure),
-        };
+        let client = transport::client();
         let url = format!(
             "{}/api/v1/plugin/jobs/{requested}/model-task",
             account.hub_url

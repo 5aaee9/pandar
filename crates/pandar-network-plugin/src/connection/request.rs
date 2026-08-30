@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use anyhow::Context;
 
-use crate::runtime;
+use crate::{
+    http::{hub_client, send_hub_request},
+    runtime,
+};
 
 const HEALTH_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -28,22 +31,14 @@ fn fetch(
 ) -> anyhow::Result<HubResponse> {
     runtime().block_on(async move {
         tokio::time::timeout(HEALTH_REQUEST_TIMEOUT, async move {
-            let client = reqwest::Client::builder()
-                .connect_timeout(HEALTH_REQUEST_TIMEOUT)
-                .timeout(HEALTH_REQUEST_TIMEOUT)
-                .redirect(reqwest::redirect::Policy::none())
-                .build()
-                .context("build Hub connection client")?;
-            let request = client.get(format!("{}{path}", snapshot.hub_url));
+            let request = hub_client()
+                .get(format!("{}{path}", snapshot.hub_url))
+                .timeout(HEALTH_REQUEST_TIMEOUT);
             let request = match token {
                 Some(token) => request.bearer_auth(token),
                 None => request,
             };
-            let response = request
-                .send()
-                .await
-                .map_err(reqwest::Error::without_url)
-                .context("send Hub connection request")?;
+            let response = send_hub_request(request, "send Hub connection request").await?;
             let http_code = response.status().as_u16().into();
             let body = crate::http::read_bounded_response_body(response)
                 .await

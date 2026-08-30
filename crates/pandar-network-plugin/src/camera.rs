@@ -11,12 +11,13 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
 use crate::{
-    PluginHttpResult, connection::StudioRequestSnapshot, invalid_input, read_utf8, result,
-    stable_error_body,
+    PluginHttpResult,
+    connection::StudioRequestSnapshot,
+    http::{hub_client, send_hub_request},
+    invalid_input, read_utf8, result, stable_error_body,
 };
 
 const RELAY_ACCEPT_TIMEOUT: Duration = Duration::from_secs(15);
-const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const RELAY_FRAME_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_RELAY_FRAME_BYTES: usize = 10 * 1024 * 1024;
 const RELAY_AUTH_BYTES: usize = 32;
@@ -112,18 +113,13 @@ async fn relay_camera(
         bail!("Studio camera relay authentication failed");
     }
 
-    let client = reqwest::Client::builder()
-        .connect_timeout(RELAY_CONNECT_TIMEOUT)
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .context("build Studio camera relay HTTP client")?;
-    let response = client
-        .get(camera_stream_url(&snapshot)?)
-        .bearer_auth(&snapshot.token)
-        .send()
-        .await
-        .map_err(reqwest::Error::without_url)
-        .context("open Hub Studio camera stream")?;
+    let response = send_hub_request(
+        hub_client()
+            .get(camera_stream_url(&snapshot)?)
+            .bearer_auth(&snapshot.token),
+        "open Hub Studio camera stream",
+    )
+    .await?;
     if !response.status().is_success() {
         bail!(
             "Hub Studio camera stream returned HTTP {}",

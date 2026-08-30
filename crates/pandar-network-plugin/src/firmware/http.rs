@@ -11,7 +11,10 @@ use super::{
     callbacks::{FirmwareCallback, FirmwareTunnel},
     model::{FirmwareSendOutcome, StudioFirmwareCommand},
 };
-use crate::studio_status::acknowledgement_callback_json;
+use crate::{
+    http::{hub_client, read_bounded_response_bytes, send_hub_request},
+    studio_status::acknowledgement_callback_json,
+};
 
 mod types;
 use types::{
@@ -69,12 +72,11 @@ impl FirmwareHttpClient {
 
     pub(super) fn catalog(&self, printer_id: &str) -> anyhow::Result<Vec<FirmwareCatalogEntry>> {
         crate::runtime().block_on(async {
-            let response = self
-                .request(reqwest::Method::GET, printer_id, "firmware")?
-                .send()
-                .await
-                .map_err(reqwest::Error::without_url)
-                .context("send Hub firmware catalog request")?;
+            let response = send_hub_request(
+                self.request(reqwest::Method::GET, printer_id, "firmware")?,
+                "send Hub firmware catalog request",
+            )
+            .await?;
             decode_success::<FirmwareStateResponse>(response, "firmware catalog")
                 .await
                 .map(|response| response.catalog)
@@ -87,14 +89,13 @@ impl FirmwareHttpClient {
         sequence_id: &str,
     ) -> anyhow::Result<Vec<PrinterFirmwareModule>> {
         crate::runtime().block_on(async {
-            let response = self
-                .request(reqwest::Method::POST, printer_id, "firmware/refresh")?
-                .timeout(FIRMWARE_REFRESH_HTTP_TIMEOUT)
-                .json(&RefreshRequest { sequence_id })
-                .send()
-                .await
-                .map_err(reqwest::Error::without_url)
-                .context("send Hub firmware version refresh request")?;
+            let response = send_hub_request(
+                self.request(reqwest::Method::POST, printer_id, "firmware/refresh")?
+                    .timeout(FIRMWARE_REFRESH_HTTP_TIMEOUT)
+                    .json(&RefreshRequest { sequence_id }),
+                "send Hub firmware version refresh request",
+            )
+            .await?;
             let response =
                 decode_success::<RefreshResponse>(response, "firmware version refresh").await?;
             ensure!(
@@ -113,15 +114,14 @@ impl FirmwareHttpClient {
         tunnel: FirmwareTunnel,
     ) -> Result<HttpSendResult, SendError> {
         let metadata = FirmwareControlMetadata::from(command);
-        let prepare = self
-            .request(reqwest::Method::POST, printer_id, "firmware/prepare")
-            .map_err(SendError::Prepare)?
-            .json(&metadata)
-            .send()
-            .await
-            .map_err(reqwest::Error::without_url)
-            .context("send Hub firmware prepare request")
-            .map_err(SendError::Prepare)?;
+        let prepare = send_hub_request(
+            self.request(reqwest::Method::POST, printer_id, "firmware/prepare")
+                .map_err(SendError::Prepare)?
+                .json(&metadata),
+            "send Hub firmware prepare request",
+        )
+        .await
+        .map_err(SendError::Prepare)?;
         let prepared = decode_success::<PreparedResponse>(prepare, "firmware prepare")
             .await
             .map_err(SendError::Prepare)?;
@@ -129,18 +129,17 @@ impl FirmwareHttpClient {
             return Err(SendError::Prepare(anyhow!("empty firmware prepared token")));
         }
 
-        let execute = self
-            .request(reqwest::Method::POST, printer_id, "firmware/execute")
-            .map_err(SendError::Execute)?
-            .json(&ExecuteRequest {
-                prepared_token: &prepared.prepared_token,
-                command: ExecuteCommand::from(command),
-            })
-            .send()
-            .await
-            .map_err(reqwest::Error::without_url)
-            .context("send Hub firmware execute request")
-            .map_err(SendError::Execute)?;
+        let execute = send_hub_request(
+            self.request(reqwest::Method::POST, printer_id, "firmware/execute")
+                .map_err(SendError::Execute)?
+                .json(&ExecuteRequest {
+                    prepared_token: &prepared.prepared_token,
+                    command: ExecuteCommand::from(command),
+                }),
+            "send Hub firmware execute request",
+        )
+        .await
+        .map_err(SendError::Execute)?;
         classify_execute(execute, dev_id, command, tunnel).await
     }
 
@@ -151,13 +150,10 @@ impl FirmwareHttpClient {
         suffix: &str,
     ) -> anyhow::Result<reqwest::RequestBuilder> {
         let url = firmware_url(&self.hub_url, printer_id, suffix)?;
-        let client = reqwest::Client::builder()
-            .timeout(FIRMWARE_HTTP_TIMEOUT)
-            .redirect(reqwest::redirect::Policy::none())
-            .retry(reqwest::retry::never())
-            .build()
-            .context("build Hub firmware client")?;
-        Ok(client.request(method, url).bearer_auth(&self.token))
+        Ok(hub_client()
+            .request(method, url)
+            .bearer_auth(&self.token)
+            .timeout(FIRMWARE_HTTP_TIMEOUT))
     }
 }
 
@@ -258,29 +254,13 @@ async fn decode_success<T: DeserializeOwned>(
 }
 
 async fn response_bytes(
-    mut response: reqwest::Response,
+    response: reqwest::Response,
     context: &'static str,
 ) -> anyhow::Result<Vec<u8>> {
-    ensure!(
-        response
-            .content_length()
-            .is_none_or(|length| length <= MAX_RESPONSE_BODY as u64),
-        "Hub {context} response exceeded body limit"
-    );
-    let mut bytes = Vec::with_capacity(response.content_length().unwrap_or_default() as usize);
-    while let Some(chunk) = response
-        .chunk()
+    let overflow_error = format!("Hub {context} response exceeded body limit");
+    read_bounded_response_bytes(response, MAX_RESPONSE_BODY, &overflow_error)
         .await
-        .map_err(reqwest::Error::without_url)
-        .with_context(|| format!("read Hub {context} response"))?
-    {
-        ensure!(
-            chunk.len() <= MAX_RESPONSE_BODY - bytes.len(),
-            "Hub {context} response exceeded body limit"
-        );
-        bytes.extend_from_slice(&chunk);
-    }
-    Ok(bytes)
+        .with_context(|| format!("read Hub {context} response"))
 }
 
 fn firmware_url(hub_url: &str, printer_id: &str, suffix: &str) -> anyhow::Result<reqwest::Url> {

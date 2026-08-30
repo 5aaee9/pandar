@@ -98,7 +98,7 @@ async fn run(
     callbacks: PluginStudioCallbacks,
     deadline: Instant,
 ) -> Result<(), PrintFailure> {
-    let client = transport::client()?;
+    let client = transport::client();
     let created_reply = transport::submit(&client, &print, callbacks, deadline).await?;
     if created_reply.status != 201 {
         return Err(transport::failure_from_reply(&created_reply));
