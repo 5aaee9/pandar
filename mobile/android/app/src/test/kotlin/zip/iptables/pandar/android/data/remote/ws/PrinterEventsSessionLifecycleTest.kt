@@ -223,7 +223,7 @@ class PrinterEventsSessionLifecycleTest {
                 assertEquals(session, withTimeout(5_000) { resync.await() })
                 val recovered = withTimeout(5_000) { recoveredCommand.await() }
                 val command = recovered.event as PrinterEventDto.CommandResult
-                assertEquals("completed", command.command.status)
+                assertEquals("succeeded", command.command.status.wireValue)
             } finally {
                 releaseFrames.complete(Unit)
                 repository.stop()
@@ -320,7 +320,7 @@ class PrinterEventsSessionLifecycleTest {
         private val COMMAND_EVENT = """
             {"type":"command_result","command":{
               "id":"command-1","tenant_id":"tenant-1","agent_id":"agent-1",
-              "printer_id":"p1","kind":"printer_operation","status":"completed",
+              "printer_id":"p1","kind":"printer_operation","status":"succeeded",
               "payload_json":"{}","created_at":"created","updated_at":"updated"}}
         """.trimIndent()
 

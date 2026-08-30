@@ -44,6 +44,9 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=moderate
 
+      - name: Verify generated Hub clients
+        run: npm run check:hub-clients
+
       - name: Lint Web
         run: npm run lint:web
 

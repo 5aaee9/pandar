@@ -5,11 +5,15 @@ on:
   pull_request:
     paths:
       - "mobile/android/**"
+      - "contracts/hub-client.openapi.json"
+      - "scripts/generate-hub-clients.mjs"
   push:
     branches:
       - main
     paths:
       - "mobile/android/**"
+      - "contracts/hub-client.openapi.json"
+      - "scripts/generate-hub-clients.mjs"
 
 permissions:
   contents: read

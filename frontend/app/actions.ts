@@ -15,6 +15,7 @@ import {
 } from "./action-helpers";
 import { apiHeaders, requireAuth } from "./api-auth";
 import { apiIdSegment } from "./api-path";
+import { decodeHubResponse } from "./hub-contract";
 import type {
   LinkPrinterActionState,
   MutationActionState,
@@ -40,7 +41,7 @@ export async function discoverPrinters(formData: FormData) {
     throw new Error(`Discover printers returned ${response.status}`);
   }
 
-  const command = (await response.json()) as { id: string };
+  const command = decodeHubResponse("Command", await response.json());
   redirect(commandUrl(command.id));
 }
 
@@ -167,7 +168,7 @@ export async function diagnosePrinter(formData: FormData) {
     throw new Error(`Diagnose printer returned ${response.status}`);
   }
 
-  const command = (await response.json()) as { id: string };
+  const command = decodeHubResponse("Command", await response.json());
   redirect(commandUrl(command.id));
 }
 
@@ -190,7 +191,7 @@ export async function linkPrinter(
   if (!response.ok) {
     return { ok: false, error: await errorCode(response) };
   }
-  const command = (await response.json()) as { id: string };
+  const command = decodeHubResponse("Command", await response.json());
   return { ok: true, commandId: command.id };
 }
 
@@ -277,10 +278,7 @@ export async function createPluginTicket(formData: FormData) {
   if (!response.ok) {
     redirect(statusUrl(await errorCode(response)));
   }
-  const body = (await response.json()) as {
-    ticket: string;
-    redirect_url: string;
-  };
+  const body = decodeHubResponse("TicketResponse", await response.json());
   const url = new URL(body.redirect_url);
   url.searchParams.set("ticket", body.ticket);
   url.searchParams.set("redirect_url", body.redirect_url);
@@ -303,10 +301,7 @@ export async function createMobileTicket(formData: FormData) {
   if (!response.ok) {
     redirect(statusUrl(await errorCode(response)));
   }
-  const body = (await response.json()) as {
-    ticket: string;
-    redirect_url: string;
-  };
+  const body = decodeHubResponse("TicketResponse", await response.json());
   const url = new URL(body.redirect_url);
   url.searchParams.set("ticket", body.ticket);
   url.searchParams.set("redirect_url", body.redirect_url);

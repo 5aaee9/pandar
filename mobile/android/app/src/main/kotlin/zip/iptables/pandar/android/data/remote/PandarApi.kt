@@ -6,12 +6,15 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 import zip.iptables.pandar.android.data.remote.dto.AgentsListDto
 import zip.iptables.pandar.android.data.remote.dto.CommandResponseDto
+import zip.iptables.pandar.android.data.remote.dto.JobDto
 import zip.iptables.pandar.android.data.remote.dto.JobListDto
 import zip.iptables.pandar.android.data.remote.dto.MobileTicketExchangeRequest
 import zip.iptables.pandar.android.data.remote.dto.MobileTicketExchangeResponse
 import zip.iptables.pandar.android.data.remote.dto.PrinterControlRequest
 import zip.iptables.pandar.android.data.remote.dto.PrinterDto
 import zip.iptables.pandar.android.data.remote.dto.PrinterListDto
+import zip.iptables.pandar.android.data.remote.dto.RecoveryReasonRequestDto
+import zip.iptables.pandar.android.data.remote.dto.ReprintJobRequestDto
 
 interface PandarApi {
 
@@ -30,6 +33,12 @@ interface PandarApi {
     @GET("api/v1/tenants/{tenant}/jobs")
     suspend fun listJobs(@Path("tenant") tenant: String): JobListDto
 
+    @GET("api/v1/tenants/{tenant}/commands/{command}")
+    suspend fun getCommand(
+        @Path("tenant") tenant: String,
+        @Path("command") command: String,
+    ): CommandResponseDto
+
     @POST("api/v1/tenants/{tenant}/printers/{printer}/controls")
     suspend fun control(
         @Path("tenant") tenant: String,
@@ -41,11 +50,13 @@ interface PandarApi {
     suspend fun retryDispatch(
         @Path("tenant") tenant: String,
         @Path("job") job: String,
-    ): CommandResponseDto
+        @Body body: RecoveryReasonRequestDto,
+    ): JobDto
 
     @POST("api/v1/tenants/{tenant}/jobs/{job}/reprint")
     suspend fun reprint(
         @Path("tenant") tenant: String,
         @Path("job") job: String,
-    ): CommandResponseDto
+        @Body body: ReprintJobRequestDto,
+    ): JobDto
 }

@@ -1,4 +1,5 @@
 import { apiHeaders } from "./api-auth";
+import { decodeHubResponse } from "./hub-contract";
 
 export const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 
@@ -31,8 +32,8 @@ export function numberOrNull(formData: FormData, name: string) {
 
 export async function errorCode(response: Response) {
   try {
-    const body = (await response.json()) as { error?: string };
-    return body.error ?? `http_${response.status}`;
+    const body = decodeHubResponse("ErrorResponse", await response.json());
+    return body.error;
   } catch {
     return `http_${response.status}`;
   }

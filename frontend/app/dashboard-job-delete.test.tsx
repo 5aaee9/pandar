@@ -29,6 +29,7 @@ const tenant: Tenant = {
 function job(overrides: Partial<Job> = {}): Job {
   return {
     id: 'job-1',
+    tenant_id: tenant.id,
     printer_id: 'printer-1',
     agent_id: 'agent-1',
     artifact_id: 'artifact-1',
@@ -69,6 +70,7 @@ function job(overrides: Partial<Job> = {}): Job {
     material: {
       ams_mapping: null,
       ams_mapping2: null,
+      ams_mapping_info: null,
       filament_usage: [],
     },
     ...overrides,
@@ -133,7 +135,7 @@ describe('JobHistory row actions', () => {
     })
 
     expect(isRetryDispatchSafe(safe)).toBe(true)
-    for (const unsafe of [
+    for (const unsafe of ([
       { ...safe, status: 'queued' },
       { ...safe, command: { ...safe.command, status: 'succeeded' } },
       { ...safe, print: { ...safe.print, status: 'running' } },
@@ -143,7 +145,7 @@ describe('JobHistory row actions', () => {
       },
       { ...safe, print: { ...safe.print, progress_percent: 1 } },
       { ...safe, print: { ...safe.print, current_layer: 1 } },
-    ]) {
+    ] satisfies Job[])) {
       expect(isRetryDispatchSafe(unsafe)).toBe(false)
     }
   })

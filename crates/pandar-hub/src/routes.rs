@@ -25,6 +25,7 @@ mod error;
 pub(crate) mod jobs;
 mod join_links;
 mod onboarding;
+mod openapi;
 mod plugin;
 mod printer_events;
 pub(crate) mod printer_operations;
@@ -40,6 +41,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(status::healthz))
         .route("/api/v1/auth/status", get(status::auth_status))
+        .route("/api/v1/openapi.json", get(openapi::hub_client_contract))
         .route("/api/v1/me", get(onboarding::me))
         .route(
             "/api/v1/onboarding/tenants",

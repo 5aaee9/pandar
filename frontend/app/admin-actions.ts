@@ -16,7 +16,7 @@ import type { MutationActionState, SecretActionState } from "./action-state";
 import { apiHeaders, requireAuth } from "./api-auth";
 import { apiIdSegment } from "./api-path";
 import { TENANT_COOKIE } from "./tenant-cookie";
-import type { Agent, JoinLink, Tenant, TenantToken } from "./dashboard-types";
+import { decodeHubResponse } from "./hub-contract";
 
 async function selectTenant(tenantId: string) {
   (await cookies()).set(TENANT_COOKIE, tenantId, {
@@ -49,10 +49,10 @@ export async function createTenantToken(
   if (!response.ok) {
     return { ok: false, error: await errorCode(response) };
   }
-  const body = (await response.json()) as {
-    tenant_token: TenantToken;
-    token: string;
-  };
+  const body = decodeHubResponse(
+    "TenantTokenSecretResponse",
+    await response.json(),
+  );
   refresh();
   return {
     ok: true,
@@ -99,10 +99,10 @@ export async function rotateTenantToken(
   if (!response.ok) {
     return { ok: false, error: await errorCode(response) };
   }
-  const body = (await response.json()) as {
-    tenant_token: TenantToken;
-    token: string;
-  };
+  const body = decodeHubResponse(
+    "RotatedTenantTokenSecretResponse",
+    await response.json(),
+  );
   refresh();
   return {
     ok: true,
@@ -122,7 +122,10 @@ export async function createTenantFromExternal(formData: FormData) {
   if (!response.ok) {
     redirect(`/?status=${encodeURIComponent(await errorCode(response))}`);
   }
-  const body = (await response.json()) as { tenant: Tenant };
+  const body = decodeHubResponse(
+    "CreatedTenantResponse",
+    await response.json(),
+  );
   await selectTenant(body.tenant.id);
   const { revalidatePath } = await import("next/cache");
   revalidatePath("/(dashboard)", "layout");
@@ -147,10 +150,10 @@ export async function createJoinLink(
   if (!response.ok) {
     return { ok: false, error: await errorCode(response) };
   }
-  const body = (await response.json()) as {
-    join_link: JoinLink;
-    token: string;
-  };
+  const body = decodeHubResponse(
+    "JoinLinkSecretResponse",
+    await response.json(),
+  );
   return {
     ok: true,
     kind: "join_link",
@@ -188,7 +191,10 @@ export async function acceptJoinLink(formData: FormData) {
   if (!response.ok) {
     redirect(`/?status=${encodeURIComponent(await errorCode(response))}`);
   }
-  const body = (await response.json()) as { tenant: Tenant };
+  const body = decodeHubResponse(
+    "AcceptedJoinLinkResponse",
+    await response.json(),
+  );
   await selectTenant(body.tenant.id);
   const { revalidatePath } = await import("next/cache");
   revalidatePath("/(dashboard)", "layout");
@@ -276,7 +282,7 @@ export async function createAgentPairing(
   if (!response.ok) {
     return { ok: false, error: await errorCode(response) };
   }
-  const body = (await response.json()) as { agent: Agent; agent_env: string };
+  const body = decodeHubResponse("AgentPairingResponse", await response.json());
   return {
     ok: true,
     kind: "agent_pairing",

@@ -336,8 +336,10 @@ describe("dispatch material mapping", () => {
 
 function fixtureMetadata(): ArtifactMetadata {
   return {
+    source: "3mf",
     display_name: "project",
     default_plate_id: 1,
+    plate_count: 1,
     warnings: [],
     plates: [
       {

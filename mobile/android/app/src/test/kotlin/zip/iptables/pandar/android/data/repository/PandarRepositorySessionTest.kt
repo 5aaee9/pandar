@@ -30,14 +30,19 @@ import zip.iptables.pandar.android.data.remote.HubApiSession
 import zip.iptables.pandar.android.data.remote.HubSession
 import zip.iptables.pandar.android.data.remote.HubSessionContext
 import zip.iptables.pandar.android.data.remote.PandarApi
+import zip.iptables.pandar.android.data.remote.appJson
 import zip.iptables.pandar.android.data.remote.dto.AgentsListDto
 import zip.iptables.pandar.android.data.remote.dto.CommandResponseDto
+import zip.iptables.pandar.android.data.remote.dto.CommandStatusDto
+import zip.iptables.pandar.android.data.remote.dto.JobDto
 import zip.iptables.pandar.android.data.remote.dto.JobListDto
 import zip.iptables.pandar.android.data.remote.dto.MobileTicketExchangeRequest
 import zip.iptables.pandar.android.data.remote.dto.MobileTicketExchangeResponse
 import zip.iptables.pandar.android.data.remote.dto.PrinterControlRequest
 import zip.iptables.pandar.android.data.remote.dto.PrinterDto
 import zip.iptables.pandar.android.data.remote.dto.PrinterListDto
+import zip.iptables.pandar.android.data.remote.dto.RecoveryReasonRequestDto
+import zip.iptables.pandar.android.data.remote.dto.ReprintJobRequestDto
 import zip.iptables.pandar.android.data.remote.ws.PrinterEventsRepository
 import zip.iptables.pandar.android.domain.model.PrinterControlIntent
 
@@ -211,6 +216,34 @@ class PandarRepositorySessionTest {
         }
     }
 
+    @Test
+    fun `retry decodes the Hub job projection then loads its command`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val context = sessionIdentity("tenant-a", "token", epoch = 1)
+        val sessions = MutableStateFlow<HubSessionContext?>(context)
+        val api = RecoveryApi()
+        val repository = PandarRepository(
+            sessions = sessions,
+            apiSession = { HubApiSession(it, api) },
+            ws = printerEvents(),
+            scope = scope,
+            logger = RepositoryTestLogger,
+        )
+
+        try {
+            withTimeout(5_000) { repository.state.first { it.hasSession } }
+            withTimeout(5_000) { api.initialSyncFinished.await() }
+            val command = repository.retry("job-source")
+
+            assertEquals("command-1", command.id)
+            assertEquals("job-source", api.retriedJobId)
+            assertEquals("command-1", api.loadedCommandId)
+            assertEquals("job-1", repository.state.value.jobs.single().id)
+        } finally {
+            scope.cancel()
+        }
+    }
+
     private fun printerEvents() = PrinterEventsRepository(
         client = OkHttpClient(),
         tokenRefresher = { false },
@@ -245,7 +278,7 @@ class PandarRepositorySessionTest {
         agentId = "agent-1",
         printerId = "printer-1",
         kind = "printer_operation",
-        status = "sent",
+        status = CommandStatusDto.SENT,
         payloadJson = "{}",
         createdAt = "created",
         updatedAt = "updated",
@@ -279,13 +312,22 @@ private open class ImmediateApi : PandarApi {
         body: MobileTicketExchangeRequest,
     ): MobileTicketExchangeResponse = unsupported()
     override suspend fun getPrinter(tenant: String, printer: String): PrinterDto = unsupported()
+    override suspend fun getCommand(tenant: String, command: String): CommandResponseDto = unsupported()
     override suspend fun control(
         tenant: String,
         printer: String,
         body: PrinterControlRequest,
     ): CommandResponseDto = unsupported()
-    override suspend fun retryDispatch(tenant: String, job: String): CommandResponseDto = unsupported()
-    override suspend fun reprint(tenant: String, job: String): CommandResponseDto = unsupported()
+    override suspend fun retryDispatch(
+        tenant: String,
+        job: String,
+        body: RecoveryReasonRequestDto,
+    ): JobDto = unsupported()
+    override suspend fun reprint(
+        tenant: String,
+        job: String,
+        body: ReprintJobRequestDto,
+    ): JobDto = unsupported()
 
     protected fun unsupported(): Nothing = error("not used by this test")
 }
@@ -306,6 +348,40 @@ private class DelayedControlApi : ImmediateApi() {
     fun completeControl(response: CommandResponseDto) {
         requireNotNull(controlContinuation).resumeWith(Result.success(response))
         controlContinuation = null
+    }
+}
+
+private class RecoveryApi : ImmediateApi() {
+    val initialSyncFinished = CompletableDeferred<Unit>()
+    var retriedJobId: String? = null
+    var loadedCommandId: String? = null
+
+    override suspend fun listJobs(tenant: String): JobListDto {
+        initialSyncFinished.complete(Unit)
+        return JobListDto(emptyList())
+    }
+
+    override suspend fun retryDispatch(
+        tenant: String,
+        job: String,
+        body: RecoveryReasonRequestDto,
+    ): JobDto {
+        retriedJobId = job
+        return appJson.decodeFromString(RECOVERY_JOB)
+    }
+
+    override suspend fun getCommand(tenant: String, command: String): CommandResponseDto {
+        loadedCommandId = command
+        return appJson.decodeFromString(RECOVERY_COMMAND)
+    }
+
+    companion object {
+        private const val RECOVERY_JOB = """
+            {"id":"job-1","tenant_id":"tenant-a","printer_id":"printer-1","agent_id":"agent-1","artifact_id":"artifact-1","command_id":"command-1","status":"queued","error":null,"created_at":"created","updated_at":"updated","print":{"status":"pending"},"command":{"id":"command-1","kind":"print_project_file","status":"queued"},"artifact":{"id":"artifact-1","tenant_id":"tenant-a","filename":"part.3mf","content_type":"model/3mf","size_bytes":1,"metadata":null,"created_at":"created"},"material":{"ams_mapping":null,"ams_mapping2":null,"ams_mapping_info":null,"filament_usage":[]}}
+        """
+        private const val RECOVERY_COMMAND = """
+            {"id":"command-1","tenant_id":"tenant-a","agent_id":"agent-1","printer_id":"printer-1","kind":"print_project_file","status":"queued","payload_json":"{}","error":null,"result_json":null,"created_at":"created","updated_at":"updated"}
+        """
     }
 }
 

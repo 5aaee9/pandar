@@ -16,6 +16,20 @@ const redirectMock = vi.hoisted(() =>
 );
 const refreshMock = vi.hoisted(() => vi.fn());
 
+const commandResponse = {
+  id: "command-1",
+  tenant_id: "tenant-1",
+  agent_id: "agent-1",
+  printer_id: null,
+  kind: "printer_operation",
+  status: "queued",
+  payload_json: "{}",
+  error: null,
+  result_json: null,
+  created_at: "created",
+  updated_at: "updated",
+};
+
 vi.mock("next/cache", () => ({
   refresh: refreshMock,
 }));
@@ -36,7 +50,7 @@ describe("discoverPrinters", () => {
       "fetch",
       vi.fn(
         async () =>
-          new Response(JSON.stringify({ id: "command-1" }), {
+          new Response(JSON.stringify(commandResponse), {
             status: 200,
             headers: { "content-type": "application/json" },
           }),
@@ -70,7 +84,7 @@ describe("linkPrinter", () => {
       "fetch",
       vi.fn(
         async () =>
-          new Response(JSON.stringify({ id: "command-1" }), {
+          new Response(JSON.stringify(commandResponse), {
             status: 200,
             headers: { "content-type": "application/json" },
           }),
@@ -145,6 +159,7 @@ describe("createMobileTicket", () => {
           new Response(
             JSON.stringify({
               ticket: "pandar_plugin_ticket_abc",
+              expires_at: "2026-08-31T00:00:00Z",
               redirect_url: "zip.iptables.pandar.android://auth/callback",
             }),
             {
@@ -227,7 +242,7 @@ describe("refreshPrinterMaterials", () => {
       "fetch",
       vi.fn(
         async () =>
-          new Response(JSON.stringify({ id: "command-1" }), {
+          new Response(JSON.stringify(commandResponse), {
             status: 200,
             headers: { "content-type": "application/json" },
           }),

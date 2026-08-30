@@ -1,15 +1,10 @@
+import { decodeHubResponse } from "../hub-contract";
+
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 
 type ReadinessResult = {
   externalAuthEnabled: boolean;
   error: string | null;
-};
-
-type AuthStatusResponse = {
-  external_auth?: {
-    enabled?: boolean;
-    ready?: boolean;
-  };
 };
 
 export async function fetchExternalAuthStatus(): Promise<ReadinessResult> {
@@ -23,7 +18,7 @@ export async function fetchExternalAuthStatus(): Promise<ReadinessResult> {
         error: `Auth status check returned ${response.status}`,
       };
     }
-    const body = (await response.json()) as AuthStatusResponse;
+    const body = decodeHubResponse("AuthStatusResponse", await response.json());
     const externalAuth = body.external_auth;
     return {
       externalAuthEnabled:

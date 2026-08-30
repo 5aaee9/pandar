@@ -1,38 +1,7 @@
 package zip.iptables.pandar.android.data.remote.dto
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import zip.iptables.pandar.android.domain.model.PrinterAxis
 import zip.iptables.pandar.android.domain.model.PrinterControlIntent
-
-@Serializable
-data class PrinterControlRequest(
-    @SerialName("action") val action: String,
-    @SerialName("light_on") val lightOn: Boolean? = null,
-    @SerialName("axes") val axes: List<PrinterAxisRequest>? = null,
-    @SerialName("movements") val movements: List<PrinterAxisMovementRequest>? = null,
-    @SerialName("feedrate_mm_per_min") val feedrateMmPerMin: Int? = null,
-    @SerialName("temperature_celsius") val temperatureCelsius: Int? = null,
-    @SerialName("wait") val wait: Boolean? = null,
-    @SerialName("ams_id") val amsId: Int? = null,
-    @SerialName("slot_id") val slotId: Int? = null,
-    @SerialName("global_tray_id") val globalTrayId: Int? = null,
-    @SerialName("external_id") val externalId: String? = null,
-    @SerialName("extruder_id") val extruderId: Int? = null,
-)
-
-@Serializable
-enum class PrinterAxisRequest {
-    @SerialName("x") X,
-    @SerialName("y") Y,
-    @SerialName("z") Z,
-}
-
-@Serializable
-data class PrinterAxisMovementRequest(
-    @SerialName("axis") val axis: PrinterAxisRequest,
-    @SerialName("delta_mm") val deltaMm: Double,
-)
 
 internal fun PrinterControlIntent.toRequest(): PrinterControlRequest = when (this) {
     PrinterControlIntent.Pause -> PrinterControlRequest(action = "pause")

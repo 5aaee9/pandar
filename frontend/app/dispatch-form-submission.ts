@@ -1,3 +1,5 @@
+import { decodeHubResponse } from "./hub-contract";
+
 export function prepareDispatchSubmission(
   formData: FormData,
   confirmExternalMismatch: () => boolean,
@@ -23,8 +25,8 @@ export function prepareDispatchSubmission(
 
 export async function dispatchErrorCode(response: Response) {
   try {
-    const body = (await response.json()) as { error?: string };
-    return body.error ?? `http_${response.status}`;
+    const body = decodeHubResponse("ErrorResponse", await response.json());
+    return body.error;
   } catch {
     return `http_${response.status}`;
   }

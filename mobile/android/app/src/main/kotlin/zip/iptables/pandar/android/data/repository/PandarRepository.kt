@@ -14,6 +14,8 @@ import zip.iptables.pandar.android.data.remote.HubSessionContext
 import zip.iptables.pandar.android.data.remote.dto.PrinterEventDto
 import zip.iptables.pandar.android.data.remote.dto.toDomain
 import zip.iptables.pandar.android.data.remote.dto.toRequest
+import zip.iptables.pandar.android.data.remote.dto.RecoveryReasonRequestDto
+import zip.iptables.pandar.android.data.remote.dto.ReprintJobRequestDto
 import zip.iptables.pandar.android.data.remote.ws.LiveState
 import zip.iptables.pandar.android.data.remote.ws.PrinterEventsRepository
 import zip.iptables.pandar.android.domain.model.Agent
@@ -145,7 +147,16 @@ class PandarRepository(
     override suspend fun retry(jobId: String): Command {
         val session = requireSession()
         val startedAtRevision = beginRead(session)
-        val command = session.api.retryDispatch(session.identity.tenantId, jobId).toDomain()
+        val job = session.api.retryDispatch(
+            session.identity.tenantId,
+            jobId,
+            RecoveryReasonRequestDto(),
+        )
+        ensureCurrent(session)
+        applyCurrent(session, PrinterStateUpdate.JobProgress(job.toDomain()))
+        val command = session.api
+            .getCommand(session.identity.tenantId, job.commandId)
+            .toDomain()
         ensureCurrent(session)
         applyCurrent(
             session,
@@ -161,7 +172,16 @@ class PandarRepository(
     override suspend fun reprint(jobId: String): Command {
         val session = requireSession()
         val startedAtRevision = beginRead(session)
-        val command = session.api.reprint(session.identity.tenantId, jobId).toDomain()
+        val job = session.api.reprint(
+            session.identity.tenantId,
+            jobId,
+            ReprintJobRequestDto(),
+        )
+        ensureCurrent(session)
+        applyCurrent(session, PrinterStateUpdate.JobProgress(job.toDomain()))
+        val command = session.api
+            .getCommand(session.identity.tenantId, job.commandId)
+            .toDomain()
         ensureCurrent(session)
         applyCurrent(
             session,

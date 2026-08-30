@@ -56,6 +56,59 @@ async fn public_auth_status_reports_disabled_external_auth() {
     assert!(external_auth.ready);
 }
 
+#[tokio::test]
+async fn public_openapi_contract_exposes_generated_client_schemas() {
+    let (status, body) = request(
+        router(state().await),
+        Method::GET,
+        "/api/v1/openapi.json",
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["openapi"], "3.1.0");
+    assert!(body["paths"]["/api/v1/tenants/{tenant_id}/printers"].is_object());
+    assert_eq!(
+        body["components"]["schemas"]["CommandStatus"]["enum"],
+        serde_json::json!([
+            "queued",
+            "sent",
+            "acknowledged",
+            "succeeded",
+            "failed",
+            "cancelled"
+        ])
+    );
+    for path in [
+        "/api/v1/onboarding/tenants",
+        "/api/v1/tenants/{tenant_id}/tenant-tokens",
+        "/api/v1/tenants/{tenant_id}/tenant-tokens/{token_id}/rotate",
+        "/api/v1/tenants/{tenant_id}/join-links",
+        "/api/v1/tenants/{tenant_id}/agent-pairings",
+        "/api/v1/tenants/{tenant_id}/plugin/login-tickets",
+        "/api/v1/tenants/{tenant_id}/mobile/login-tickets",
+        "/api/v1/tenants/{tenant_id}/jobs/{job_id}/retry-dispatch",
+        "/api/v1/tenants/{tenant_id}/jobs/{job_id}/reprint",
+    ] {
+        assert!(body["paths"][path]["post"]["responses"]["201"].is_object());
+        assert_eq!(
+            body["paths"][path]["post"]["responses"]["default"]["content"]["application/json"]["schema"]
+                ["$ref"],
+            "#/components/schemas/ErrorResponse"
+        );
+    }
+    for path in [
+        "/api/v1/tenants/{tenant_id}/users",
+        "/api/v1/tenants/{tenant_id}/join-links",
+        "/api/v1/tenants/{tenant_id}/tenant-tokens",
+        "/api/v1/tenants/{tenant_id}/audit-events",
+        "/api/v1/tenants/{tenant_id}/printers/{printer_id}",
+    ] {
+        assert!(body["paths"][path]["get"]["responses"]["200"].is_object());
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct ErrorResponse {
     error: String,

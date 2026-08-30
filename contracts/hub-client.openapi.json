@@ -1,0 +1,3815 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Pandar Hub client API",
+    "version": "1.0.0"
+  },
+  "x-pandar-codegen": {
+    "kotlinRoots": [
+      "PrinterList",
+      "AgentList",
+      "JobList",
+      "Command",
+      "RecoveryReasonRequest",
+      "ReprintJobRequest",
+      "MobileTicketExchangeRequest",
+      "MobileTicketExchangeResponse",
+      "PrinterControlRequest"
+    ],
+    "typescriptGroups": [
+      "core",
+      "printer",
+      "job",
+      "admin"
+    ]
+  },
+  "paths": {
+    "/api/v1/tenants": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Tenant list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Current identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/status": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Authentication readiness",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthStatusResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/printers": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Printer list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrinterList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/agents": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Agent list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/jobs": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Job list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/commands/{command_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        },
+        {
+          "$ref": "#/components/parameters/CommandId"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Command"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        },
+        {
+          "$ref": "#/components/parameters/PrinterId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Accepted command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Command"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrinterControlRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/onboarding/tenants": {
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedTenantResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/join-links/accept": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Accepted tenant membership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptedJoinLinkResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/tenant-tokens": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created tenant token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantTokenSecretResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Tenant-token list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantTokenList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/join-links": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created join link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinLinkSecretResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Join-link list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinLinkList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/agent-pairings": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created agent pairing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPairingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/agents/{agent_id}/discover-printers": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        },
+        {
+          "$ref": "#/components/parameters/AgentId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Accepted command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Command"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/agents/{agent_id}/diagnose-printer": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        },
+        {
+          "$ref": "#/components/parameters/AgentId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Accepted command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Command"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        },
+        {
+          "$ref": "#/components/parameters/AgentId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Accepted command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Command"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/plugin/login-tickets": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created plugin ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/mobile/login-tickets": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created mobile ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/artifact-metadata-preview": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Artifact metadata preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactMetadataPreviewResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/tenant-tokens/{token_id}/rotate": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        },
+        {
+          "$ref": "#/components/parameters/TokenId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Rotated tenant token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RotatedTenantTokenSecretResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/users": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "User list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/audit-events": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Audit-event list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/printers/{printer_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        },
+        {
+          "$ref": "#/components/parameters/PrinterId"
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Printer detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Printer"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/jobs/{job_id}/retry-dispatch": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        },
+        {
+          "$ref": "#/components/parameters/JobId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Retried dispatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoveryReasonRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/jobs/{job_id}/reprint": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantId"
+        },
+        {
+          "$ref": "#/components/parameters/JobId"
+        }
+      ],
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Queued reprint",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReprintJobRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/mobile/login-tickets/exchange": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileTicketExchangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Exchanged mobile login ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileTicketExchangeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Hub API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "TenantId": {
+        "name": "tenant_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "CommandId": {
+        "name": "command_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "PrinterId": {
+        "name": "printer_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "AgentId": {
+        "name": "agent_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "TokenId": {
+        "name": "token_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "JobId": {
+        "name": "job_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "schemas": {
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "tenant_admin",
+          "operator",
+          "viewer"
+        ],
+        "x-typescript-group": "core"
+      },
+      "CommandStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "sent",
+          "acknowledged",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ],
+        "x-typescript-group": "core"
+      },
+      "JobStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "sent",
+          "acknowledged",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ],
+        "x-typescript-group": "core"
+      },
+      "PrintStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "stalled",
+          "running",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "x-typescript-group": "core"
+      },
+      "Capability": {
+        "type": "string",
+        "enum": [
+          "supported",
+          "unsupported",
+          "unknown"
+        ],
+        "x-typescript-group": "printer"
+      },
+      "NozzleLayout": {
+        "type": "string",
+        "enum": [
+          "single",
+          "main_auxiliary",
+          "left_right",
+          "unknown"
+        ],
+        "x-typescript-group": "printer"
+      },
+      "CoolingMode": {
+        "type": "string",
+        "enum": [
+          "cooling",
+          "heating",
+          "exhaust",
+          "full_cooling"
+        ],
+        "x-typescript-group": "printer"
+      },
+      "CoolingFanKind": {
+        "type": "string",
+        "enum": [
+          "hotend",
+          "part_cooling",
+          "auxiliary",
+          "chamber",
+          "hotend_second",
+          "controller",
+          "inner_loop",
+          "auxiliary_second"
+        ],
+        "x-typescript-group": "printer"
+      },
+      "Tenant": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "display_name",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "TenantList": {
+        "type": "object",
+        "required": [
+          "tenants"
+        ],
+        "properties": {
+          "tenants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tenant"
+            }
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "MeIdentity": {
+        "type": "object",
+        "required": [
+          "provider",
+          "subject",
+          "email",
+          "email_verified",
+          "display_name"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email_verified": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "display_name": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "TenantMembership": {
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "tenant_slug",
+          "display_name",
+          "role"
+        ],
+        "properties": {
+          "tenant_id": {
+            "type": "string"
+          },
+          "tenant_slug": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "MeResponse": {
+        "type": "object",
+        "required": [
+          "identity",
+          "tenants",
+          "can_self_create_tenant"
+        ],
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/MeIdentity"
+          },
+          "tenants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TenantMembership"
+            }
+          },
+          "can_self_create_tenant": {
+            "type": "boolean"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "ExternalAuthStatus": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "ready"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "ready": {
+            "type": "boolean"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "AuthStatusResponse": {
+        "type": "object",
+        "required": [
+          "external_auth"
+        ],
+        "properties": {
+          "external_auth": {
+            "$ref": "#/components/schemas/ExternalAuthStatus"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "TicketResponse": {
+        "type": "object",
+        "required": [
+          "ticket",
+          "redirect_url",
+          "expires_at"
+        ],
+        "properties": {
+          "ticket": {
+            "type": "string"
+          },
+          "redirect_url": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "Agent": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "AgentList": {
+        "type": "object",
+        "required": [
+          "agents"
+        ],
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Agent"
+            }
+          }
+        },
+        "x-kotlin-name": "AgentsListDto",
+        "x-typescript-group": "core"
+      },
+      "AgentPairingResponse": {
+        "type": "object",
+        "required": [
+          "agent",
+          "agent_env"
+        ],
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/Agent"
+          },
+          "agent_env": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "Command": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "agent_id",
+          "printer_id",
+          "kind",
+          "status",
+          "payload_json",
+          "error",
+          "result_json",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "printer_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CommandStatus"
+          },
+          "payload_json": {
+            "type": "string"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "result_json": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "x-kotlin-name": "CommandResponseDto",
+        "x-typescript-group": "core"
+      },
+      "PrinterNozzleTemperature": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "current_celsius": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "target_celsius": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "diameter_mm": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nozzle_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "x-kotlin-name": "PrinterNozzleTempDto",
+        "x-typescript-group": "printer"
+      },
+      "CalibrationOption": {
+        "type": "object",
+        "required": [
+          "modes",
+          "default_mode"
+        ],
+        "properties": {
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "enum": [
+                0,
+                1,
+                2
+              ]
+            }
+          },
+          "default_mode": {
+            "type": "integer",
+            "enum": [
+              0,
+              1,
+              2
+            ]
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "CompatibilityFeatures": {
+        "type": "object",
+        "required": [
+          "chamber_temperature",
+          "drying",
+          "dual_nozzle",
+          "flow_calibration",
+          "vibration_calibration",
+          "nozzle_offset_calibration",
+          "live_controls"
+        ],
+        "properties": {
+          "chamber_temperature": {
+            "$ref": "#/components/schemas/Capability"
+          },
+          "drying": {
+            "$ref": "#/components/schemas/Capability"
+          },
+          "dual_nozzle": {
+            "$ref": "#/components/schemas/Capability"
+          },
+          "flow_calibration": {
+            "$ref": "#/components/schemas/Capability"
+          },
+          "vibration_calibration": {
+            "$ref": "#/components/schemas/Capability"
+          },
+          "nozzle_offset_calibration": {
+            "$ref": "#/components/schemas/Capability"
+          },
+          "live_controls": {
+            "$ref": "#/components/schemas/Capability"
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "PrintOptionCapabilities": {
+        "type": "object",
+        "required": [
+          "timelapse",
+          "bed_leveling",
+          "flow_calibration",
+          "nozzle_offset_calibration"
+        ],
+        "properties": {
+          "timelapse": {
+            "type": "boolean"
+          },
+          "bed_leveling": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CalibrationOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "flow_calibration": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CalibrationOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nozzle_offset_calibration": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CalibrationOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "PrinterCompatibility": {
+        "type": "object",
+        "required": [
+          "normalized_model",
+          "external_storage",
+          "ftps_tls_1_2_cap",
+          "features",
+          "print_options",
+          "chamber_fan",
+          "nozzle_layout"
+        ],
+        "properties": {
+          "normalized_model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "external_storage": {
+            "$ref": "#/components/schemas/Capability"
+          },
+          "ftps_tls_1_2_cap": {
+            "type": "boolean"
+          },
+          "features": {
+            "$ref": "#/components/schemas/CompatibilityFeatures"
+          },
+          "print_options": {
+            "$ref": "#/components/schemas/PrintOptionCapabilities"
+          },
+          "chamber_fan": {
+            "$ref": "#/components/schemas/Capability"
+          },
+          "nozzle_layout": {
+            "$ref": "#/components/schemas/NozzleLayout"
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "CoolingFan": {
+        "type": "object",
+        "required": [
+          "kind",
+          "speed_percent"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/CoolingFanKind"
+          },
+          "speed_percent": {
+            "type": "integer"
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "CoolingSystem": {
+        "type": "object",
+        "required": [
+          "fans"
+        ],
+        "properties": {
+          "mode": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CoolingMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CoolingFan"
+            }
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "AmsTray": {
+        "type": "object",
+        "properties": {
+          "tray_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "multi_color": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "filament_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "setting_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "remaining_estimate": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "k_value": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "toolhead": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "global_tray_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "exists": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "AmsUnit": {
+        "type": "object",
+        "properties": {
+          "unit_id": {
+            "type": "string"
+          },
+          "unit_kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "humidity": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "humidity_level": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "temperature_celsius": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dry_status": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dry_time_minutes": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "toolhead": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trays": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AmsTray"
+            }
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "ExternalSpool": {
+        "type": "object",
+        "properties": {
+          "external_id": {
+            "type": "string"
+          },
+          "tray_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "multi_color": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "filament_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "setting_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "remaining_estimate": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "k_value": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "toolhead": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "global_tray_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "exists": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "ActiveTray": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "ams_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tray_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "global_tray_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "external_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "PrinterMaterials": {
+        "type": "object",
+        "required": [
+          "ams_units",
+          "external_spools",
+          "active_tray",
+          "observed_at"
+        ],
+        "properties": {
+          "filament_switch_installed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "cfg": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "aux": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ams_units": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AmsUnit"
+            }
+          },
+          "external_spools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExternalSpool"
+            }
+          },
+          "active_tray": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ActiveTray"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observed_at": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "NozzleInfo": {
+        "type": "object",
+        "required": [
+          "id",
+          "diameter",
+          "type"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "diameter": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string"
+          },
+          "stat": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "fila_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "wear": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "p_t": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "color_m": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "NozzleRack": {
+        "type": "object",
+        "required": [
+          "info"
+        ],
+        "properties": {
+          "exist": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "state": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "src_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tar_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "info": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NozzleInfo"
+            }
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "NozzleHolder": {
+        "type": "object",
+        "properties": {
+          "stat": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pos": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "info": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "NozzleSystem": {
+        "type": "object",
+        "required": [
+          "nozzle"
+        ],
+        "properties": {
+          "nozzle": {
+            "$ref": "#/components/schemas/NozzleRack"
+          },
+          "holder": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NozzleHolder"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "Hms": {
+        "type": "object",
+        "required": [
+          "attr",
+          "code"
+        ],
+        "properties": {
+          "attr": {
+            "type": "integer"
+          },
+          "code": {
+            "type": "integer"
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "PrinterPrint": {
+        "type": "object",
+        "required": [
+          "task_generation",
+          "error_generation",
+          "hms",
+          "job_state",
+          "gcode_state",
+          "task_id",
+          "subtask_id",
+          "subtask_name",
+          "gcode_file",
+          "progress_percent",
+          "speed_level",
+          "remaining_time_minutes",
+          "current_layer",
+          "total_layers",
+          "print_error",
+          "printer_job_id"
+        ],
+        "properties": {
+          "task_generation": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error_generation": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "hms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Hms"
+            }
+          },
+          "job_state": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "gcode_state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "task_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subtask_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subtask_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gcode_file": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "progress_percent": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "speed_level": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "remaining_time_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "current_layer": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "total_layers": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "print_error": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "printer_job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "Printer": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "agent_id",
+          "serial_number",
+          "name",
+          "model",
+          "status",
+          "last_seen_at",
+          "created_at",
+          "materials"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "serial_number": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compatibility": {
+            "$ref": "#/components/schemas/PrinterCompatibility"
+          },
+          "status": {
+            "type": "string"
+          },
+          "last_seen_at": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "nozzle_temperatures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PrinterNozzleTemperature"
+            }
+          },
+          "active_nozzle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bed_temperature_celsius": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bed_target_temperature_celsius": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "chamber_temperature_celsius": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "chamber_target_temperature_celsius": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "chamber_light_on": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "cooling_system": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CoolingSystem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "materials": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrinterMaterials"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nozzle_system": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NozzleSystem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "print": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrinterPrint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "PrinterList": {
+        "type": "object",
+        "required": [
+          "printers"
+        ],
+        "properties": {
+          "printers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Printer"
+            }
+          }
+        },
+        "x-typescript-group": "printer"
+      },
+      "ArtifactFilament": {
+        "type": "object",
+        "required": [
+          "filament_id",
+          "filament_type",
+          "color",
+          "used_grams",
+          "used_meters"
+        ],
+        "properties": {
+          "filament_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tray_info_idx": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nozzle_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "filament_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "used_grams": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "used_meters": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "ArtifactPlate": {
+        "type": "object",
+        "required": [
+          "plate_id",
+          "name",
+          "estimated_time_seconds",
+          "filament_weight_grams",
+          "object_count",
+          "objects",
+          "filaments",
+          "has_thumbnail"
+        ],
+        "properties": {
+          "plate_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "estimated_time_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "filament_weight_grams": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "object_count": {
+            "type": "integer"
+          },
+          "objects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "filaments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactFilament"
+            }
+          },
+          "has_thumbnail": {
+            "type": "boolean"
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "ArtifactMetadata": {
+        "type": "object",
+        "required": [
+          "source",
+          "display_name",
+          "default_plate_id",
+          "plate_count",
+          "plates",
+          "warnings"
+        ],
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "default_plate_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "plate_count": {
+            "type": "integer"
+          },
+          "plates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactPlate"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "ArtifactMetadataPreviewResponse": {
+        "type": "object",
+        "required": [
+          "metadata"
+        ],
+        "properties": {
+          "metadata": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "JobPrint": {
+        "type": "object",
+        "required": [
+          "status",
+          "printer_state",
+          "progress_percent",
+          "remaining_time_minutes",
+          "current_layer",
+          "total_layers",
+          "active_file",
+          "last_progress_percent",
+          "last_layer",
+          "error",
+          "started_at",
+          "finished_at",
+          "updated_at"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PrintStatus"
+          },
+          "printer_state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "progress_percent": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "remaining_time_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "current_layer": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "total_layers": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "active_file": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_progress_percent": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "last_layer": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "JobCommand": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CommandStatus"
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "JobArtifact": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "filename",
+          "content_type",
+          "size_bytes",
+          "metadata",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "AmsMapping2": {
+        "type": "object",
+        "required": [
+          "ams_id",
+          "slot_id"
+        ],
+        "properties": {
+          "ams_id": {
+            "type": "integer"
+          },
+          "slot_id": {
+            "type": "integer"
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "AmsMappingInfo": {
+        "type": "object",
+        "required": [
+          "ams",
+          "targetColor",
+          "filamentId",
+          "filamentType",
+          "nozzleId",
+          "sourceColor"
+        ],
+        "properties": {
+          "ams": {
+            "type": "integer"
+          },
+          "targetColor": {
+            "type": "string"
+          },
+          "filamentId": {
+            "type": "string"
+          },
+          "filamentType": {
+            "type": "string"
+          },
+          "nozzleId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sourceColor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "FilamentUsage": {
+        "type": "object",
+        "required": [
+          "slot_index",
+          "source",
+          "ams_id",
+          "tray_id",
+          "global_tray_id",
+          "external_id",
+          "filament_id",
+          "setting_id",
+          "filament_type",
+          "color",
+          "used_mm",
+          "used_grams",
+          "confidence"
+        ],
+        "properties": {
+          "slot_index": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "ams_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tray_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "global_tray_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "external_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filament_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "setting_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filament_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "used_mm": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "used_grams": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confidence": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "JobMaterial": {
+        "type": "object",
+        "required": [
+          "ams_mapping",
+          "ams_mapping2",
+          "ams_mapping_info",
+          "filament_usage"
+        ],
+        "properties": {
+          "ams_mapping": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer"
+            }
+          },
+          "ams_mapping2": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AmsMapping2"
+            }
+          },
+          "ams_mapping_info": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AmsMappingInfo"
+            }
+          },
+          "filament_usage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilamentUsage"
+            }
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "Job": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "printer_id",
+          "agent_id",
+          "artifact_id",
+          "command_id",
+          "status",
+          "error",
+          "created_at",
+          "updated_at",
+          "print",
+          "command",
+          "artifact",
+          "material"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "printer_id": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "artifact_id": {
+            "type": "string"
+          },
+          "command_id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "print": {
+            "$ref": "#/components/schemas/JobPrint"
+          },
+          "command": {
+            "$ref": "#/components/schemas/JobCommand"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/JobArtifact"
+          },
+          "material": {
+            "$ref": "#/components/schemas/JobMaterial"
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "JobList": {
+        "type": "object",
+        "required": [
+          "jobs"
+        ],
+        "properties": {
+          "jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            }
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "User": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "email",
+          "display_name",
+          "role",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "admin"
+      },
+      "UserIdentity": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "user_id",
+          "provider",
+          "subject",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "admin"
+      },
+      "UserList": {
+        "type": "object",
+        "required": [
+          "users",
+          "identities"
+        ],
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/User"
+            }
+          },
+          "identities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserIdentity"
+            }
+          }
+        },
+        "x-typescript-group": "admin"
+      },
+      "JoinLink": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "role",
+          "email_constraint",
+          "expires_at",
+          "max_uses",
+          "used_count",
+          "created_by_user_id",
+          "revoked_at",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "email_constraint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "max_uses": {
+            "type": "integer"
+          },
+          "used_count": {
+            "type": "integer"
+          },
+          "created_by_user_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "admin"
+      },
+      "JoinLinkList": {
+        "type": "object",
+        "required": [
+          "join_links"
+        ],
+        "properties": {
+          "join_links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JoinLink"
+            }
+          }
+        },
+        "x-typescript-group": "admin"
+      },
+      "TenantToken": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "scopes",
+          "created_by_user_id",
+          "created_at",
+          "last_used_at",
+          "expires_at",
+          "revoked_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_by_user_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "x-typescript-group": "admin"
+      },
+      "TenantTokenList": {
+        "type": "object",
+        "required": [
+          "tenant_tokens"
+        ],
+        "properties": {
+          "tenant_tokens": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TenantToken"
+            }
+          }
+        },
+        "x-typescript-group": "admin"
+      },
+      "TenantTokenSecretResponse": {
+        "type": "object",
+        "required": [
+          "tenant_token",
+          "token"
+        ],
+        "properties": {
+          "tenant_token": {
+            "$ref": "#/components/schemas/TenantToken"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "admin"
+      },
+      "JoinLinkSecretResponse": {
+        "type": "object",
+        "required": [
+          "join_link",
+          "token"
+        ],
+        "properties": {
+          "join_link": {
+            "$ref": "#/components/schemas/JoinLink"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "admin"
+      },
+      "AuditEvent": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "actor_type",
+          "user_id",
+          "action",
+          "target_type",
+          "target_id",
+          "metadata",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "actor_type": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "action": {
+            "type": "string"
+          },
+          "target_type": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "admin"
+      },
+      "AuditEventList": {
+        "type": "object",
+        "required": [
+          "audit_events"
+        ],
+        "properties": {
+          "audit_events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            }
+          }
+        },
+        "x-typescript-group": "admin"
+      },
+      "RotatedTenantTokenSecretResponse": {
+        "type": "object",
+        "required": [
+          "tenant_token",
+          "token",
+          "rotated_from_token_id"
+        ],
+        "properties": {
+          "tenant_token": {
+            "$ref": "#/components/schemas/TenantToken"
+          },
+          "token": {
+            "type": "string"
+          },
+          "rotated_from_token_id": {
+            "type": "string"
+          }
+        },
+        "x-typescript-group": "admin"
+      },
+      "CreatedTenantResponse": {
+        "type": "object",
+        "required": [
+          "tenant",
+          "membership"
+        ],
+        "properties": {
+          "tenant": {
+            "$ref": "#/components/schemas/Tenant"
+          },
+          "membership": {
+            "$ref": "#/components/schemas/TenantMembership"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "AcceptedMembership": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "role",
+          "created"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "created": {
+            "type": "boolean"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "AcceptedJoinLinkResponse": {
+        "type": "object",
+        "required": [
+          "tenant",
+          "membership",
+          "created"
+        ],
+        "properties": {
+          "tenant": {
+            "$ref": "#/components/schemas/Tenant"
+          },
+          "membership": {
+            "$ref": "#/components/schemas/AcceptedMembership"
+          },
+          "created": {
+            "type": "boolean"
+          }
+        },
+        "x-typescript-group": "core"
+      },
+      "RecoveryReasonRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "ReprintJobRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "printer_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plate_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "use_ams": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "bed_leveling": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "auto_bed_leveling": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  0,
+                  1,
+                  2
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "flow_cali": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "auto_flow_cali": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  0,
+                  1,
+                  2
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "auto_offset_cali": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  0,
+                  1,
+                  2
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timelapse": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "ams_mapping": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ams_mapping2": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AmsMapping2"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ams_mapping_info": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AmsMappingInfo"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "x-typescript-group": "job"
+      },
+      "MobileTicketExchangeRequest": {
+        "type": "object",
+        "required": [
+          "ticket",
+          "code_verifier"
+        ],
+        "properties": {
+          "ticket": {
+            "type": "string"
+          },
+          "code_verifier": {
+            "type": "string"
+          }
+        },
+        "x-kotlin-name": "MobileTicketExchangeRequest",
+        "x-typescript-group": "core"
+      },
+      "MobileAuthProfile": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "user_name",
+          "tenant_id",
+          "tenant_name"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "user_name": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "tenant_name": {
+            "type": "string"
+          }
+        },
+        "x-kotlin-name": "MobileAuthProfileDto",
+        "x-typescript-group": "core"
+      },
+      "MobileTicketExchangeResponse": {
+        "type": "object",
+        "required": [
+          "token",
+          "expires_at",
+          "profile"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/MobileAuthProfile"
+          }
+        },
+        "x-kotlin-name": "MobileTicketExchangeResponse",
+        "x-typescript-group": "core"
+      },
+      "PrinterAxis": {
+        "type": "string",
+        "enum": [
+          "x",
+          "y",
+          "z"
+        ],
+        "x-kotlin-name": "PrinterAxisRequest",
+        "x-typescript-group": "core"
+      },
+      "PrinterAxisMovement": {
+        "type": "object",
+        "required": [
+          "axis",
+          "delta_mm"
+        ],
+        "properties": {
+          "axis": {
+            "$ref": "#/components/schemas/PrinterAxis"
+          },
+          "delta_mm": {
+            "type": "number"
+          }
+        },
+        "x-kotlin-name": "PrinterAxisMovementRequest",
+        "x-typescript-group": "core"
+      },
+      "PrinterControlRequest": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "light_on": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "axes": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PrinterAxis"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "movements": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PrinterAxisMovement"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "feedrate_mm_per_min": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "speed_mode": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "fan_index": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "speed_percent": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "airduct": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "temperature_celsius": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "wait": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "ams_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "slot_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "global_tray_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "external_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_hours": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "filament": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rotate_tray": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "holder_action": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "nozzle_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "extruder_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "error_action": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrintErrorAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error_generation": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "required_device_features": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RequiredDeviceFeature"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "x-kotlin-name": "PrinterControlRequest",
+        "x-typescript-group": "core",
+        "additionalProperties": false
+      },
+      "PrintErrorAction": {
+        "type": "string",
+        "enum": [
+          "resume",
+          "ignore",
+          "stop"
+        ],
+        "x-typescript-group": "core"
+      },
+      "RequiredDeviceFeature": {
+        "type": "string",
+        "enum": [
+          "bambu_mqtt_homing",
+          "bambu_mqtt_axis_control"
+        ],
+        "x-typescript-group": "core"
+      }
+    }
+  }
+}

@@ -46,10 +46,12 @@ class PrinterEventsDecoderTest {
     @Test fun decodes_job_progress_event() {
         val json = """
         {"type":"job_progress","job":{
-          "id":"j1","printer_id":"p1","agent_id":"a1","artifact_id":"art1","command_id":"c1",
-          "status":"dispatched","created_at":"a","updated_at":"b",
+          "id":"j1","tenant_id":"t1","printer_id":"p1","agent_id":"a1","artifact_id":"art1","command_id":"c1",
+          "status":"acknowledged","created_at":"a","updated_at":"b",
           "print":{"status":"running","progress_percent":10},
-          "artifact":{"id":"art1","tenant_id":"t1","filename":"f.3mf","content_type":"model/3mf","size_bytes":1,"created_at":"c"}}}
+          "command":{"id":"c1","kind":"print_project_file","status":"acknowledged"},
+          "artifact":{"id":"art1","tenant_id":"t1","filename":"f.3mf","content_type":"model/3mf","size_bytes":1,"created_at":"c"},
+          "material":{"ams_mapping":null,"ams_mapping2":null,"ams_mapping_info":null,"filament_usage":[]}}}
         """.trimIndent()
 
         val event = appJson.decodeFromString<PrinterEventDto>(json)
@@ -61,7 +63,7 @@ class PrinterEventsDecoderTest {
         val json = """
         {"type":"command_result","command":{
           "id":"c1","tenant_id":"t1","agent_id":"a1","printer_id":"p1","kind":"printer_operation",
-          "status":"completed","payload_json":"{}","created_at":"a","updated_at":"b"}}
+          "status":"succeeded","payload_json":"{}","created_at":"a","updated_at":"b"}}
         """.trimIndent()
 
         val event = appJson.decodeFromString<PrinterEventDto>(json)

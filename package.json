@@ -18,6 +18,8 @@
     }
   },
   "scripts": {
+    "generate:hub-clients": "node scripts/generate-hub-clients.mjs",
+    "check:hub-clients": "node scripts/generate-hub-clients.mjs --check",
     "build:plugin-local": "npm run build --workspace pandar-plugin-local",
     "build:web": "npm run build:plugin-local && npm run build --workspace pandar-web",
     "build:auth": "npm run build --workspace pandar-auth",
@@ -63,6 +65,7 @@
     "eslint": "9.39.5",
     "eslint-config-next": "16.2.11",
     "jsdom": "29.1.1",
+    "prettier": "3.9.6",
     "shadcn": "4.14.1",
     "tailwindcss": "4.3.1",
     "typescript": "5.9.3",

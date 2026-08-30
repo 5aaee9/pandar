@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { parseCommandResult } from "./command-result-parser";
+import type { Command } from "./dashboard-types";
 
-const baseCommand = {
+const baseCommand: Omit<Command, "kind" | "result_json"> = {
   id: "cmd1",
   tenant_id: "tenant1",
   agent_id: "agent1",

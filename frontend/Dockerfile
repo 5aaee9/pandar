@@ -17,6 +17,7 @@ COPY --from=deps /app/frontend/package.json ./frontend/package.json
 COPY --from=deps /app/frontend/auth/package.json ./frontend/auth/package.json
 COPY --from=deps /app/frontend/plugin-local/package.json ./frontend/plugin-local/package.json
 COPY frontend ./frontend
+COPY contracts ./contracts
 RUN npm run build:web
 
 FROM node:24-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS runner

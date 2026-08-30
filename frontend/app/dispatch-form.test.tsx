@@ -215,8 +215,10 @@ describe("DispatchForm", () => {
         content_type: "model/3mf",
         size_bytes: 42,
         metadata: {
+          source: "3mf",
           display_name: "Benchy",
           default_plate_id: 2,
+          plate_count: 1,
           warnings: [],
           plates: [{
             plate_id: 2,
@@ -339,8 +341,10 @@ describe("DispatchForm", () => {
     resolvePreview(
       Response.json({
         metadata: {
+          source: "3mf",
           display_name: "project",
           default_plate_id: 7,
+          plate_count: 2,
           warnings: [],
           plates: [
             {
@@ -395,8 +399,10 @@ describe("DispatchForm", () => {
         if (String(input).includes("artifact-metadata-preview")) {
           return Response.json({
             metadata: {
+              source: "3mf",
               display_name: "benchy",
               default_plate_id: 1,
+              plate_count: 1,
               warnings: [],
               plates: [{
                 plate_id: 1,

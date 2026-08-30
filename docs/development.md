@@ -94,6 +94,8 @@ not part of automated tests because it opens real printer sockets.
 
 ## Hub APIs
 
+The client-facing machine-readable contract is `contracts/hub-client.openapi.json` and is served publicly at `GET /api/v1/openapi.json`. Edit that contract rather than generated models, then run `npm run generate:hub-clients`. The generator writes split TypeScript wire types under `frontend/app/generated/` and Kotlin serialization DTOs under `mobile/android/app/src/main/kotlin/zip/iptables/pandar/android/data/remote/dto/`; `npm run check:hub-clients` fails when either target is stale. Web response reads cross `decodeHubResponse()` instead of unchecked `response.json()` casts, while Android maps generated DTO/status enums into its domain model.
+
 Printer inventory and live events:
 
 - `GET /api/v1/tenants/{tenant_id}/printers` lists the latest printers reported for a tenant.

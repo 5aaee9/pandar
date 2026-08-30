@@ -3,12 +3,16 @@ import { cookies } from "next/headers";
 
 import { apiHeaders, authSource } from "./api-auth";
 import { authProviderConfig } from "./auth-provider";
+import { decodeHubResponse } from "./hub-contract";
+import type {
+  HubSchemaMap,
+  HubSchemaName,
+} from "./generated/hub-api-schema-map";
 import { TENANT_COOKIE } from "./tenant-cookie";
 import type {
   FetchResult,
   MeResponse,
   Tenant,
-  TenantList,
 } from "./dashboard-types";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
@@ -20,7 +24,7 @@ export const getTenantsForRequest = cache(async () => {
   if (configuredTenantId || useExternalOnboarding) {
     return { tenants: [], error: null };
   }
-  const result = await fetchJson<TenantList>("/api/v1/tenants", "Tenants");
+  const result = await fetchJson("TenantList", "/api/v1/tenants", "Tenants");
   return { tenants: result.data?.tenants ?? [], error: result.error };
 });
 
@@ -29,7 +33,7 @@ export const getIdentityForRequest = cache(async () => {
   if (auth.provider === "none") {
     return { me: null, error: null, status: null };
   }
-  const result = await fetchJson<MeResponse>("/api/v1/me", "Current identity");
+  const result = await fetchJson("MeResponse", "/api/v1/me", "Current identity");
   return { me: result.data, error: result.error, status: result.status };
 });
 
@@ -152,10 +156,11 @@ export async function dashboardSidebarDefaultOpen() {
   return (await cookies()).get("sidebar_state")?.value !== "false";
 }
 
-async function fetchJson<T>(
+async function fetchJson<Name extends HubSchemaName>(
+  schemaName: Name,
   path: string,
   label: string,
-): Promise<FetchResult<T>> {
+): Promise<FetchResult<HubSchemaMap[Name]>> {
   try {
     const response = await fetch(`${apiUrl}${path}`, {
       cache: "no-store",
@@ -170,7 +175,7 @@ async function fetchJson<T>(
     }
 
     return {
-      data: (await response.json()) as T,
+      data: decodeHubResponse(schemaName, await response.json()),
       error: null,
       status: response.status,
     };

@@ -27,6 +27,7 @@ const tenant: Tenant = {
 function job(overrides: Partial<Job> = {}): Job {
   return {
     id: 'job-1',
+    tenant_id: tenant.id,
     printer_id: 'printer-1',
     agent_id: 'agent-1',
     artifact_id: 'artifact-1',
@@ -67,6 +68,7 @@ function job(overrides: Partial<Job> = {}): Job {
     material: {
       ams_mapping: null,
       ams_mapping2: null,
+      ams_mapping_info: null,
       filament_usage: [],
     },
     ...overrides,

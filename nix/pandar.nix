@@ -61,6 +61,8 @@
           || rel == "Cargo.lock"
           || rel == "Cargo.toml"
           || rel == "studio-abi-profiles.json"
+          || rel == "contracts"
+          || lib.hasPrefix "contracts/" rel
           || rel == "crates"
           || lib.hasPrefix "crates/" rel
           || rel == "docs"
@@ -222,6 +224,8 @@
           && (
             relativePath == "package.json"
             || relativePath == "package-lock.json"
+            || relativePath == "contracts"
+            || lib.hasPrefix "contracts/" relativePath
             || relativePath == "frontend"
             || lib.hasPrefix "frontend/" relativePath
           );
@@ -234,7 +238,7 @@
         src = frontendWorkspaceSource;
         npmWorkspace = "pandar-auth";
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-olh/SbyitQrQIltivAMyxRm7ZYD3ywjZMrM5fTMvKKI=";
+        npmDepsHash = "sha256-KgWmgnnruqrSfyfKZSbwJWpFH+mrI7Orr8Pwi0tI6ck=";
 
         nativeBuildInputs = [
           pkgs.makeWrapper
@@ -318,7 +322,7 @@
         version = "0.1.4";
         src = frontendWorkspaceSource;
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-olh/SbyitQrQIltivAMyxRm7ZYD3ywjZMrM5fTMvKKI=";
+        npmDepsHash = "sha256-KgWmgnnruqrSfyfKZSbwJWpFH+mrI7Orr8Pwi0tI6ck=";
         npmBuildScript = "build:web";
 
         nativeBuildInputs = [

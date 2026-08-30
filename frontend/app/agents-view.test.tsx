@@ -53,7 +53,11 @@ const agent = {
   created_at: "2026-06-30T00:00:00Z",
 };
 
-function command(id: string, kind: string, status = "succeeded"): Command {
+function command(
+  id: string,
+  kind: string,
+  status: Command["status"] = "succeeded",
+): Command {
   return {
     id,
     tenant_id: tenant.id,

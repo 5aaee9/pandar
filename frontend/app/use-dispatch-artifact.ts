@@ -2,13 +2,14 @@
 
 import { useRef, useState } from "react";
 
-import type { ArtifactMetadata, Job } from "./dashboard-types";
+import type { Job } from "./dashboard-types";
 import {
   maxArtifactBytes,
   type DispatchArtifactState,
   type MetadataPreviewState,
 } from "./dispatch-artifact-field";
 import { apiIdSegment } from "./api-path";
+import { decodeHubResponse } from "./hub-contract";
 
 export function useDispatchArtifact(
   selectedTenant: { id: string } | null,
@@ -54,9 +55,10 @@ export function useDispatchArtifact(
         setMetadataPreview({ state: "error", metadata: null });
         return;
       }
-      const body = (await response.json()) as {
-        metadata?: ArtifactMetadata | null;
-      };
+      const body = decodeHubResponse(
+        "ArtifactMetadataPreviewResponse",
+        await response.json(),
+      );
       if (isStale()) {
         return;
       }

@@ -13,6 +13,7 @@ import { apiIdSegment } from './api-path'
 import { isTerminalCommandStatus } from './command-status'
 import type { Agent, Command, Tenant } from './dashboard-types'
 import { EmptyState } from './dashboard-ui'
+import { decodeHubResponse } from './hub-contract'
 import { invalidateTenantResources, mutationResources } from './mutation-invalidation'
 
 const POLL_INTERVAL_MS = 2000
@@ -292,5 +293,5 @@ async function fetchLinkCommand(tenantId: string, commandId: string): Promise<Co
   if (!response.ok) {
     throw new Error(`Link command poll failed: ${response.status}`)
   }
-  return (await response.json()) as Command
+  return decodeHubResponse('Command', await response.json())
 }

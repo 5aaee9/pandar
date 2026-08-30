@@ -43,7 +43,7 @@ const agent: Agent = {
   created_at: "2026-06-30T00:00:00Z",
 };
 
-function discoveryCommand(status: string): Command {
+function discoveryCommand(status: Command["status"]): Command {
   return {
     id: "cmd-discovery",
     tenant_id: tenant.id,

@@ -293,6 +293,7 @@ describe("rotateTenantToken", () => {
             JSON.stringify({
               tenant_token: tenantToken,
               token: "pandar_tenant_rotated-secret",
+              rotated_from_token_id: "token-old",
             }),
             {
               status: 201,

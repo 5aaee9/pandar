@@ -2,6 +2,7 @@
 
 import { apiHeaders, requireAuth } from "./api-auth";
 import { apiIdSegment, isApiId } from "./api-path";
+import { decodeHubPayload } from "./hub-contract";
 import type { PlateMismatchAction } from "./plate-mismatch-actions";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
@@ -37,11 +38,13 @@ export async function handlePrintError(
       {
         method: "POST",
         headers: await apiHeaders("application/json"),
-        body: JSON.stringify({
-          action: "handle_print_error",
-          error_action: errorAction,
-          error_generation: errorGeneration,
-        }),
+        body: JSON.stringify(
+          decodeHubPayload("PrinterControlRequest", {
+            action: "handle_print_error",
+            error_action: errorAction,
+            error_generation: errorGeneration,
+          }),
+        ),
       },
     );
   } catch (cause) {

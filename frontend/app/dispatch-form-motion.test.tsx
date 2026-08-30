@@ -52,8 +52,10 @@ const printers = [
 ];
 
 const metadata = {
+  source: "3mf",
   display_name: "project",
   default_plate_id: 1,
+  plate_count: 2,
   warnings: [],
   plates: [1, 2].map((plateId) => ({
     plate_id: plateId,

@@ -2,40 +2,42 @@ import { queryOptions } from "@tanstack/react-query";
 
 import { apiIdSegment } from "./api-path";
 import { parseCommandResult } from "./command-result-parser";
+import { decodeHubResponse } from "./hub-contract";
+import type {
+  HubSchemaMap,
+  HubSchemaName,
+} from "./generated/hub-api-schema-map";
 import {
   DISCOVERY_COMMAND_KIND,
   isTerminalCommandStatus,
 } from "./command-status";
 import type {
   Agent,
-  AgentList,
   AuditEvent,
-  AuditEventList,
   Command,
   CommandResultData,
   DiscoveryResultData,
   Job,
-  JobList,
   JoinLink,
-  JoinLinkList,
   Printer,
-  PrinterList,
   TenantToken,
-  TenantTokenList,
   User,
   UserIdentity,
-  UserList,
 } from "./dashboard-types";
 
 // Browser reads cross the Hub proxy same-origin; never fetch the Hub directly.
-async function fetchRouteJson<T>(tenantId: string, path: string): Promise<T> {
+async function fetchRouteJson<Name extends HubSchemaName>(
+  tenantId: string,
+  path: string,
+  schemaName: Name,
+): Promise<HubSchemaMap[Name]> {
   const response = await fetch(
     `/api/tenants/${apiIdSegment(tenantId, "tenant_id")}${path}`,
   );
   if (!response.ok) {
     throw new Error(`Route data error: ${response.status}`);
   }
-  return response.json() as Promise<T>;
+  return decodeHubResponse(schemaName, await response.json());
 }
 
 /** Canonical tenant-scoped owners for mutable dashboard resources. */
@@ -67,7 +69,7 @@ export function printersResourceQuery(tenantId: string) {
   return queryOptions({
     queryKey: resourceDataKeys.printers(tenantId),
     queryFn: async (): Promise<Printer[]> =>
-      (await fetchRouteJson<PrinterList>(tenantId, "/printers")).printers,
+      (await fetchRouteJson(tenantId, "/printers", "PrinterList")).printers,
     staleTime: 10 * 1000,
     refetchInterval: 30 * 1000,
   });
@@ -77,7 +79,7 @@ export function agentsResourceQuery(tenantId: string) {
   return queryOptions({
     queryKey: resourceDataKeys.agents(tenantId),
     queryFn: async (): Promise<Agent[]> =>
-      (await fetchRouteJson<AgentList>(tenantId, "/agents")).agents,
+      (await fetchRouteJson(tenantId, "/agents", "AgentList")).agents,
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
   });
@@ -87,7 +89,7 @@ export function jobsResourceQuery(tenantId: string) {
   return queryOptions({
     queryKey: resourceDataKeys.jobs(tenantId),
     queryFn: async (): Promise<Job[]> =>
-      (await fetchRouteJson<JobList>(tenantId, "/jobs")).jobs,
+      (await fetchRouteJson(tenantId, "/jobs", "JobList")).jobs,
     staleTime: 10 * 1000,
     refetchInterval: 30 * 1000,
   });
@@ -97,7 +99,7 @@ export function usersResourceQuery(tenantId: string) {
   return queryOptions({
     queryKey: resourceDataKeys.users(tenantId),
     queryFn: async (): Promise<UsersResourceData> => {
-      const users = await fetchRouteJson<UserList>(tenantId, "/users");
+      const users = await fetchRouteJson(tenantId, "/users", "UserList");
       return { users: users.users, identities: users.identities };
     },
     staleTime: 60 * 1000,
@@ -108,7 +110,8 @@ export function joinLinksResourceQuery(tenantId: string) {
   return queryOptions({
     queryKey: resourceDataKeys.joinLinks(tenantId),
     queryFn: async (): Promise<JoinLink[]> =>
-      (await fetchRouteJson<JoinLinkList>(tenantId, "/join-links")).join_links,
+      (await fetchRouteJson(tenantId, "/join-links", "JoinLinkList"))
+        .join_links,
     staleTime: 60 * 1000,
   });
 }
@@ -117,7 +120,7 @@ export function tenantTokensResourceQuery(tenantId: string) {
   return queryOptions({
     queryKey: resourceDataKeys.tenantTokens(tenantId),
     queryFn: async (): Promise<TenantToken[]> =>
-      (await fetchRouteJson<TenantTokenList>(tenantId, "/tenant-tokens"))
+      (await fetchRouteJson(tenantId, "/tenant-tokens", "TenantTokenList"))
         .tenant_tokens,
     staleTime: 60 * 1000,
   });
@@ -127,7 +130,7 @@ export function auditEventsResourceQuery(tenantId: string) {
   return queryOptions({
     queryKey: resourceDataKeys.auditEvents(tenantId),
     queryFn: async (): Promise<AuditEvent[]> =>
-      (await fetchRouteJson<AuditEventList>(tenantId, "/audit-events"))
+      (await fetchRouteJson(tenantId, "/audit-events", "AuditEventList"))
         .audit_events,
     staleTime: 60 * 1000,
   });
@@ -194,15 +197,17 @@ export function agentsCommandRouteQuery(
     queryFn: async (): Promise<AgentsCommandRouteData> => {
       const [command, listedDiscoveryCommand] = await Promise.all([
         commandId
-          ? fetchRouteJson<Command>(
+          ? fetchRouteJson(
               tenantId,
               `/commands/${apiIdSegment(commandId, "command_id")}`,
+              "Command",
             )
           : Promise.resolve(null),
         discoveryId && discoveryId !== commandId
-          ? fetchRouteJson<Command>(
+          ? fetchRouteJson(
               tenantId,
               `/commands/${apiIdSegment(discoveryId, "command_id")}`,
+              "Command",
             )
           : Promise.resolve(null),
       ]);
