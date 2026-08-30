@@ -2,51 +2,39 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 import {
-  betterAuthCallbackRedirect,
+  betterAuthCallbackTarget,
   dashboardCallbackRedirectUrl,
+  decodePluginSignInReturnTarget,
   encodePluginSignInReturnTarget,
 } from "../../../app/auth/betterauth/callback-redirect.ts";
 
-const validToken = "header.payload.signature";
-const acceptsOnlyValidToken = (token) => token === validToken;
+const pluginTarget =
+  "/plugin-sign-in?redirect_url=http://localhost:13618/callback";
+const encodedPluginTarget = encodePluginSignInReturnTarget(pluginTarget);
 
-assert.deepEqual(
-  betterAuthCallbackRedirect(
-    `https://pandar.example/auth/betterauth/callback?token=${validToken}&return_to=${encodePluginSignInReturnTarget("/plugin-sign-in?redirect_url=http://localhost:13618/callback")}`,
-    acceptsOnlyValidToken,
+assert.equal(
+  betterAuthCallbackTarget(
+    `https://pandar.example/auth/betterauth/callback?return_to=${encodedPluginTarget}`,
   ),
-  {
-    ok: true,
-    token: validToken,
-    target: "/plugin-sign-in?redirect_url=http://localhost:13618/callback",
-    status: 303,
-  },
+  pluginTarget,
 );
+assert.equal(decodePluginSignInReturnTarget(encodedPluginTarget), pluginTarget);
 
 assert.equal(
   dashboardCallbackRedirectUrl(
     "/",
-    `https://0.0.0.0:3000/auth/betterauth/callback?token=${validToken}`,
+    "https://0.0.0.0:3000/auth/betterauth/callback",
     "https://pandar.example",
   ).toString(),
   "https://pandar.example/",
 );
-
 assert.equal(
   dashboardCallbackRedirectUrl(
     "/",
-    `https://0.0.0.0:3000/auth/betterauth/callback?token=${validToken}`,
+    "https://0.0.0.0:3000/auth/betterauth/callback",
     "",
   ).toString(),
   "https://0.0.0.0:3000/",
-);
-
-assert.deepEqual(
-  betterAuthCallbackRedirect(
-    `https://pandar.example/auth/betterauth/callback?token=%20${validToken}%20`,
-    acceptsOnlyValidToken,
-  ),
-  { ok: true, token: validToken, target: "/", status: 303 },
 );
 
 for (const returnTo of [
@@ -56,38 +44,16 @@ for (const returnTo of [
   "/plugin-sign-in#fragment",
   "/\\evil.example/plugin-sign-in",
 ]) {
-  assert.deepEqual(
-    betterAuthCallbackRedirect(
-      `https://pandar.example/auth/betterauth/callback?token=${validToken}&return_to=${encodePluginSignInReturnTarget(returnTo)}`,
-      acceptsOnlyValidToken,
+  assert.equal(
+    betterAuthCallbackTarget(
+      `https://pandar.example/auth/betterauth/callback?return_to=${encodePluginSignInReturnTarget(returnTo)}`,
     ),
-    { ok: true, token: validToken, target: "/", status: 303 },
+    "/",
   );
 }
-
-assert.deepEqual(
-  betterAuthCallbackRedirect(
-    "https://pandar.example/auth/betterauth/callback",
-    acceptsOnlyValidToken,
-  ),
-  { ok: false, body: "malformed token", status: 400 },
-);
-
-assert.deepEqual(
-  betterAuthCallbackRedirect(
-    "https://pandar.example/auth/betterauth/callback?token=%20%20",
-    () => true,
-  ),
-  { ok: false, body: "malformed token", status: 400 },
-);
-
-assert.deepEqual(
-  betterAuthCallbackRedirect(
-    "https://pandar.example/auth/betterauth/callback?token=bad-token",
-    acceptsOnlyValidToken,
-  ),
-  { ok: false, body: "malformed token", status: 400 },
-);
+for (const malformed of [null, "", "v1.", "v1.not+base64", "legacy-token"]) {
+  assert.equal(decodePluginSignInReturnTarget(malformed), null);
+}
 
 const routeSource = await readFile(
   new URL("../../../app/auth/betterauth/callback/route.ts", import.meta.url),
@@ -96,17 +62,29 @@ const routeSource = await readFile(
 
 assert.match(
   routeSource,
-  /betterAuthCallbackRedirect\(request\.url,\s*isAllowedDashboardJwt\)/s,
+  /export\s+async\s+function\s+POST\(request:\s*Request\)/,
+);
+assert.doesNotMatch(routeSource, /export\s+(?:async\s+)?function\s+GET/);
+assert.match(
+  routeSource,
+  /content-type[\s\S]*application\/x-www-form-urlencoded/,
+);
+assert.match(routeSource, /bodyBytes\s*>\s*maxCallbackBytes/);
+assert.match(routeSource, /form\.get\("token"\)/);
+assert.match(routeSource, /form\.get\("state"\)/);
+assert.match(routeSource, /cookieStore\.get\("pandar_auth_state"\)/);
+assert.match(routeSource, /sameState\(state, expectedState\)/);
+assert.match(routeSource, /isAllowedDashboardJwt\(token\)/);
+assert.match(
+  routeSource,
+  /dashboardCallbackRedirectUrl\(\s*betterAuthCallbackTarget\(request\.url\),\s*request\.url,?\s*\)/s,
 );
 assert.match(
   routeSource,
-  /NextResponse\.redirect\([\s\S]*dashboardCallbackRedirectUrl\(result\.target, request\.url\),[\s\S]*result\.status,[\s\S]*\)/,
+  /response\.cookies\.set\(readAuthCookieConfig\(\)\.name, token, authCookieOptions\(\)\)/,
 );
-assert.doesNotMatch(routeSource, /new URL\(result\.target, request\.url\)/);
-assert.match(
-  routeSource,
-  /response\.cookies\.set\(\s*readAuthCookieConfig\(\)\.name,\s*result\.token,\s*authCookieOptions\(\)/s,
-);
+assert.match(routeSource, /response\.cookies\.set\("pandar_auth_state", "",/);
+assert.match(routeSource, /timingSafeEqual\(actualBytes, expectedBytes\)/);
 assert.match(
   routeSource,
   /response\.headers\.set\("cache-control", "no-store"\)/,
@@ -115,11 +93,4 @@ assert.match(
   routeSource,
   /response\.headers\.set\("referrer-policy", "no-referrer"\)/,
 );
-assert.doesNotMatch(
-  routeSource,
-  /export\s+async\s+function\s+POST|export\s+function\s+POST/,
-);
-assert.doesNotMatch(
-  routeSource,
-  /callbackHtml|location\.hash|method:\s*"POST"|method:\s*'POST'/,
-);
+assert.doesNotMatch(routeSource, /searchParams\.get\("token"\)/);

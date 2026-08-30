@@ -81,6 +81,57 @@ jobs:
       - name: Audit Rust dependencies
         run: cargo install cargo-audit --locked && cargo audit
 
+  studio-contract-checks:
+    name: Pinned Bambu Studio contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Pandar
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Checkout pinned Bambu Studio source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: bambulab/BambuStudio
+          ref: 42d319c6692fa8e64790fddf0cdaafd2a4254bcc
+          path: reference/BambuStudio
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch every catalogued Studio commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            jq -r '.abi_series[].studio_commit' studio-abi-profiles.json
+            echo 42d319c6692fa8e64790fddf0cdaafd2a4254bcc
+          } | sort -u | while read -r commit; do
+            git -C reference/BambuStudio fetch --no-tags --depth=1 origin "$commit"
+          done
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Set up hestia cache
+        uses: Mic92/hestia@b21a1aaf8c3d5c2e430c9ba278c0f78abd46a320 # v3.0.0
+        with:
+          version: v3.0.0
+          upstream-cache-filter: true
+          no-closure: true
+
+      - name: Run pinned Studio contract binaries
+        run: >-
+          nix develop --command cargo nextest run
+          -p pandar-network-plugin
+          -E 'binary(studio_print_contract_red) | binary(studio_projection_contract) | binary(personal_presets)'
+          --no-tests=fail
+
   helm-chart:
     name: Helm chart
     runs-on: ubuntu-latest
@@ -150,6 +201,10 @@ jobs:
             .#checks.x86_64-linux.pandar-clippy \
             .#checks.x86_64-linux.pandar-module-size \
             .#checks.x86_64-linux.pandar-nextest \
+            .#checks.x86_64-linux.pandar-auth-migrate \
+            .#checks.x86_64-linux.pandar-auth-jwt-smoke \
+            .#checks.x86_64-linux.pandar-auth-cookie-smoke \
+            .#checks.x86_64-linux.pandar-web-auth-redirect-smoke \
             .#checks.x86_64-linux.pandar-nixos-module \
             .#checks.x86_64-linux.pandar-nixos-options-doc
 
