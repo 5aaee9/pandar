@@ -4,23 +4,26 @@ use sea_orm::{ConnectionTrait, Statement};
 use crate::db::Database;
 
 use super::{
-    ARTIFACT_SELECTION_SQL, DELETE_ARTIFACT_CANDIDATES_SQL, DELETE_JOBS_SQL,
-    DROP_ARTIFACT_CANDIDATES_SQL, postgres_sql,
+    CleanupSelection, postgres_sql, sql::DELETE_ARTIFACT_CANDIDATES_SQL,
+    sql::DROP_ARTIFACT_CANDIDATES_SQL,
 };
 
 pub(super) async fn cleanup_jobs_and_artifacts(
     database: &Database,
-    jobs_cutoff: &str,
+    jobs: &CleanupSelection<'_>,
+    artifacts: &CleanupSelection<'_>,
 ) -> anyhow::Result<()> {
     let tx = database
         .begin_write_transaction()
         .await
         .context("failed to begin job and artifact cleanup transaction")?;
     execute(&tx, DROP_ARTIFACT_CANDIDATES_SQL, &[]).await?;
-    let candidate_sql =
-        format!("CREATE TEMPORARY TABLE cleanup_artifact_candidates AS {ARTIFACT_SELECTION_SQL}");
-    execute(&tx, &candidate_sql, &[jobs_cutoff, jobs_cutoff]).await?;
-    execute(&tx, DELETE_JOBS_SQL, &[jobs_cutoff]).await?;
+    let candidate_sql = format!(
+        "CREATE TEMPORARY TABLE cleanup_artifact_candidates AS {}",
+        artifacts.sql
+    );
+    execute(&tx, &candidate_sql, &artifacts.binds).await?;
+    execute(&tx, &jobs.delete_sql(), &jobs.binds).await?;
     let deleted_paths =
         query_strings(&tx, DELETE_ARTIFACT_CANDIDATES_SQL, &[], "storage_path").await?;
     for storage_path in deleted_paths {

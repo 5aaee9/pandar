@@ -53,6 +53,9 @@ WHERE commands.updated_at < ?
       )
   )";
 
+pub(super) const MACHINE_EVENT_SELECTION_SQL: &str =
+    "SELECT id FROM machine_events WHERE created_at < ?";
+
 pub(super) const AUDIT_SELECTION_SQL: &str = "\
 SELECT audit_events.id
 FROM audit_events
@@ -107,18 +110,6 @@ FROM tenant_tokens
 WHERE (revoked_at IS NOT NULL AND revoked_at < ?)
    OR (expires_at IS NOT NULL AND expires_at < ?)";
 
-pub(super) const DELETE_JOBS_SQL: &str = "\
-DELETE FROM jobs
-WHERE id IN (
-  SELECT jobs.id
-  FROM jobs
-  JOIN commands ON commands.id = jobs.command_id
-  WHERE jobs.updated_at < ?
-    AND jobs.status IN ('succeeded', 'failed')
-    AND jobs.print_status IN ('stalled', 'completed', 'failed', 'cancelled', 'pending')
-    AND commands.status NOT IN ('queued', 'sent', 'acknowledged')
-)";
-
 pub(super) const DROP_ARTIFACT_CANDIDATES_SQL: &str =
     "DROP TABLE IF EXISTS cleanup_artifact_candidates";
 
@@ -129,46 +120,3 @@ WHERE id IN (SELECT id FROM cleanup_artifact_candidates)
     SELECT 1 FROM jobs retained WHERE retained.artifact_id = job_artifacts.id
   )
 RETURNING storage_path";
-
-pub(super) const DELETE_COMMANDS_SQL: &str = "\
-DELETE FROM commands
-WHERE id IN (
-  SELECT commands.id
-  FROM commands
-  WHERE commands.updated_at < ?
-    AND commands.status IN ('succeeded', 'failed')
-    AND NOT EXISTS (
-      SELECT 1
-      FROM jobs retained
-      WHERE retained.command_id = commands.id
-        AND NOT (
-          retained.updated_at < ?
-          AND retained.status IN ('succeeded', 'failed')
-          AND retained.print_status IN ('stalled', 'completed', 'failed', 'cancelled', 'pending')
-          AND commands.status NOT IN ('queued', 'sent', 'acknowledged')
-        )
-    )
-)";
-
-pub(super) const DELETE_AUDIT_SQL: &str = "\
-DELETE FROM audit_events
-WHERE id IN (";
-
-pub(super) const DELETE_PLUGIN_TICKETS_SQL: &str = "\
-DELETE FROM plugin_login_tickets
-WHERE id IN (
-  SELECT id
-  FROM plugin_login_tickets
-  WHERE (used_at IS NOT NULL AND used_at < ?)
-     OR (revoked_at IS NOT NULL AND revoked_at < ?)
-     OR (expires_at < ?)
-)";
-
-pub(super) const DELETE_TENANT_TOKENS_SQL: &str = "\
-DELETE FROM tenant_tokens
-WHERE id IN (
-  SELECT id
-  FROM tenant_tokens
-  WHERE (revoked_at IS NOT NULL AND revoked_at < ?)
-     OR (expires_at IS NOT NULL AND expires_at < ?)
-)";

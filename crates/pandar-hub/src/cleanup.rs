@@ -5,11 +5,12 @@ use crate::{artifacts::ArtifactStorage, db::Database};
 
 mod artifacts;
 mod options;
+mod plan;
 mod sql;
 
 use options::CleanupCutoffs;
 pub use options::{CleanupMode, CleanupOptions, CleanupSummary};
-use sql::*;
+use plan::{CleanupCategory, CleanupPlan, CleanupSelection};
 
 pub async fn cleanup_database(
     database: &Database,
@@ -17,66 +18,29 @@ pub async fn cleanup_database(
     options: CleanupOptions,
     mode: CleanupMode,
 ) -> anyhow::Result<CleanupSummary> {
-    let cutoffs = CleanupCutoffs::from_options(&options)?;
+    let plan = CleanupPlan::new(CleanupCutoffs::from_options(&options)?);
+    let jobs = plan.selection(CleanupCategory::Jobs);
+    let artifacts = plan.selection(CleanupCategory::Artifacts);
+    let commands = plan.selection(CleanupCategory::Commands);
+    let machine_events = plan.selection(CleanupCategory::MachineEvents);
+    let audit_events = plan.selection(CleanupCategory::AuditEvents);
+    let plugin_login_tickets = plan.selection(CleanupCategory::PluginLoginTickets);
+    let tenant_tokens = plan.selection(CleanupCategory::TenantTokens);
     let summary = CleanupSummary {
-        jobs: count(database, JOB_SELECTION_SQL, &[&cutoffs.jobs]).await?,
-        artifact_ids: strings(
-            database,
-            ARTIFACT_SELECTION_SQL,
-            &[&cutoffs.jobs, &cutoffs.jobs],
-        )
-        .await?,
-        artifact_storage_paths: artifact_strings(
-            database,
-            "storage_path",
-            &[&cutoffs.jobs, &cutoffs.jobs],
-        )
-        .await?,
-        artifact_bytes: artifact_bytes(database, &[&cutoffs.jobs, &cutoffs.jobs]).await?,
-        artifacts: artifact_count(database, &[&cutoffs.jobs, &cutoffs.jobs]).await?,
-        commands: count(
-            database,
-            COMMAND_SELECTION_SQL,
-            &[&cutoffs.commands, &cutoffs.commands],
-        )
-        .await?,
-        machine_events: count(
-            database,
-            "SELECT id FROM machine_events WHERE created_at < ?",
-            &[&cutoffs.machine_events],
-        )
-        .await?,
-        audit_events: count(
-            database,
-            AUDIT_SELECTION_SQL,
-            &[
-                &cutoffs.audit,
-                &cutoffs.jobs,
-                &cutoffs.commands,
-                &cutoffs.jobs,
-            ],
-        )
-        .await?,
-        plugin_login_tickets: count(
-            database,
-            PLUGIN_TICKET_SELECTION_SQL,
-            &[
-                &cutoffs.plugin_tickets,
-                &cutoffs.plugin_tickets,
-                &cutoffs.plugin_tickets,
-            ],
-        )
-        .await?,
-        tenant_tokens: count(
-            database,
-            TENANT_TOKEN_SELECTION_SQL,
-            &[&cutoffs.tenant_tokens, &cutoffs.tenant_tokens],
-        )
-        .await?,
+        jobs: count(database, &jobs).await?,
+        artifact_ids: strings(database, artifacts.sql, &artifacts.binds).await?,
+        artifact_storage_paths: artifact_strings(database, "storage_path", &artifacts).await?,
+        artifact_bytes: artifact_bytes(database, &artifacts).await?,
+        artifacts: count(database, &artifacts).await?,
+        commands: count(database, &commands).await?,
+        machine_events: count(database, &machine_events).await?,
+        audit_events: count(database, &audit_events).await?,
+        plugin_login_tickets: count(database, &plugin_login_tickets).await?,
+        tenant_tokens: count(database, &tenant_tokens).await?,
     };
 
     if mode == CleanupMode::Execute {
-        execute_cleanup(database, &cutoffs).await?;
+        execute_cleanup(database, &plan).await?;
         crate::artifacts::lifecycle::reap_expired_reservations(database).await?;
         if let Some(artifact_storage) = artifact_storage {
             crate::artifacts::lifecycle::drain_deletions(database, artifact_storage).await?;
@@ -86,53 +50,28 @@ pub async fn cleanup_database(
     Ok(summary)
 }
 
-async fn execute_cleanup(database: &Database, cutoffs: &CleanupCutoffs) -> anyhow::Result<()> {
-    artifacts::cleanup_jobs_and_artifacts(database, &cutoffs.jobs).await?;
+async fn execute_cleanup(database: &Database, plan: &CleanupPlan) -> anyhow::Result<()> {
+    let jobs = plan.selection(CleanupCategory::Jobs);
+    let artifacts = plan.selection(CleanupCategory::Artifacts);
+    artifacts::cleanup_jobs_and_artifacts(database, &jobs, &artifacts).await?;
 
-    delete_category(
-        database,
-        DELETE_COMMANDS_SQL,
-        &[&cutoffs.commands, &cutoffs.commands],
-        "command",
-    )
-    .await?;
-    delete_category(
-        database,
-        "DELETE FROM machine_events WHERE created_at < ?",
-        &[&cutoffs.machine_events],
-        "machine event",
-    )
-    .await?;
-    delete_category(
-        database,
-        &delete_from_selection(DELETE_AUDIT_SQL, AUDIT_SELECTION_SQL),
-        &[
-            &cutoffs.audit,
-            &cutoffs.jobs,
-            &cutoffs.commands,
-            &cutoffs.jobs,
-        ],
-        "audit event",
-    )
-    .await?;
-    delete_category(
-        database,
-        DELETE_PLUGIN_TICKETS_SQL,
-        &[
-            &cutoffs.plugin_tickets,
-            &cutoffs.plugin_tickets,
-            &cutoffs.plugin_tickets,
-        ],
-        "plugin login ticket",
-    )
-    .await?;
-    delete_category(
-        database,
-        DELETE_TENANT_TOKENS_SQL,
-        &[&cutoffs.tenant_tokens, &cutoffs.tenant_tokens],
-        "tenant token",
-    )
-    .await
+    for category in [
+        CleanupCategory::Commands,
+        CleanupCategory::MachineEvents,
+        CleanupCategory::AuditEvents,
+        CleanupCategory::PluginLoginTickets,
+        CleanupCategory::TenantTokens,
+    ] {
+        let selection = plan.selection(category);
+        delete_category(
+            database,
+            &selection.delete_sql(),
+            &selection.binds,
+            selection.label,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 async fn delete_category(
@@ -165,26 +104,26 @@ async fn delete_category(
     }
 }
 
-async fn count(database: &Database, selection_sql: &str, binds: &[&str]) -> anyhow::Result<i64> {
+async fn count(database: &Database, selection: &CleanupSelection<'_>) -> anyhow::Result<i64> {
     scalar(
         database,
-        &format!("SELECT COUNT(*) FROM ({selection_sql}) selected"),
-        binds,
+        &format!("SELECT COUNT(*) FROM ({}) selected", selection.sql),
+        &selection.binds,
     )
     .await
 }
 
-async fn artifact_count(database: &Database, binds: &[&str]) -> anyhow::Result<i64> {
-    count(database, ARTIFACT_SELECTION_SQL, binds).await
-}
-
-async fn artifact_bytes(database: &Database, binds: &[&str]) -> anyhow::Result<i64> {
+async fn artifact_bytes(
+    database: &Database,
+    selection: &CleanupSelection<'_>,
+) -> anyhow::Result<i64> {
     scalar(
         database,
         &format!(
-            "SELECT CAST(COALESCE(SUM(size_bytes), 0) AS BIGINT) FROM job_artifacts WHERE id IN ({ARTIFACT_SELECTION_SQL})"
+            "SELECT CAST(COALESCE(SUM(size_bytes), 0) AS BIGINT) FROM job_artifacts WHERE id IN ({})",
+            selection.sql
         ),
-        binds,
+        &selection.binds,
     )
     .await
 }
@@ -192,12 +131,15 @@ async fn artifact_bytes(database: &Database, binds: &[&str]) -> anyhow::Result<i
 async fn artifact_strings(
     database: &Database,
     column: &'static str,
-    binds: &[&str],
+    selection: &CleanupSelection<'_>,
 ) -> anyhow::Result<Vec<String>> {
     strings(
         database,
-        &format!("SELECT {column} FROM job_artifacts WHERE id IN ({ARTIFACT_SELECTION_SQL})"),
-        binds,
+        &format!(
+            "SELECT {column} FROM job_artifacts WHERE id IN ({})",
+            selection.sql
+        ),
+        &selection.binds,
     )
     .await
 }
@@ -292,8 +234,4 @@ fn postgres_sql(sql: &str) -> String {
             }
         })
         .collect()
-}
-
-fn delete_from_selection(prefix: &str, selection_sql: &str) -> String {
-    format!("{prefix}{selection_sql})")
 }
