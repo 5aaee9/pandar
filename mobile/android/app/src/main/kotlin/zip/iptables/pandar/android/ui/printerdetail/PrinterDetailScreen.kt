@@ -34,13 +34,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import zip.iptables.pandar.android.data.remote.dto.AmsLoadFilamentRequest
-import zip.iptables.pandar.android.data.remote.dto.AmsRereadRfidRequest
-import zip.iptables.pandar.android.data.remote.dto.AmsUnloadFilamentRequest
-import zip.iptables.pandar.android.data.remote.dto.PrinterAxis
 import zip.iptables.pandar.android.domain.model.AmsTray
 import zip.iptables.pandar.android.domain.model.Materials
 import zip.iptables.pandar.android.domain.model.Printer
+import zip.iptables.pandar.android.domain.model.PrinterAxis
+import zip.iptables.pandar.android.domain.model.PrinterControlIntent
 import zip.iptables.pandar.android.ui.components.StatusPill
 
 @Composable
@@ -56,9 +54,9 @@ fun PrinterDetailScreen(
     onSetHotend: (Int) -> Unit,
     onSetBed: (Int) -> Unit,
     onSetChamber: (Int) -> Unit,
-    onAmsLoad: (AmsLoadFilamentRequest) -> Unit,
-    onAmsUnload: (AmsUnloadFilamentRequest) -> Unit,
-    onAmsReread: (AmsRereadRfidRequest) -> Unit,
+    onAmsLoad: (PrinterControlIntent.AmsLoadFilament) -> Unit,
+    onAmsUnload: (PrinterControlIntent.AmsUnloadFilament) -> Unit,
+    onAmsReread: (PrinterControlIntent.AmsRereadRfid) -> Unit,
 ) {
     val printer = state.printer
     Scaffold { padding ->
@@ -202,9 +200,9 @@ private fun MaterialsSection(
     materials: Materials?,
     printer: Printer,
     state: PrinterDetailUiState,
-    onAmsLoad: (AmsLoadFilamentRequest) -> Unit,
-    onAmsUnload: (AmsUnloadFilamentRequest) -> Unit,
-    onAmsReread: (AmsRereadRfidRequest) -> Unit,
+    onAmsLoad: (PrinterControlIntent.AmsLoadFilament) -> Unit,
+    onAmsUnload: (PrinterControlIntent.AmsUnloadFilament) -> Unit,
+    onAmsReread: (PrinterControlIntent.AmsRereadRfid) -> Unit,
 ) {
     Column {
         Text("Materials", style = MaterialTheme.typography.titleMedium)
@@ -260,9 +258,9 @@ private fun AmsTrayRow(
     amsUnitId: String?,
     enabled: Boolean,
     active: Boolean,
-    onAmsLoad: (AmsLoadFilamentRequest) -> Unit,
-    onAmsUnload: (AmsUnloadFilamentRequest) -> Unit,
-    onAmsReread: (AmsRereadRfidRequest) -> Unit,
+    onAmsLoad: (PrinterControlIntent.AmsLoadFilament) -> Unit,
+    onAmsUnload: (PrinterControlIntent.AmsUnloadFilament) -> Unit,
+    onAmsReread: (PrinterControlIntent.AmsRereadRfid) -> Unit,
 ) {
     val amsId = amsUnitId?.toIntOrNull()
     val slotId = tray.trayId?.toIntOrNull()
@@ -281,9 +279,9 @@ private fun AmsTrayRow(
             if (active) ActiveLabel()
         }
         if (actionable) {
-            OutlinedButton(onClick = { onAmsLoad(AmsLoadFilamentRequest(amsId = amsId!!, slotId = slotId!!, globalTrayId = tray.globalTrayId)) }) { Text("Load") }
-            OutlinedButton(onClick = { onAmsUnload(AmsUnloadFilamentRequest(amsId = amsId!!, slotId = slotId!!, globalTrayId = tray.globalTrayId)) }) { Text("Unload") }
-            OutlinedButton(onClick = { onAmsReread(AmsRereadRfidRequest(amsId = amsId!!, slotId = slotId!!)) }) { Text("Reread") }
+            OutlinedButton(onClick = { onAmsLoad(PrinterControlIntent.AmsLoadFilament(amsId = amsId!!, slotId = slotId!!, globalTrayId = tray.globalTrayId)) }) { Text("Load") }
+            OutlinedButton(onClick = { onAmsUnload(PrinterControlIntent.AmsUnloadFilament(amsId = amsId!!, slotId = slotId!!, globalTrayId = tray.globalTrayId)) }) { Text("Unload") }
+            OutlinedButton(onClick = { onAmsReread(PrinterControlIntent.AmsRereadRfid(amsId = amsId!!, slotId = slotId!!)) }) { Text("Reread") }
         } else if (amsId == null || slotId == null) {
             Text("No slot id", style = MaterialTheme.typography.labelSmall)
         }

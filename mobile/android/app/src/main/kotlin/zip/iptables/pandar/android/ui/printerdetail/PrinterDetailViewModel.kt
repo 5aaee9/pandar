@@ -11,16 +11,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import zip.iptables.pandar.android.core.di.AppContainer
-import zip.iptables.pandar.android.data.remote.dto.AmsLoadFilamentRequest
-import zip.iptables.pandar.android.data.remote.dto.AmsRereadRfidRequest
-import zip.iptables.pandar.android.data.remote.dto.AmsUnloadFilamentRequest
-import zip.iptables.pandar.android.data.remote.dto.PrinterAxis
-import zip.iptables.pandar.android.data.remote.dto.SetBedTemperatureRequest
-import zip.iptables.pandar.android.data.remote.dto.SetChamberTemperatureRequest
-import zip.iptables.pandar.android.data.remote.dto.SetHotendTemperatureRequest
-import zip.iptables.pandar.android.data.remote.dto.moveAxisRequest
 import zip.iptables.pandar.android.domain.model.Command
 import zip.iptables.pandar.android.domain.model.Printer
+import zip.iptables.pandar.android.domain.model.PrinterAxis
+import zip.iptables.pandar.android.domain.model.PrinterControlIntent
+import zip.iptables.pandar.android.domain.model.moveAxisIntent
 
 data class PrinterDetailUiState(
     val loading: Boolean = true,
@@ -97,33 +92,29 @@ class PrinterDetailViewModel(
         }
     }
 
-    fun pause() = sendControl { container.pandar.pause(printerId) }
-    fun resume() = sendControl { container.pandar.resume(printerId) }
-    fun stop() = sendControl { container.pandar.stop(printerId) }
-    fun home() = sendControl { container.pandar.home(printerId) }
-    fun moveAxis(axis: PrinterAxis, deltaMm: Double) = sendControl {
-        container.pandar.moveAxes(printerId, moveAxisRequest(axis, deltaMm))
+    private fun control(intent: PrinterControlIntent) = sendControl {
+        container.pandar.control(printerId, intent)
     }
-    fun toggleLight() = sendControl { container.pandar.toggleLight(printerId) }
-    fun setChamberLight(on: Boolean) = sendControl {
-        container.pandar.setChamberLight(printerId, on)
-    }
-    fun setHotend(temperatureCelsius: Int, wait: Boolean, extruderId: Int?) = sendControl {
-        container.pandar.setHotendTemperature(printerId, SetHotendTemperatureRequest(temperatureCelsius = temperatureCelsius, wait = wait, extruderId = extruderId))
-    }
-    fun setBed(temperatureCelsius: Int, wait: Boolean) = sendControl {
-        container.pandar.setBedTemperature(printerId, SetBedTemperatureRequest(temperatureCelsius = temperatureCelsius, wait = wait))
-    }
-    fun setChamber(temperatureCelsius: Int, wait: Boolean) = sendControl {
-        container.pandar.setChamberTemperature(printerId, SetChamberTemperatureRequest(temperatureCelsius = temperatureCelsius, wait = wait))
-    }
-    fun amsReread(amsId: Int, slotId: Int) = sendControl {
-        container.pandar.amsRereadRfid(printerId, AmsRereadRfidRequest(amsId = amsId, slotId = slotId))
-    }
-    fun amsLoad(request: AmsLoadFilamentRequest) = sendControl {
-        container.pandar.amsLoadFilament(printerId, request)
-    }
-    fun amsUnload(request: AmsUnloadFilamentRequest) = sendControl {
-        container.pandar.amsUnloadFilament(printerId, request)
-    }
+
+    fun pause() = control(PrinterControlIntent.Pause)
+    fun resume() = control(PrinterControlIntent.Resume)
+    fun stop() = control(PrinterControlIntent.Stop)
+    fun home() = control(PrinterControlIntent.Home())
+    fun moveAxis(axis: PrinterAxis, deltaMm: Double) = control(moveAxisIntent(axis, deltaMm))
+    fun toggleLight() = control(PrinterControlIntent.ToggleLight)
+    fun setChamberLight(on: Boolean) = control(PrinterControlIntent.SetChamberLight(on))
+    fun setHotend(temperatureCelsius: Int, wait: Boolean, extruderId: Int?) = control(
+        PrinterControlIntent.SetHotendTemperature(temperatureCelsius, wait, extruderId),
+    )
+    fun setBed(temperatureCelsius: Int, wait: Boolean) = control(
+        PrinterControlIntent.SetBedTemperature(temperatureCelsius, wait),
+    )
+    fun setChamber(temperatureCelsius: Int, wait: Boolean) = control(
+        PrinterControlIntent.SetChamberTemperature(temperatureCelsius, wait),
+    )
+    fun amsReread(amsId: Int, slotId: Int) = control(
+        PrinterControlIntent.AmsRereadRfid(amsId, slotId),
+    )
+    fun amsLoad(intent: PrinterControlIntent.AmsLoadFilament) = control(intent)
+    fun amsUnload(intent: PrinterControlIntent.AmsUnloadFilament) = control(intent)
 }

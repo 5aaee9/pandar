@@ -23,12 +23,18 @@ type AmsSlotAction = 'ams_load_filament' | 'ams_unload_filament' | 'ams_reread_r
 
 export type PrinterTemperatureAction = 'set_bed_temperature' | 'set_chamber_temperature'
 export type PrinterSpeedMode = 1 | 2 | 3 | 4
+export type PrinterAxis = 'x' | 'y' | 'z'
+export type PrinterAxisMovement = { axis: PrinterAxis; deltaMm: number }
 
 export type PrinterControlIntent =
   | { action: 'home' | 'stop' | 'pause' | 'resume' }
   | { action: 'set_print_speed'; speedMode: PrinterSpeedMode }
   | { action: 'set_fan_speed'; fanIndex: 1 | 2 | 3; speedPercent: number; airduct: boolean }
-  | { action: 'move_axes'; axis: string; deltaMm: number; feedrateMmPerMin: number }
+  | {
+      action: 'move_axes'
+      movements: readonly [PrinterAxisMovement]
+      feedrateMmPerMin: number
+    }
   | { action: PrinterTemperatureAction; temperatureCelsius?: number }
   | { action: 'set_hotend_temperature'; extruderId: number | null; temperatureCelsius?: number }
   | { action: 'select_extruder'; extruderId: number }
@@ -80,14 +86,16 @@ function IntentFields({ intent }: { intent: PrinterControlIntent }) {
           <input name="airduct" type="hidden" value={String(intent.airduct)} />
         </>
       )
-    case 'move_axes':
+    case 'move_axes': {
+      const [movement] = intent.movements
       return (
         <>
-          <input name="axis" type="hidden" value={intent.axis} />
-          <input name="delta_mm" type="hidden" value={intent.deltaMm} />
+          <input name="axis" type="hidden" value={movement.axis} />
+          <input name="delta_mm" type="hidden" value={movement.deltaMm} />
           <input name="feedrate_mm_per_min" type="hidden" value={intent.feedrateMmPerMin} />
         </>
       )
+    }
     case 'set_bed_temperature':
     case 'set_chamber_temperature':
       return intent.temperatureCelsius !== undefined ? (

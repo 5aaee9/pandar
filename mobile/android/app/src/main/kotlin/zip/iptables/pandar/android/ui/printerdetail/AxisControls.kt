@@ -21,7 +21,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import zip.iptables.pandar.android.data.remote.dto.PrinterAxis
+import zip.iptables.pandar.android.domain.model.PrinterAxis
 
 @Composable
 internal fun AxisControls(

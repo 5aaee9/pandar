@@ -104,8 +104,7 @@ function AxisMoveButton({
         printer={printer}
         intent={{
           action: 'move_axes',
-          axis: axis.id,
-          deltaMm: distance,
+          movements: [{ axis: axis.id, deltaMm: distance }],
           feedrateMmPerMin: axis.feedrate,
         }}
       />
