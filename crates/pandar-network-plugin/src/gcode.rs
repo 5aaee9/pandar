@@ -1,11 +1,11 @@
-pub(super) use operation::{PrintErrorAction, PrinterOperation};
+pub(super) use pandar_core::{PrintErrorAction, PrinterOperation};
 
 mod operation;
 mod studio_axis;
 mod studio_json;
 
 use crate::{PluginHttpResult, result, stable_error_body};
-use operation::{Axis, AxisMovement};
+use pandar_core::{PrinterAxis, PrinterAxisMovement};
 
 const PARSE_OPERATION: i32 = 0;
 const PARSE_UNSUPPORTED: i32 = 1;
@@ -15,6 +15,16 @@ pub(crate) enum StudioOperationParse {
     Operation(PrinterOperation),
     Unsupported,
     InvalidNativeCandidate,
+}
+
+pub(super) fn operation_request_from_json(
+    body: &str,
+) -> Option<operation::PrinterOperationRequest> {
+    operation::parse_validated_request(body)
+}
+
+pub(crate) fn operation_request_json(operation: PrinterOperation) -> Option<String> {
+    operation::request_json(operation)
 }
 
 pub(super) fn operation_json_from_gcode(message: &str) -> StudioOperationParse {
@@ -64,7 +74,8 @@ impl StudioOperationParse {
             Self::Operation(operation) => result(
                 PARSE_OPERATION,
                 200,
-                serde_json::to_string(&operation).expect("printer operation is serializable"),
+                operation::request_json(operation)
+                    .expect("Studio parser emits a supported printer operation"),
             ),
             Self::Unsupported => result(
                 PARSE_UNSUPPORTED,
@@ -110,15 +121,15 @@ fn parse_home_operation(command: &str) -> Option<PrinterOperation> {
     let mut axes = Vec::new();
     for token in command.split_whitespace().skip(1) {
         let axis = match token.to_ascii_uppercase().as_str() {
-            "X" => Axis::X,
-            "Y" => Axis::Y,
-            "Z" => Axis::Z,
+            "X" => PrinterAxis::X,
+            "Y" => PrinterAxis::Y,
+            "Z" => PrinterAxis::Z,
             _ => return None,
         };
         axes.push(axis);
     }
     Some(PrinterOperation::Home {
-        axes: Some(axes),
+        axes,
         required_device_features: Vec::new(),
     })
 }
@@ -149,23 +160,23 @@ fn parse_temperature_operation(
     let celsius = parse_integer_gcode_value(celsius?)?;
     let operation = match operation {
         TemperatureOperation::Hotend => PrinterOperation::SetHotendTemperature {
-            temperature_celsius: celsius,
-            wait: Some(wait),
+            temperature_celsius: u16::try_from(celsius).ok()?,
+            wait,
             extruder_id: match extruder_id {
                 Some(value) => Some(parse_integer_gcode_value(value)?),
                 None => None,
             },
         },
         TemperatureOperation::Bed => PrinterOperation::SetBedTemperature {
-            temperature_celsius: celsius,
-            wait: Some(wait),
+            temperature_celsius: u16::try_from(celsius).ok()?,
+            wait,
         },
         TemperatureOperation::Chamber => PrinterOperation::SetChamberTemperature {
-            temperature_celsius: celsius,
-            wait: Some(wait),
+            temperature_celsius: u16::try_from(celsius).ok()?,
+            wait,
         },
     };
-    operation.is_valid().then_some(operation)
+    operation.validate().is_ok().then_some(operation)
 }
 
 fn parse_move_axes_operation(command: &str) -> Option<PrinterOperation> {
@@ -181,11 +192,11 @@ fn parse_move_axes_operation(command: &str) -> Option<PrinterOperation> {
         let value = parse_gcode_number(chars.as_str())?;
         match parameter {
             'X' | 'Y' | 'Z'
-                if !movements.iter().any(|movement: &AxisMovement| {
+                if !movements.iter().any(|movement: &PrinterAxisMovement| {
                     movement.axis == axis_from_parameter(parameter)
                 }) =>
             {
-                movements.push(AxisMovement {
+                movements.push(PrinterAxisMovement {
                     axis: axis_from_parameter(parameter),
                     delta_mm: value,
                 });
@@ -206,7 +217,7 @@ fn parse_move_axes_operation(command: &str) -> Option<PrinterOperation> {
         },
         required_device_features: Vec::new(),
     };
-    operation.is_valid().then_some(operation)
+    operation.validate().is_ok().then_some(operation)
 }
 
 fn command_code(command: &str) -> Option<&str> {
@@ -251,15 +262,15 @@ fn parse_gcode_number(value: &str) -> Option<f64> {
         .filter(|value| value.is_finite())
 }
 
-fn parse_integer_gcode_value(value: f64) -> Option<u64> {
-    (value >= 0.0 && value.fract() == 0.0 && value <= u32::MAX as f64).then_some(value as u64)
+fn parse_integer_gcode_value(value: f64) -> Option<u32> {
+    (value >= 0.0 && value.fract() == 0.0 && value <= u32::MAX as f64).then_some(value as u32)
 }
 
-fn axis_from_parameter(parameter: char) -> Axis {
+fn axis_from_parameter(parameter: char) -> PrinterAxis {
     match parameter {
-        'X' => Axis::X,
-        'Y' => Axis::Y,
-        'Z' => Axis::Z,
+        'X' => PrinterAxis::X,
+        'Y' => PrinterAxis::Y,
+        'Z' => PrinterAxis::Z,
         _ => unreachable!("axis parameter is matched before conversion"),
     }
 }

@@ -86,7 +86,6 @@ use serde::{Serialize, de::DeserializeOwned};
 
 pub(crate) use runtime::runtime;
 
-use gcode::PrinterOperation;
 use http::{
     AmsMapping, AmsMapping2, AmsMappingInfo, PrintSubmissionBody, calibration_mode, get_json,
     plugin_printer_operation_url, post_json, post_multipart_print,
@@ -266,7 +265,7 @@ pub(crate) fn submit_printer_operation_upstream(
     if printer_id.trim().is_empty() {
         return invalid_input("invalid_printer_id");
     }
-    let Some(operation) = PrinterOperation::from_json(operation_json) else {
+    let Some(operation) = gcode::operation_request_from_json(operation_json) else {
         return invalid_input("invalid_printer_operation");
     };
     let Some(url) = plugin_printer_operation_url(&hub_url, printer_id) else {

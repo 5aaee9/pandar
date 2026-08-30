@@ -3,7 +3,7 @@ use serde::Deserialize;
 use crate::{
     PluginHttpResult,
     firmware::{StudioFirmwareParse, parse_studio_firmware},
-    gcode::{StudioOperationParse, operation_json_from_gcode},
+    gcode::{StudioOperationParse, operation_json_from_gcode, operation_request_json},
     read_utf8, result, stable_error_body,
     studio_status::{StudioStatusRequest, parse_status_request},
 };
@@ -73,8 +73,8 @@ pub(crate) fn classify_studio_message(message: &str) -> StudioMessageRoute {
 
     match operation_json_from_gcode(message) {
         StudioOperationParse::Operation(operation) => StudioMessageRoute::Operation {
-            operation_json: serde_json::to_string(&operation)
-                .expect("printer operation is serializable"),
+            operation_json: operation_request_json(operation)
+                .expect("Studio parser emits a supported printer operation"),
         },
         StudioOperationParse::Unsupported | StudioOperationParse::InvalidNativeCandidate => {
             StudioMessageRoute::Invalid { kind: UNSUPPORTED }

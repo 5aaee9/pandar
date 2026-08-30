@@ -1,24 +1,11 @@
+use pandar_core::{
+    PrintErrorAction, PrinterAxis, PrinterAxisMovement, PrinterOperation, RequiredDeviceFeature,
+};
 use serde::{Deserialize, Serialize};
-
-const MAX_EXTRUDER_ID: u64 = 1;
-const MAX_HOTEND_TEMPERATURE_CELSIUS: u64 = 300;
-const MAX_BED_TEMPERATURE_CELSIUS: u64 = 120;
-const MAX_CHAMBER_TEMPERATURE_CELSIUS: u64 = 70;
-const MAX_AMS_ID: u64 = 255;
-const MAX_AMS_SLOT_ID: u64 = 255;
-const MAX_U32: u64 = u32::MAX as u64;
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum PrintErrorAction {
-    Resume,
-    Ignore,
-    Stop,
-}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
-pub(crate) enum PrinterOperation {
+pub(crate) enum PrinterOperationRequest {
     Pause,
     Resume,
     Stop,
@@ -36,178 +23,359 @@ pub(crate) enum PrinterOperation {
         light_on: bool,
     },
     SetPrintSpeed {
-        speed_mode: u64,
+        speed_mode: u8,
+    },
+    SetFanSpeed {
+        fan_index: u8,
+        speed_percent: u8,
+        airduct: bool,
     },
     SelectExtruder {
-        extruder_id: u64,
+        extruder_id: u32,
     },
     Home {
         #[serde(skip_serializing_if = "Option::is_none")]
-        axes: Option<Vec<Axis>>,
+        axes: Option<Vec<PrinterAxis>>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         required_device_features: Vec<RequiredDeviceFeature>,
     },
     MoveAxes {
-        movements: Vec<AxisMovement>,
+        movements: Vec<PrinterAxisMovement>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        feedrate_mm_per_min: Option<u64>,
+        feedrate_mm_per_min: Option<u32>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         required_device_features: Vec<RequiredDeviceFeature>,
     },
     SetHotendTemperature {
-        temperature_celsius: u64,
+        temperature_celsius: u16,
         #[serde(skip_serializing_if = "Option::is_none")]
         wait: Option<bool>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        extruder_id: Option<u64>,
+        extruder_id: Option<u32>,
     },
     SetBedTemperature {
-        temperature_celsius: u64,
+        temperature_celsius: u16,
         #[serde(skip_serializing_if = "Option::is_none")]
         wait: Option<bool>,
     },
     SetChamberTemperature {
-        temperature_celsius: u64,
+        temperature_celsius: u16,
         #[serde(skip_serializing_if = "Option::is_none")]
         wait: Option<bool>,
     },
     AmsRereadRfid {
-        ams_id: u64,
-        slot_id: u64,
+        ams_id: u32,
+        slot_id: u32,
     },
     AmsLoadFilament {
-        ams_id: u64,
-        slot_id: u64,
+        ams_id: u32,
+        slot_id: u32,
         #[serde(skip_serializing_if = "Option::is_none")]
-        global_tray_id: Option<u64>,
+        global_tray_id: Option<u32>,
         #[serde(skip_serializing_if = "Option::is_none")]
         external_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        extruder_id: Option<u64>,
+        extruder_id: Option<u32>,
     },
     AmsUnloadFilament {
-        ams_id: u64,
-        slot_id: u64,
+        ams_id: u32,
+        slot_id: u32,
         #[serde(skip_serializing_if = "Option::is_none")]
-        global_tray_id: Option<u64>,
+        global_tray_id: Option<u32>,
         #[serde(skip_serializing_if = "Option::is_none")]
         external_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        extruder_id: Option<u64>,
+        extruder_id: Option<u32>,
+    },
+    AmsStartDrying {
+        ams_id: u32,
+        temperature_celsius: u16,
+        duration_hours: u16,
+        filament: String,
+        rotate_tray: bool,
+    },
+    AmsStopDrying {
+        ams_id: u32,
+    },
+    NozzleHolderCtrl {
+        holder_action: u32,
+    },
+    NozzleInfoConfirm {
+        nozzle_id: u32,
+    },
+    HolderNozzleRefresh {
+        nozzle_id: u32,
     },
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum Axis {
-    X,
-    Y,
-    Z,
+pub(super) fn parse_validated_request(body: &str) -> Option<PrinterOperationRequest> {
+    let request = serde_json::from_str::<PrinterOperationRequest>(body).ok()?;
+    PrinterOperation::from(request.clone()).validate().ok()?;
+    Some(request)
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum RequiredDeviceFeature {
-    BambuMqttHoming,
-    BambuMqttAxisControl,
+pub(super) fn request_json(operation: PrinterOperation) -> Option<String> {
+    let request = PrinterOperationRequest::try_from(operation).ok()?;
+    Some(serde_json::to_string(&request).expect("printer operation request is serializable"))
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub(crate) struct AxisMovement {
-    pub(crate) axis: Axis,
-    pub(crate) delta_mm: f64,
-}
-
-impl PrinterOperation {
-    pub(crate) fn from_json(body: &str) -> Option<Self> {
-        serde_json::from_str::<Self>(body)
-            .ok()
-            .filter(Self::is_valid)
-    }
-
-    pub(super) fn is_valid(&self) -> bool {
-        match self {
-            Self::Pause | Self::Resume | Self::Stop | Self::ToggleLight => true,
-            Self::GcodeLine { .. } => true,
-            Self::HandlePrintError { print_error, .. } => {
-                (1..=i32::MAX as u32).contains(print_error)
+impl From<PrinterOperationRequest> for PrinterOperation {
+    fn from(value: PrinterOperationRequest) -> Self {
+        match value {
+            PrinterOperationRequest::Pause => Self::Pause {},
+            PrinterOperationRequest::Resume => Self::Resume {},
+            PrinterOperationRequest::Stop => Self::Stop {},
+            PrinterOperationRequest::GcodeLine { param } => Self::GcodeLine { param },
+            PrinterOperationRequest::HandlePrintError {
+                error_action,
+                print_error,
+                printer_job_id,
+                sequence_id,
+            } => Self::HandlePrintError {
+                error_action,
+                print_error,
+                printer_job_id,
+                sequence_id,
+            },
+            PrinterOperationRequest::ToggleLight => Self::ToggleLight {},
+            PrinterOperationRequest::SetChamberLight { light_on } => {
+                Self::SetChamberLight { on: light_on }
             }
-            Self::SetChamberLight { .. } => true,
-            Self::SetPrintSpeed { speed_mode } => (1..=4).contains(speed_mode),
-            Self::SelectExtruder { extruder_id } => in_range(*extruder_id, 0, MAX_EXTRUDER_ID),
-            Self::Home {
+            PrinterOperationRequest::SetPrintSpeed { speed_mode } => {
+                Self::SetPrintSpeed { speed_mode }
+            }
+            PrinterOperationRequest::SetFanSpeed {
+                fan_index,
+                speed_percent,
+                airduct,
+            } => Self::SetFanSpeed {
+                fan_index,
+                speed_percent,
+                airduct,
+            },
+            PrinterOperationRequest::SelectExtruder { extruder_id } => {
+                Self::SelectExtruder { extruder_id }
+            }
+            PrinterOperationRequest::Home {
                 axes,
                 required_device_features,
-            } => {
-                required_device_features.is_empty()
-                    || (axes.as_ref().is_some_and(Vec::is_empty)
-                        && required_device_features == &[RequiredDeviceFeature::BambuMqttHoming])
-            }
-            Self::MoveAxes {
+            } => Self::Home {
+                axes: axes.unwrap_or_default(),
+                required_device_features,
+            },
+            PrinterOperationRequest::MoveAxes {
                 movements,
                 feedrate_mm_per_min,
                 required_device_features,
-            } => {
-                !movements.is_empty()
-                    && movements.iter().all(AxisMovement::is_valid)
-                    && feedrate_mm_per_min.is_none_or(|feedrate| (1..=12_000).contains(&feedrate))
-                    && (required_device_features.is_empty()
-                        || (movements.len() == 1
-                            && feedrate_mm_per_min.is_none()
-                            && matches!(movements[0].delta_mm.abs(), 1.0 | 10.0)
-                            && required_device_features
-                                == &[RequiredDeviceFeature::BambuMqttAxisControl]))
-            }
-            Self::SetHotendTemperature {
+            } => Self::MoveAxes {
+                movements,
+                feedrate_mm_per_min,
+                required_device_features,
+            },
+            PrinterOperationRequest::SetHotendTemperature {
                 temperature_celsius,
+                wait,
                 extruder_id,
-                ..
-            } => {
-                in_range(*temperature_celsius, 0, MAX_HOTEND_TEMPERATURE_CELSIUS)
-                    && extruder_id
-                        .is_none_or(|extruder_id| in_range(extruder_id, 0, MAX_EXTRUDER_ID))
+            } => Self::SetHotendTemperature {
+                temperature_celsius,
+                wait: wait.unwrap_or(false),
+                extruder_id,
+            },
+            PrinterOperationRequest::SetBedTemperature {
+                temperature_celsius,
+                wait,
+            } => Self::SetBedTemperature {
+                temperature_celsius,
+                wait: wait.unwrap_or(false),
+            },
+            PrinterOperationRequest::SetChamberTemperature {
+                temperature_celsius,
+                wait,
+            } => Self::SetChamberTemperature {
+                temperature_celsius,
+                wait: wait.unwrap_or(false),
+            },
+            PrinterOperationRequest::AmsRereadRfid { ams_id, slot_id } => {
+                Self::AmsRereadRfid { ams_id, slot_id }
             }
-            Self::SetBedTemperature {
-                temperature_celsius,
-                ..
-            } => in_range(*temperature_celsius, 0, MAX_BED_TEMPERATURE_CELSIUS),
-            Self::SetChamberTemperature {
-                temperature_celsius,
-                ..
-            } => in_range(*temperature_celsius, 0, MAX_CHAMBER_TEMPERATURE_CELSIUS),
-            Self::AmsRereadRfid { ams_id, slot_id } => valid_ams_slot(*ams_id, *slot_id),
-            Self::AmsLoadFilament {
+            PrinterOperationRequest::AmsLoadFilament {
                 ams_id,
                 slot_id,
                 global_tray_id,
+                external_id,
                 extruder_id,
-                ..
-            }
-            | Self::AmsUnloadFilament {
+            } => Self::AmsLoadFilament {
                 ams_id,
                 slot_id,
                 global_tray_id,
+                external_id,
                 extruder_id,
-                ..
-            } => {
-                valid_ams_slot(*ams_id, *slot_id)
-                    && global_tray_id.is_none_or(|value| in_range(value, 0, MAX_U32))
-                    && extruder_id.is_none_or(|value| in_range(value, 0, MAX_EXTRUDER_ID))
+            },
+            PrinterOperationRequest::AmsUnloadFilament {
+                ams_id,
+                slot_id,
+                global_tray_id,
+                external_id,
+                extruder_id,
+            } => Self::AmsUnloadFilament {
+                ams_id,
+                slot_id,
+                global_tray_id,
+                external_id,
+                extruder_id,
+            },
+            PrinterOperationRequest::AmsStartDrying {
+                ams_id,
+                temperature_celsius,
+                duration_hours,
+                filament,
+                rotate_tray,
+            } => Self::AmsStartDrying {
+                ams_id,
+                temperature_celsius,
+                duration_hours,
+                filament,
+                rotate_tray,
+            },
+            PrinterOperationRequest::AmsStopDrying { ams_id } => Self::AmsStopDrying { ams_id },
+            PrinterOperationRequest::NozzleHolderCtrl { holder_action } => Self::NozzleHolderCtrl {
+                action: holder_action,
+            },
+            PrinterOperationRequest::NozzleInfoConfirm { nozzle_id } => {
+                Self::NozzleInfoConfirm { id: nozzle_id }
+            }
+            PrinterOperationRequest::HolderNozzleRefresh { nozzle_id } => {
+                Self::HolderNozzleRefresh { id: nozzle_id }
             }
         }
     }
 }
 
-impl AxisMovement {
-    fn is_valid(&self) -> bool {
-        self.delta_mm.is_finite() && self.delta_mm != 0.0 && self.delta_mm.abs() <= 50.0
+impl TryFrom<PrinterOperation> for PrinterOperationRequest {
+    type Error = ();
+
+    fn try_from(value: PrinterOperation) -> Result<Self, Self::Error> {
+        Ok(match value {
+            PrinterOperation::Pause {} => Self::Pause,
+            PrinterOperation::Resume {} => Self::Resume,
+            PrinterOperation::Stop {} => Self::Stop,
+            PrinterOperation::GcodeLine { param } => Self::GcodeLine { param },
+            PrinterOperation::HandlePrintError {
+                error_action,
+                print_error,
+                printer_job_id,
+                sequence_id,
+            } => Self::HandlePrintError {
+                error_action,
+                print_error,
+                printer_job_id,
+                sequence_id,
+            },
+            PrinterOperation::ToggleLight {} => Self::ToggleLight,
+            PrinterOperation::SetChamberLight { on } => Self::SetChamberLight { light_on: on },
+            PrinterOperation::SetPrintSpeed { speed_mode } => Self::SetPrintSpeed { speed_mode },
+            PrinterOperation::SetFanSpeed {
+                fan_index,
+                speed_percent,
+                airduct,
+            } => Self::SetFanSpeed {
+                fan_index,
+                speed_percent,
+                airduct,
+            },
+            PrinterOperation::SelectExtruder { extruder_id } => {
+                Self::SelectExtruder { extruder_id }
+            }
+            PrinterOperation::Home {
+                axes,
+                required_device_features,
+            } => Self::Home {
+                axes: Some(axes),
+                required_device_features,
+            },
+            PrinterOperation::MoveAxes {
+                movements,
+                feedrate_mm_per_min,
+                required_device_features,
+            } => Self::MoveAxes {
+                movements,
+                feedrate_mm_per_min,
+                required_device_features,
+            },
+            PrinterOperation::SetHotendTemperature {
+                temperature_celsius,
+                wait,
+                extruder_id,
+            } => Self::SetHotendTemperature {
+                temperature_celsius,
+                wait: Some(wait),
+                extruder_id,
+            },
+            PrinterOperation::SetBedTemperature {
+                temperature_celsius,
+                wait,
+            } => Self::SetBedTemperature {
+                temperature_celsius,
+                wait: Some(wait),
+            },
+            PrinterOperation::SetChamberTemperature {
+                temperature_celsius,
+                wait,
+            } => Self::SetChamberTemperature {
+                temperature_celsius,
+                wait: Some(wait),
+            },
+            PrinterOperation::AmsRereadRfid { ams_id, slot_id } => {
+                Self::AmsRereadRfid { ams_id, slot_id }
+            }
+            PrinterOperation::AmsLoadFilament {
+                ams_id,
+                slot_id,
+                global_tray_id,
+                external_id,
+                extruder_id,
+            } => Self::AmsLoadFilament {
+                ams_id,
+                slot_id,
+                global_tray_id,
+                external_id,
+                extruder_id,
+            },
+            PrinterOperation::AmsUnloadFilament {
+                ams_id,
+                slot_id,
+                global_tray_id,
+                external_id,
+                extruder_id,
+            } => Self::AmsUnloadFilament {
+                ams_id,
+                slot_id,
+                global_tray_id,
+                external_id,
+                extruder_id,
+            },
+            PrinterOperation::AmsStartDrying {
+                ams_id,
+                temperature_celsius,
+                duration_hours,
+                filament,
+                rotate_tray,
+            } => Self::AmsStartDrying {
+                ams_id,
+                temperature_celsius,
+                duration_hours,
+                filament,
+                rotate_tray,
+            },
+            PrinterOperation::AmsStopDrying { ams_id } => Self::AmsStopDrying { ams_id },
+            PrinterOperation::NozzleHolderCtrl { action } => Self::NozzleHolderCtrl {
+                holder_action: action,
+            },
+            PrinterOperation::NozzleInfoConfirm { id } => Self::NozzleInfoConfirm { nozzle_id: id },
+            PrinterOperation::HolderNozzleRefresh { id } => {
+                Self::HolderNozzleRefresh { nozzle_id: id }
+            }
+            PrinterOperation::GetAutoNozzleMapping { .. } => return Err(()),
+        })
     }
-}
-
-fn valid_ams_slot(ams_id: u64, slot_id: u64) -> bool {
-    in_range(ams_id, 0, MAX_AMS_ID) && in_range(slot_id, 0, MAX_AMS_SLOT_ID)
-}
-
-fn in_range(value: u64, min: u64, max: u64) -> bool {
-    (min..=max).contains(&value)
 }

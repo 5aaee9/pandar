@@ -2,9 +2,9 @@ use serde::{Deserialize, Deserializer, de::IgnoredAny};
 
 use super::{
     PrintErrorAction, PrinterOperation, StudioOperationParse,
-    operation::{AxisMovement, RequiredDeviceFeature},
     studio_axis::{StudioAxis, StudioDirection, StudioMoveMode},
 };
+use pandar_core::{PrinterAxisMovement, RequiredDeviceFeature};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -112,7 +112,7 @@ impl StudioSystem {
             "off" => false,
             _ => return None,
         };
-        Some(PrinterOperation::SetChamberLight { light_on })
+        Some(PrinterOperation::SetChamberLight { on: light_on })
     }
 }
 
@@ -128,7 +128,7 @@ impl StudioPrint {
         }
 
         self.ordinary_operation()
-            .filter(PrinterOperation::is_valid)
+            .filter(|operation| operation.validate().is_ok())
             .map_or(
                 StudioOperationParse::Unsupported,
                 StudioOperationParse::Operation,
@@ -162,42 +162,42 @@ impl StudioPrint {
             printer_job_id: self.job_id.as_string()?.to_owned(),
             sequence_id,
         };
-        operation.is_valid().then_some(operation)
+        operation.validate().is_ok().then_some(operation)
     }
 
     fn ordinary_operation(&self) -> Option<PrinterOperation> {
         match self.command.as_str() {
-            "pause" => Some(PrinterOperation::Pause),
-            "resume" => Some(PrinterOperation::Resume),
-            "stop" => Some(PrinterOperation::Stop),
+            "pause" => Some(PrinterOperation::Pause {}),
+            "resume" => Some(PrinterOperation::Resume {}),
+            "stop" => Some(PrinterOperation::Stop {}),
             "back_to_center" => Some(PrinterOperation::Home {
-                axes: Some(Vec::new()),
+                axes: Vec::new(),
                 required_device_features: vec![RequiredDeviceFeature::BambuMqttHoming],
             }),
             "xyz_ctrl" => self.xyz_ctrl_operation(),
             "gcode_line" => self.gcode_line_operation(),
             "print_speed" => Some(PrinterOperation::SetPrintSpeed {
-                speed_mode: self.param.as_u64()?,
+                speed_mode: u8::try_from(self.param.as_u64()?).ok()?,
             }),
             "select_extruder" => Some(PrinterOperation::SelectExtruder {
-                extruder_id: field_u64(&self.extruder_index)?,
+                extruder_id: field_u32(&self.extruder_index)?,
             }),
             "set_nozzle_temp" => Some(PrinterOperation::SetHotendTemperature {
-                temperature_celsius: field_u64(&self.target_temp)?,
-                wait: Some(false),
-                extruder_id: Some(field_u64(&self.extruder_index)?),
+                temperature_celsius: field_u16(&self.target_temp)?,
+                wait: false,
+                extruder_id: Some(field_u32(&self.extruder_index)?),
             }),
             "set_bed_temp" => Some(PrinterOperation::SetBedTemperature {
-                temperature_celsius: field_u64(&self.temp)?,
-                wait: Some(false),
+                temperature_celsius: field_u16(&self.temp)?,
+                wait: false,
             }),
             "set_ctt" => Some(PrinterOperation::SetChamberTemperature {
-                temperature_celsius: field_u64(&self.ctt_val)?,
-                wait: Some(false),
+                temperature_celsius: field_u16(&self.ctt_val)?,
+                wait: false,
             }),
             "ams_get_rfid" => Some(PrinterOperation::AmsRereadRfid {
-                ams_id: field_u64(&self.ams_id)?,
-                slot_id: field_u64(&self.slot_id)?,
+                ams_id: field_u32(&self.ams_id)?,
+                slot_id: field_u32(&self.slot_id)?,
             }),
             "ams_change_filament" => self.ams_change_filament_operation(),
             _ => None,
@@ -217,17 +217,17 @@ impl StudioPrint {
         let axis = self.axis?.operation_axis();
         let delta_mm = self.dir?.sign() * self.mode?.distance_mm();
         Some(PrinterOperation::MoveAxes {
-            movements: vec![AxisMovement { axis, delta_mm }],
+            movements: vec![PrinterAxisMovement { axis, delta_mm }],
             feedrate_mm_per_min: None,
             required_device_features: vec![RequiredDeviceFeature::BambuMqttAxisControl],
         })
     }
 
     fn ams_change_filament_operation(&self) -> Option<PrinterOperation> {
-        let ams_id = field_u64(&self.ams_id)?;
-        let slot_id = field_u64(&self.slot_id)?;
-        let target = field_u64(&self.target)?;
-        let extruder_id = optional_field_u64(&self.extruder_id);
+        let ams_id = field_u32(&self.ams_id)?;
+        let slot_id = field_u32(&self.slot_id)?;
+        let target = field_u32(&self.target)?;
+        let extruder_id = optional_field_u32(&self.extruder_id);
         if target == 255 && slot_id == 255 {
             return Some(PrinterOperation::AmsUnloadFilament {
                 ams_id,
@@ -298,10 +298,17 @@ impl StudioU64 {
     }
 }
 
-fn field_u64(value: &Option<StudioU64>) -> Option<u64> {
-    value.as_ref().and_then(StudioU64::as_u64)
+fn field_u32(value: &Option<StudioU64>) -> Option<u32> {
+    u32::try_from(value.as_ref()?.as_u64()?).ok()
 }
 
-fn optional_field_u64(value: &Option<StudioU64>) -> Option<u64> {
-    value.as_ref().and_then(StudioU64::as_u64)
+fn optional_field_u32(value: &Option<StudioU64>) -> Option<u32> {
+    value
+        .as_ref()
+        .and_then(StudioU64::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+}
+
+fn field_u16(value: &Option<StudioU64>) -> Option<u16> {
+    u16::try_from(value.as_ref()?.as_u64()?).ok()
 }

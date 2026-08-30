@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use super::operation::Axis;
+use pandar_core::PrinterAxis;
 
 #[derive(Clone, Copy, Deserialize)]
 pub(super) enum StudioAxis {
@@ -24,11 +24,11 @@ pub(super) enum StudioMoveMode {
 }
 
 impl StudioAxis {
-    pub(super) const fn operation_axis(self) -> Axis {
+    pub(super) const fn operation_axis(self) -> PrinterAxis {
         match self {
-            Self::X => Axis::X,
-            Self::Y => Axis::Y,
-            Self::Z => Axis::Z,
+            Self::X => PrinterAxis::X,
+            Self::Y => PrinterAxis::Y,
+            Self::Z => PrinterAxis::Z,
         }
     }
 }
