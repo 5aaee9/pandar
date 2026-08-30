@@ -62,8 +62,8 @@ async fn job_repository_persists_mapping_json_null_and_empty_distinctly() {
         .await
         .unwrap();
     let mut empty = create_input(tenant.id, agent.id, &printer_id, "artifact-2");
-    empty.ams_mapping_json = Some("[]".to_string());
-    empty.ams_mapping2_json = Some("[]".to_string());
+    empty.options.ams_mapping_json = Some("[]".to_string());
+    empty.options.ams_mapping2_json = Some("[]".to_string());
     let empty = jobs.create_print_job(empty).await.unwrap();
 
     let neither = jobs
@@ -97,7 +97,7 @@ async fn job_repository_rejects_mapping_json_over_32_entries() {
             .unwrap();
 
     let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
-    input.ams_mapping_json = Some(format!(
+    input.options.ams_mapping_json = Some(format!(
         "[{}]",
         std::iter::repeat_n("0", 33).collect::<Vec<_>>().join(",")
     ));
@@ -107,7 +107,7 @@ async fn job_repository_rejects_mapping_json_over_32_entries() {
     assert!(format!("{err:#}").contains("ams_mapping_json must not contain more than 32 entries"));
 
     let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-2");
-    input.ams_mapping2_json = Some(format!(
+    input.options.ams_mapping2_json = Some(format!(
         "[{}]",
         std::iter::repeat_n(r#"{"ams_id":0,"slot_id":0}"#, 33)
             .collect::<Vec<_>>()
@@ -130,7 +130,7 @@ async fn job_repository_accepts_mapping2_external_slot_outside_ams_tray_range() 
             .unwrap();
 
     let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
-    input.ams_mapping2_json = Some(r#"[{"ams_id":254,"slot_id":8}]"#.to_string());
+    input.options.ams_mapping2_json = Some(r#"[{"ams_id":254,"slot_id":8}]"#.to_string());
     let created = jobs.create_print_job(input).await.unwrap();
     let payloads = queued_payloads(&commands, tenant.id, agent.id).await;
 
@@ -195,7 +195,7 @@ async fn terminal_report_derives_usage_from_mapping_and_material_snapshot_idempo
             .await
             .unwrap();
     let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
-    input.ams_mapping_json = Some("[0,254,255,128,0]".to_string());
+    input.options.ams_mapping_json = Some("[0,254,255,128,0]".to_string());
     let created = jobs.create_print_job(input).await.unwrap();
 
     let terminal = ApplyPrintReport {
@@ -246,8 +246,8 @@ async fn mapping2_takes_precedence_and_external_slots_match_materials() {
             .await
             .unwrap();
     let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
-    input.ams_mapping_json = Some("[0,0,0]".to_string());
-    input.ams_mapping2_json = Some(
+    input.options.ams_mapping_json = Some("[0,0,0]".to_string());
+    input.options.ams_mapping2_json = Some(
         r#"[{"ams_id":254,"slot_id":8},{"ams_id":255,"slot_id":255},{"ams_id":2,"slot_id":3}]"#
             .to_string(),
     );
@@ -290,8 +290,8 @@ async fn terminal_usage_preserves_a2l_mixed_ams_lite_global_routes() {
             .await
             .unwrap();
     let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
-    input.ams_mapping_json = Some("[24,25]".to_owned());
-    input.ams_mapping2_json = Some(r#"[{"ams_id":0,"slot_id":0}]"#.to_owned());
+    input.options.ams_mapping_json = Some("[24,25]".to_owned());
+    input.options.ams_mapping2_json = Some(r#"[{"ams_id":0,"slot_id":0}]"#.to_owned());
     let created = jobs.create_print_job(input).await.unwrap();
 
     let applied = jobs
@@ -331,8 +331,8 @@ async fn terminal_usage_preserves_flat_a2l_route_over_stale_material_snapshot() 
             .await
             .unwrap();
     let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
-    input.ams_mapping_json = Some("[24]".to_owned());
-    input.ams_mapping2_json = Some(r#"[{"ams_id":0,"slot_id":0}]"#.to_owned());
+    input.options.ams_mapping_json = Some("[24]".to_owned());
+    input.options.ams_mapping2_json = Some(r#"[{"ams_id":0,"slot_id":0}]"#.to_owned());
     let created = jobs.create_print_job(input).await.unwrap();
 
     let applied = jobs
@@ -369,7 +369,7 @@ async fn running_report_updates_material_snapshot_without_deriving_usage() {
             .await
             .unwrap();
     let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
-    input.ams_mapping_json = Some("[0]".to_string());
+    input.options.ams_mapping_json = Some("[0]".to_string());
     let created = jobs.create_print_job(input).await.unwrap();
 
     let applied = jobs

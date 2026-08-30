@@ -59,7 +59,7 @@ async fn create_print_job_with_optional_metadata(
         .await
         .context("failed to begin print job audit transaction")?;
     if let Some(quota) = quota {
-        enforce_artifact_quota(&tx, input.tenant_id, input.artifact_size_bytes, quota).await?;
+        enforce_artifact_quota(&tx, input.tenant_id, input.artifact.size_bytes, quota).await?;
     }
     let created = create_print_job_in_transaction(&tx, input, metadata, actor).await?;
     tx.commit()

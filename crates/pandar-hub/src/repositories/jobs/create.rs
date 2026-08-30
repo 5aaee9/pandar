@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use anyhow::Context;
-use pandar_core::{AgentId, CommandId, JobId, PrintCalibrationMode, StudioPrintMetadata};
+use pandar_core::{AgentId, CommandId, JobId, StudioPrintMetadata};
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 
 mod build;
@@ -15,8 +15,8 @@ mod inserts;
 mod payload;
 mod validation;
 use build::{build_created_job, build_job_from_existing_artifact};
-use inserts::{insert_artifact, insert_job, insert_job_from_existing_artifact};
-use payload::{payload, payload_from_existing_artifact};
+use inserts::{insert_artifact, insert_job};
+use payload::payload;
 use validation::validate_mapping_json;
 
 pub async fn create_print_job<C>(
@@ -27,9 +27,12 @@ pub async fn create_print_job<C>(
 where
     C: ConnectionTrait,
 {
-    validate_mapping_json(&input.ams_mapping_json, "ams_mapping_json")?;
-    validate_mapping_json(&input.ams_mapping2_json, "ams_mapping2_json")?;
-    validate_mapping_json(&input.ams_mapping_info_json, "ams_mapping_info_json")?;
+    validate_mapping_json(&input.options.ams_mapping_json, "ams_mapping_json")?;
+    validate_mapping_json(&input.options.ams_mapping2_json, "ams_mapping2_json")?;
+    validate_mapping_json(
+        &input.options.ams_mapping_info_json,
+        "ams_mapping_info_json",
+    )?;
     let serial_number = printer_for_agent(connection, &input).await?;
     let now = pandar_core::created_at_now();
     let job_id = JobId::new();
@@ -84,26 +87,7 @@ where
 }
 
 pub struct NewPrintJobFromArtifact {
-    tenant_id: pandar_core::TenantId,
-    printer_id: String,
-    agent_id: pandar_core::AgentId,
-    artifact_id: String,
-    artifact_filename: String,
-    artifact_content_type: String,
-    artifact_size_bytes: u64,
-    artifact_storage_path: String,
-    artifact_metadata_json: Option<String>,
-    plate_id: u32,
-    use_ams: bool,
-    auto_bed_leveling: PrintCalibrationMode,
-    bed_leveling: bool,
-    flow_cali: bool,
-    auto_flow_cali: PrintCalibrationMode,
-    auto_offset_cali: PrintCalibrationMode,
-    timelapse: bool,
-    ams_mapping_json: Option<String>,
-    ams_mapping2_json: Option<String>,
-    ams_mapping_info_json: Option<String>,
+    input: CreatePrintJob,
     studio_metadata: Option<StudioPrintMetadata>,
 }
 
@@ -116,46 +100,52 @@ impl NewPrintJobFromArtifact {
         let overrides = overrides.unwrap_or_default();
         let preserve_mappings = !overrides.replace_ams_mappings;
         Self {
-            tenant_id: source.job.tenant_id,
-            printer_id: overrides.printer_id.unwrap_or(source.job.printer_id),
-            agent_id: source.job.agent_id,
-            artifact_id: source.artifact.id,
-            artifact_filename: source.artifact.filename,
-            artifact_content_type: source.artifact.content_type,
-            artifact_size_bytes: source.artifact.size_bytes,
-            artifact_storage_path: source.artifact.storage_path,
-            artifact_metadata_json: source.artifact.metadata_json,
-            plate_id: overrides.plate_id.unwrap_or(source_payload.plate_id),
-            use_ams: overrides.use_ams.unwrap_or(source_payload.use_ams),
-            bed_leveling: overrides
-                .bed_leveling
-                .unwrap_or(source_payload.bed_leveling),
-            auto_bed_leveling: overrides
-                .auto_bed_leveling
-                .unwrap_or(source_payload.auto_bed_leveling),
-            flow_cali: overrides.flow_cali.unwrap_or(source_payload.flow_cali),
-            auto_flow_cali: overrides
-                .auto_flow_cali
-                .unwrap_or(source_payload.auto_flow_cali),
-            auto_offset_cali: overrides
-                .auto_offset_cali
-                .unwrap_or(source_payload.auto_offset_cali),
-            timelapse: overrides.timelapse.unwrap_or(source_payload.timelapse),
-            ams_mapping_json: overrides.ams_mapping_json.or_else(|| {
-                preserve_mappings
-                    .then_some(source.job.ams_mapping_json)
-                    .flatten()
-            }),
-            ams_mapping2_json: overrides.ams_mapping2_json.or_else(|| {
-                preserve_mappings
-                    .then_some(source.job.ams_mapping2_json)
-                    .flatten()
-            }),
-            ams_mapping_info_json: overrides.ams_mapping_info_json.or_else(|| {
-                preserve_mappings
-                    .then_some(source.job.ams_mapping_info_json)
-                    .flatten()
-            }),
+            input: CreatePrintJob {
+                tenant_id: source.job.tenant_id,
+                printer_id: overrides.printer_id.unwrap_or(source.job.printer_id),
+                agent_id: source.job.agent_id,
+                artifact: crate::repositories::PrintArtifactInput {
+                    id: source.artifact.id,
+                    filename: source.artifact.filename,
+                    content_type: source.artifact.content_type,
+                    size_bytes: source.artifact.size_bytes,
+                    storage_path: source.artifact.storage_path,
+                    metadata_json: source.artifact.metadata_json,
+                },
+                options: crate::repositories::PrintExecutionOptions {
+                    plate_id: overrides.plate_id.unwrap_or(source_payload.plate_id),
+                    use_ams: overrides.use_ams.unwrap_or(source_payload.use_ams),
+                    bed_leveling: overrides
+                        .bed_leveling
+                        .unwrap_or(source_payload.bed_leveling),
+                    auto_bed_leveling: overrides
+                        .auto_bed_leveling
+                        .unwrap_or(source_payload.auto_bed_leveling),
+                    flow_cali: overrides.flow_cali.unwrap_or(source_payload.flow_cali),
+                    auto_flow_cali: overrides
+                        .auto_flow_cali
+                        .unwrap_or(source_payload.auto_flow_cali),
+                    auto_offset_cali: overrides
+                        .auto_offset_cali
+                        .unwrap_or(source_payload.auto_offset_cali),
+                    timelapse: overrides.timelapse.unwrap_or(source_payload.timelapse),
+                    ams_mapping_json: overrides.ams_mapping_json.or_else(|| {
+                        preserve_mappings
+                            .then_some(source.job.ams_mapping_json)
+                            .flatten()
+                    }),
+                    ams_mapping2_json: overrides.ams_mapping2_json.or_else(|| {
+                        preserve_mappings
+                            .then_some(source.job.ams_mapping2_json)
+                            .flatten()
+                    }),
+                    ams_mapping_info_json: overrides.ams_mapping_info_json.or_else(|| {
+                        preserve_mappings
+                            .then_some(source.job.ams_mapping_info_json)
+                            .flatten()
+                    }),
+                },
+            },
             studio_metadata: source_payload.studio_metadata.clone(),
         }
     }
@@ -168,9 +158,12 @@ pub async fn create_print_job_from_artifact<C>(
 where
     C: ConnectionTrait,
 {
-    validate_mapping_json(&input.ams_mapping_json, "ams_mapping_json")?;
-    validate_mapping_json(&input.ams_mapping2_json, "ams_mapping2_json")?;
-    validate_mapping_json(&input.ams_mapping_info_json, "ams_mapping_info_json")?;
+    validate_mapping_json(&input.input.options.ams_mapping_json, "ams_mapping_json")?;
+    validate_mapping_json(&input.input.options.ams_mapping2_json, "ams_mapping2_json")?;
+    validate_mapping_json(
+        &input.input.options.ams_mapping_info_json,
+        "ams_mapping_info_json",
+    )?;
     let (serial_number, agent_id, model) =
         printer_for_existing_artifact(connection, &input).await?;
     if model
@@ -184,19 +177,20 @@ where
     {
         return Err(RepositoryError::H2cNozzleMappingRequired);
     }
-    input.agent_id = agent_id;
+    input.input.agent_id = agent_id;
     let now = pandar_core::created_at_now();
     let job_id = JobId::new();
     let command_id = CommandId::new();
-    let studio_submission_id = super::studio_ids::allocate(connection, input.tenant_id).await?;
+    let studio_submission_id =
+        super::studio_ids::allocate(connection, input.input.tenant_id).await?;
     let studio_metadata_json = input
         .studio_metadata
         .as_ref()
         .map(serde_json::to_string)
         .transpose()
         .context("failed to serialize recovered Studio print metadata")?;
-    let payload = payload_from_existing_artifact(
-        &input,
+    let payload = payload(
+        &input.input,
         job_id,
         &serial_number,
         studio_submission_id,
@@ -208,18 +202,18 @@ where
         connection,
         InsertCommand {
             id: command_id,
-            tenant_id: input.tenant_id,
-            agent_id: input.agent_id,
-            printer_id: Some(&input.printer_id),
+            tenant_id: input.input.tenant_id,
+            agent_id: input.input.agent_id,
+            printer_id: Some(&input.input.printer_id),
             kind: "print_project_file",
             payload_json: &payload_json,
             created_at: &now,
         },
     )
     .await?;
-    insert_job_from_existing_artifact(
+    insert_job(
         connection,
-        &input,
+        &input.input,
         job_id,
         command_id,
         studio_submission_id,
@@ -258,8 +252,8 @@ async fn printer_for_existing_artifact<C>(
 where
     C: ConnectionTrait,
 {
-    printers::Entity::find_by_id(&input.printer_id)
-        .filter(printers::Column::TenantId.eq(input.tenant_id.to_string()))
+    printers::Entity::find_by_id(&input.input.printer_id)
+        .filter(printers::Column::TenantId.eq(input.input.tenant_id.to_string()))
         .one(connection)
         .await
         .context("failed to verify recovered print job printer ownership")?

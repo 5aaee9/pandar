@@ -135,8 +135,8 @@ impl ArtifactQuotaReservation {
             || reservation.tenant_id != self.tenant_id.to_string()
             || reservation.artifact_id != self.artifact_id
             || reservation.storage_path != self.storage_path
-            || input.artifact_id != self.artifact_id
-            || input.artifact_storage_path != self.storage_path
+            || input.artifact.id != self.artifact_id
+            || input.artifact.storage_path != self.storage_path
         {
             return Err(anyhow::anyhow!("artifact quota reservation cannot be finalized").into());
         }

@@ -139,7 +139,7 @@ async fn job_repository_metadata_round_trips_through_create_list_and_get() {
             .await
             .unwrap();
     let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
-    input.artifact_metadata_json = Some(artifact_metadata_json("Widget", 1));
+    input.artifact.metadata_json = Some(artifact_metadata_json("Widget", 1));
 
     let created = jobs.create_print_job(input).await.unwrap();
     let listed = jobs.list_for_tenant(tenant.id).await.unwrap();
@@ -191,10 +191,10 @@ async fn job_repository_reprint_and_duplicate_reuse_artifact_metadata() {
             .await
             .unwrap();
     let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
-    input.artifact_metadata_json = Some(artifact_metadata_json("Reusable", 2));
-    input.ams_mapping_json = Some("[0]".to_owned());
-    input.ams_mapping2_json = Some(r#"[{"ams_id":0,"slot_id":0}]"#.to_owned());
-    input.ams_mapping_info_json = Some(
+    input.artifact.metadata_json = Some(artifact_metadata_json("Reusable", 2));
+    input.options.ams_mapping_json = Some("[0]".to_owned());
+    input.options.ams_mapping2_json = Some(r#"[{"ams_id":0,"slot_id":0}]"#.to_owned());
+    input.options.ams_mapping_info_json = Some(
         r#"[{"ams":0,"targetColor":"11223344","filamentId":"GFA00","filamentType":"PLA","nozzleId":0}]"#
             .to_owned(),
     );

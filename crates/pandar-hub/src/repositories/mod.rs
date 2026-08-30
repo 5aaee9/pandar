@@ -41,7 +41,8 @@ pub(crate) use jobs::studio_task_test_pause;
 pub use jobs::{
     AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, ArtifactQuotaLimits,
     ClearJobsOutcome, CreatePrintJob, DuplicatePrintJob, JobRepository, JobWithArtifact,
-    PrintReportDiagnostic, StudioTaskPage, StudioTaskQuery, StudioTaskStatus,
+    PrintArtifactInput, PrintExecutionOptions, PrintReportDiagnostic, StudioTaskPage,
+    StudioTaskQuery, StudioTaskStatus,
 };
 pub(crate) use materials::CurrentMaterialPatchOutcome;
 pub use materials::{

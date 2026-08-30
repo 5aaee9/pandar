@@ -53,16 +53,17 @@ pub(crate) struct ArtifactQuotaReservation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CreatePrintJob {
-    pub tenant_id: TenantId,
-    pub printer_id: String,
-    pub agent_id: AgentId,
-    pub artifact_id: String,
-    pub artifact_filename: String,
-    pub artifact_content_type: String,
-    pub artifact_size_bytes: u64,
-    pub artifact_storage_path: String,
-    pub artifact_metadata_json: Option<String>,
+pub struct PrintArtifactInput {
+    pub id: String,
+    pub filename: String,
+    pub content_type: String,
+    pub size_bytes: u64,
+    pub storage_path: String,
+    pub metadata_json: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrintExecutionOptions {
     pub plate_id: u32,
     pub use_ams: bool,
     pub auto_bed_leveling: PrintCalibrationMode,
@@ -74,6 +75,15 @@ pub struct CreatePrintJob {
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
     pub ams_mapping_info_json: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreatePrintJob {
+    pub tenant_id: TenantId,
+    pub printer_id: String,
+    pub agent_id: AgentId,
+    pub artifact: PrintArtifactInput,
+    pub options: PrintExecutionOptions,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

@@ -159,9 +159,9 @@ pub(in crate::repositories::tests) async fn exercise_committed_artifact_reservat
     let reservation = jobs
         .reserve_artifact_quota(
             tenant.id,
-            input.artifact_id.clone(),
-            input.artifact_storage_path.clone(),
-            input.artifact_size_bytes,
+            input.artifact.id.clone(),
+            input.artifact.storage_path.clone(),
+            input.artifact.size_bytes,
             crate::repositories::ArtifactQuotaLimits {
                 tenant_bytes: 42,
                 tenant_count: 1,

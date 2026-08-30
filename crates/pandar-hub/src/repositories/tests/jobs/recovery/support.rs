@@ -1,12 +1,12 @@
 use super::*;
 
 pub(super) fn with_studio_auto_calibration(mut input: CreatePrintJob) -> CreatePrintJob {
-    input.bed_leveling = true;
-    input.auto_bed_leveling = PrintCalibrationMode::Auto;
-    input.flow_cali = false;
-    input.auto_flow_cali = PrintCalibrationMode::Auto;
-    input.auto_offset_cali = PrintCalibrationMode::On;
-    input.timelapse = true;
+    input.options.bed_leveling = true;
+    input.options.auto_bed_leveling = PrintCalibrationMode::Auto;
+    input.options.flow_cali = false;
+    input.options.auto_flow_cali = PrintCalibrationMode::Auto;
+    input.options.auto_offset_cali = PrintCalibrationMode::On;
+    input.options.timelapse = true;
     input
 }
 
