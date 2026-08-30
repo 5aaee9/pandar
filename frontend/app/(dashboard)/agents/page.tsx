@@ -36,7 +36,6 @@ export default async function AgentsPage({
 
   return (
     <AgentsPageClient
-      auth={auth}
       selectedTenant={selectedTenant}
       adminUnavailable={adminAccessUnavailable(auth.provider, membership)}
       commandId={commandId}

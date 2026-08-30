@@ -8,7 +8,7 @@ import en from '../messages/en.json'
 import { JobHistory } from './dashboard-job-history'
 import { isRetryDispatchSafe } from './dashboard-job-status'
 import type { Job, Tenant } from './dashboard-types'
-import { DashboardViewContent } from './dashboard-view-content'
+import { JobsView } from './dashboard-view-content'
 
 function createTestQueryClient() {
   return new QueryClient({
@@ -375,40 +375,12 @@ describe('JobHistory row actions', () => {
     render(
       <QueryClientProvider client={createTestQueryClient()}>
         <NextIntlClientProvider locale="en" messages={en}>
-          <DashboardViewContent
-            view="jobs"
-            auth={{
-              source: 'app_api_token',
-              cookieName: 'pandar_auth',
-              provider: 'none',
-              signInUrl: null,
-              signOutUrl: null,
-            }}
+          <JobsView
             selectedTenant={tenant}
-            health={{
-              printersTotal: 0,
-              printersOnline: 0,
-              agentsTotal: 0,
-              agentsConnected: 0,
-              jobsActive: 0,
-              jobsFailed: 0,
-            }}
-            attentionItems={[]}
-            topSeverity={null}
-            liveState="idle"
-            lastEventAt={null}
-            fleetEmpty={false}
             printers={[]}
             agents={[]}
             jobs={[job()]}
             nowMs={Date.parse('2026-07-15T01:00:00Z')}
-            selectedCommand={null}
-            commandData={null}
-            notifications={[]}
-            tenantTokens={[]}
-            auditEvents={[]}
-            adminUnavailable={true}
-            adminLoadError={false}
             canManageJobs={true}
           />
         </NextIntlClientProvider>

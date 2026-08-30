@@ -4,7 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../../../messages/en.json";
-import type { AuthMetadata, Printer, Tenant } from "../../dashboard-types";
+import type { Printer, Tenant } from "../../dashboard-types";
 import { DevicesPageClient } from "./devices-page-client";
 
 const tenant: Tenant = {
@@ -12,14 +12,6 @@ const tenant: Tenant = {
   slug: "tenant-1",
   display_name: "Tenant 1",
   created_at: "2026-07-28T00:00:00Z",
-};
-
-const auth: AuthMetadata = {
-  source: "none",
-  cookieName: "pandar_session",
-  provider: "none",
-  signInUrl: null,
-  signOutUrl: null,
 };
 
 const printer: Printer = {
@@ -62,7 +54,7 @@ describe("DevicesPageClient", () => {
     render(
       <QueryClientProvider client={queryClient}>
         <NextIntlClientProvider locale="en" messages={en}>
-          <DevicesPageClient auth={auth} selectedTenant={tenant} />
+          <DevicesPageClient selectedTenant={tenant} />
         </NextIntlClientProvider>
       </QueryClientProvider>,
     );

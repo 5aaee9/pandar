@@ -1,15 +1,27 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
 
 import { AgentsSection } from "./agents-section";
 import { DISCOVERY_COMMAND_KIND } from "./command-status";
-
-
 import type { AttentionItem, Health, Severity } from "./dashboard-attention";
 import { JobHistory, PrinterInventory } from "./dashboard-inventory";
 import { FleetStatusStrip } from "./dashboard-overview";
-import dynamic from "next/dynamic";
+import type {
+  Agent,
+  Command,
+  CommandResultData,
+  DiscoveryResultData,
+  Job,
+  Printer,
+  Tenant,
+} from "./dashboard-types";
+import type { LiveState } from "./dashboard-runtime-helpers";
+import { DiscoverySection } from "./discovery-section";
+import { DispatchDialog } from "./dispatch-dialog";
+import { NeedsAttention } from "./needs-attention";
+import { PrinterMismatchCoordinator } from "./printer-mismatch-dialog";
 
 const DiagnosticsSection = dynamic(
   () => import("./diagnostics-section").then((mod) => mod.DiagnosticsSection),
@@ -20,33 +32,10 @@ const DiagnosticsSection = dynamic(
         <div className="mt-2 h-3 w-48 animate-pulse rounded bg-muted" />
       </div>
     ),
-  }
+  },
 );
-import { DiscoverySection } from "./discovery-section";
-import { DispatchDialog } from "./dispatch-dialog";
-import type {
-  Agent,
-  AuthMetadata,
-  AuditEvent,
-  Command,
-  CommandResultData,
-  DiscoveryResultData,
-  Job,
-  Printer,
-  Tenant,
-  TenantToken,
-} from "./dashboard-types";
-import type {
-  LiveState,
-  RuntimeNotification,
-} from "./dashboard-runtime-helpers";
-import type { DashboardView } from "./dashboard-shell";
-import { NeedsAttention } from "./needs-attention";
-import { PrinterMismatchCoordinator } from "./printer-mismatch-dialog";
 
-export type DashboardViewContentProps = {
-  view: Exclude<DashboardView, "users" | "settings">;
-  auth: AuthMetadata;
+export type DevicesViewProps = {
   selectedTenant: Tenant | null;
   health: Health;
   attentionItems: AttentionItem[];
@@ -58,29 +47,9 @@ export type DashboardViewContentProps = {
   agents: Agent[];
   jobs: Job[];
   nowMs: number;
-  selectedCommand: Command | null;
-  commandData: CommandResultData | null;
-  discoveryCommand?: Command | null;
-  discoveryData?: DiscoveryResultData | null;
-  notifications: RuntimeNotification[];
-  tenantTokens: TenantToken[];
-  auditEvents: AuditEvent[];
-  adminUnavailable: boolean;
-  adminLoadError: boolean;
-  canManageJobs: boolean;
 };
 
-export function DashboardViewContent(props: DashboardViewContentProps) {
-  if (props.view === "devices") {
-    return <DevicesView {...props} />;
-  }
-  if (props.view === "jobs") {
-    return <JobsView {...props} />;
-  }
-  return <AgentsView {...props} />;
-}
-
-function DevicesView({
+export function DevicesView({
   health,
   attentionItems,
   topSeverity,
@@ -92,7 +61,7 @@ function DevicesView({
   agents,
   jobs,
   nowMs,
-}: DashboardViewContentProps) {
+}: DevicesViewProps) {
   const [reprintJob, setReprintJob] = useState<Job | null>(null);
 
   return (
@@ -139,14 +108,23 @@ function DevicesView({
   );
 }
 
-function JobsView({
+export type JobsViewProps = {
+  selectedTenant: Tenant | null;
+  printers: Printer[];
+  agents: Agent[];
+  jobs: Job[];
+  nowMs: number;
+  canManageJobs: boolean;
+};
+
+export function JobsView({
   selectedTenant,
   printers,
   agents,
   jobs,
   nowMs,
   canManageJobs,
-}: DashboardViewContentProps) {
+}: JobsViewProps) {
   const [dispatch, setDispatch] = useState<{
     open: boolean;
     sourceJob: Job | null;
@@ -180,7 +158,18 @@ function JobsView({
   );
 }
 
-function AgentsView({
+export type AgentsViewProps = {
+  selectedTenant: Tenant | null;
+  agents: Agent[];
+  printers: Printer[];
+  selectedCommand: Command | null;
+  commandData: CommandResultData | null;
+  discoveryCommand?: Command | null;
+  discoveryData?: DiscoveryResultData | null;
+  adminUnavailable: boolean;
+};
+
+export function AgentsView({
   selectedTenant,
   agents,
   printers,
@@ -189,7 +178,7 @@ function AgentsView({
   discoveryCommand = null,
   discoveryData = null,
   adminUnavailable,
-}: DashboardViewContentProps) {
+}: AgentsViewProps) {
   const selectedIsDiscovery =
     selectedCommand?.kind === DISCOVERY_COMMAND_KIND;
   return (

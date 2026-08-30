@@ -19,7 +19,6 @@ export default async function JobsPage() {
 
   return (
     <JobsPageClient
-      auth={auth}
       selectedTenant={selectedTenant}
       canManageJobs={canManageJobs(auth.provider, membership)}
     />

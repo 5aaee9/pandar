@@ -2,28 +2,21 @@
 
 import { useQueries, useQuery } from "@tanstack/react-query";
 
-import {
-  computeAttention,
-  computeHealth,
-  topSeverityOf,
-} from "../../dashboard-attention";
-import { DashboardViewContent } from "../../dashboard-view-content";
+import { AgentsView } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
 import {
   agentsCommandRouteQuery,
   agentsResourceQuery,
   printersResourceQuery,
 } from "../../route-data";
-import type { AuthMetadata, Tenant } from "../../dashboard-types";
+import type { Tenant } from "../../dashboard-types";
 
 export function AgentsPageClient({
-  auth,
   selectedTenant,
   adminUnavailable,
   commandId,
   discoveryId,
 }: {
-  auth: AuthMetadata;
   selectedTenant: Tenant;
   adminUnavailable: boolean;
   commandId: string | null;
@@ -69,40 +62,17 @@ export function AgentsPageClient({
       discoveryData: null,
     };
 
-  const health = computeHealth(agents, printers, []);
-  const attentionItems = computeAttention({
-    agents,
-    printers,
-    jobs: [],
-    nowMs: 0,
-  });
-
   return (
     <QueryErrorBoundary>
-      <DashboardViewContent
-        view="agents"
-        auth={auth}
+      <AgentsView
         selectedTenant={selectedTenant}
         printers={printers}
         agents={agents}
-        jobs={[]}
-        health={health}
-        attentionItems={attentionItems}
-        topSeverity={topSeverityOf(attentionItems)}
-        liveState="idle"
-        lastEventAt={null}
-        fleetEmpty={printers.length === 0}
-        nowMs={0}
         selectedCommand={command}
         commandData={commandData}
         discoveryCommand={discoveryCommand}
         discoveryData={discoveryData}
-        notifications={[]}
-        tenantTokens={[]}
-        auditEvents={[]}
         adminUnavailable={adminUnavailable}
-        adminLoadError={false}
-        canManageJobs={true}
       />
     </QueryErrorBoundary>
   );

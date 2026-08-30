@@ -7,19 +7,17 @@ import {
   computeHealth,
   topSeverityOf,
 } from "../../dashboard-attention";
-import { DashboardViewContent } from "../../dashboard-view-content";
+import { DevicesView } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
 import { devicesRouteQueries } from "../../route-data";
-import type { AuthMetadata, Printer, Tenant } from "../../dashboard-types";
+import type { Printer, Tenant } from "../../dashboard-types";
 import { useDashboardClock } from "../../use-dashboard-clock";
 
 const EMPTY_PRINTERS: Printer[] = [];
 
 export function DevicesPageClient({
-  auth,
   selectedTenant,
 }: {
-  auth: AuthMetadata;
   selectedTenant: Tenant;
 }) {
   const [printersQuery, agentsQuery, jobsQuery] = useQueries({
@@ -56,9 +54,7 @@ export function DevicesPageClient({
 
   return (
     <QueryErrorBoundary>
-      <DashboardViewContent
-        view="devices"
-        auth={auth}
+      <DevicesView
         selectedTenant={selectedTenant}
         printers={printers}
         agents={agents}
@@ -70,14 +66,6 @@ export function DevicesPageClient({
         lastEventAt={null}
         fleetEmpty={printers.length === 0}
         nowMs={nowMs}
-        selectedCommand={null}
-        commandData={null}
-        notifications={[]}
-        tenantTokens={[]}
-        auditEvents={[]}
-        adminUnavailable={false}
-        adminLoadError={false}
-        canManageJobs={true}
       />
     </QueryErrorBoundary>
   );

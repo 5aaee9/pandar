@@ -4,10 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
 import { QueryClientTestProvider } from "./query-client.test-utils";
-import {
-  DashboardViewContent,
-  type DashboardViewContentProps,
-} from "./dashboard-view-content";
+import { AgentsView, type AgentsViewProps } from "./dashboard-view-content";
 import type { Command, Tenant } from "./dashboard-types";
 
 vi.mock("./actions", () => ({
@@ -72,46 +69,18 @@ function command(id: string, kind: string, status = "succeeded"): Command {
   };
 }
 
-const baseProps: DashboardViewContentProps = {
-  view: "agents",
-  auth: {
-    source: "none",
-    cookieName: "pandar_session",
-    provider: "none",
-    signInUrl: null,
-    signOutUrl: null,
-  },
+const baseProps: AgentsViewProps = {
   selectedTenant: tenant,
-  health: {
-    printersTotal: 0,
-    printersOnline: 0,
-    agentsTotal: 1,
-    agentsConnected: 1,
-    jobsActive: 0,
-    jobsFailed: 0,
-  },
-  attentionItems: [],
-  topSeverity: null,
-  liveState: "idle",
-  lastEventAt: null,
-  fleetEmpty: true,
   printers: [],
   agents: [agent],
-  jobs: [],
-  nowMs: 0,
   selectedCommand: null,
   commandData: null,
-  notifications: [],
-  tenantTokens: [],
-  auditEvents: [],
   adminUnavailable: false,
-  adminLoadError: false,
-  canManageJobs: true,
 };
 
 describe("Agents view composition", () => {
   it("renders agents before diagnostics without the selected command", async () => {
-    renderWithMessages(<DashboardViewContent {...baseProps} />);
+    renderWithMessages(<AgentsView {...baseProps} />);
 
     const agentsHeading = screen.getByRole("heading", { name: "Agents" });
     const diagnosticsHeading = await screen.findByRole("heading", {
@@ -129,7 +98,7 @@ describe("Agents view composition", () => {
 
   it("routes a selected discovery command to the discovery section", async () => {
     renderWithMessages(
-      <DashboardViewContent
+      <AgentsView
         {...baseProps}
         selectedCommand={command("cmd-1", "discover_printers", "sent")}
         discoveryCommand={command("cmd-1", "discover_printers", "sent")}
@@ -154,7 +123,7 @@ describe("Agents view composition", () => {
     const linkCommand = command("cmd-2", "link_printer");
     const discovery = command("cmd-1", "discover_printers");
     renderWithMessages(
-      <DashboardViewContent
+      <AgentsView
         {...baseProps}
         selectedCommand={linkCommand}
         commandData={{

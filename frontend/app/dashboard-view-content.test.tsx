@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
 import zh from "../messages/zh.json";
-import { DashboardViewContent } from "./dashboard-view-content";
+import { DevicesView, JobsView } from "./dashboard-view-content";
 import { SettingsDashboard } from "./settings-dashboard";
 import type { AuthMetadata, Printer, Tenant, TenantToken } from "./dashboard-types";
 
@@ -113,9 +113,8 @@ const tenantTokens: TenantToken[] = [
   },
 ];
 
-describe("DashboardViewContent", () => {
-  const baseProps = {
-    auth,
+describe("Dashboard views", () => {
+  const devicesProps = {
     selectedTenant: tenant,
     health: {
       printersTotal: 0,
@@ -134,13 +133,13 @@ describe("DashboardViewContent", () => {
     agents: [],
     jobs: [],
     nowMs: 0,
-    selectedCommand: null,
-    commandData: null,
-    notifications: [],
-    tenantTokens: [],
-    auditEvents: [],
-    adminUnavailable: false,
-    adminLoadError: false,
+  };
+  const jobsProps = {
+    selectedTenant: tenant,
+    printers: [],
+    agents: [],
+    jobs: [],
+    nowMs: 0,
     canManageJobs: true,
   };
   const settingsProps = {
@@ -159,7 +158,7 @@ describe("DashboardViewContent", () => {
   };
 
   it("keeps devices focused on overview and printer inventory", () => {
-    renderWithMessages(<DashboardViewContent {...baseProps} view="devices" />);
+    renderWithMessages(<DevicesView {...devicesProps} />);
 
     expect(screen.getByText("All systems nominal")).toBeVisible();
     expect(
@@ -177,7 +176,7 @@ describe("DashboardViewContent", () => {
   });
 
   it("links overview agent and job stats to their dashboard pages", () => {
-    renderWithMessages(<DashboardViewContent {...baseProps} view="devices" />);
+    renderWithMessages(<DevicesView {...devicesProps} />);
 
     expect(
       screen.getByRole("link", { name: "Agents 1/1 connected" }),
@@ -189,9 +188,7 @@ describe("DashboardViewContent", () => {
 
   it("opens the dispatch form in a dialog from jobs", async () => {
     const user = userEvent.setup();
-    renderWithMessages(
-      <DashboardViewContent {...baseProps} view="jobs" printers={[printer]} />,
-    );
+    renderWithMessages(<JobsView {...jobsProps} printers={[printer]} />);
 
     const jobsHeading = screen.getByRole("heading", { name: "Print jobs" });
     expect(jobsHeading).toBeVisible();
