@@ -10,7 +10,7 @@ async fn configured_operate_printer_print_speed_mode_4_publishes_to_request_topi
     );
 
     gateway
-        .operate_printer("SERIAL1", PrinterOperation::SetPrintSpeed(4))
+        .operate_printer("SERIAL1", PrinterOperation::SetPrintSpeed { speed_mode: 4 })
         .await
         .unwrap();
 
@@ -145,7 +145,7 @@ async fn configured_operate_printer_home_preserves_axis_specific_request() {
             "SERIAL1",
             PrinterOperation::Home {
                 axes: vec![PrinterAxis::X, PrinterAxis::Z],
-                required_feature: None,
+                required_device_features: Vec::new(),
             },
         )
         .await
@@ -176,11 +176,25 @@ async fn configured_operate_printer_move_axes_publishes_relative_gcode_line() {
         .operate_printer(
             "SERIAL1",
             PrinterOperation::MoveAxes {
-                x_mm: Some(10.0),
-                y_mm: None,
-                z_mm: Some(-0.5),
-                feedrate_mm_per_min: Some(3000.0),
-                required_feature: None,
+                movements: [
+                    Some(10.0).map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::X,
+                        delta_mm,
+                    }),
+                    None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::Y,
+                        delta_mm,
+                    }),
+                    Some(-0.5).map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::Z,
+                        delta_mm,
+                    }),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+                feedrate_mm_per_min: Some(3000),
+                required_device_features: Vec::new(),
             },
         )
         .await

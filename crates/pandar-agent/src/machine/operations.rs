@@ -1,5 +1,5 @@
 use anyhow::Context;
-use pandar_core::{BambuDeviceFeature, H2cAutoNozzleMappingRequest};
+pub use pandar_core::{PrinterAxis, PrinterOperation};
 
 mod axis;
 mod light;
@@ -9,122 +9,13 @@ mod report;
 use super::{
     BambuPrinterEndpoint, DeviceFeatureLease, PrinterOperationDispatchResult,
     mqtt::{
-        BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, PrintErrorAction,
-        PublishedMqttCommand,
+        BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, PublishedMqttCommand,
     },
 };
 
 pub(crate) use axis::operate_printer_with_feature_selection;
 #[cfg(test)]
 pub(crate) use axis::pause as device_feature_dispatch_pause;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum PrinterOperation {
-    Pause,
-    Resume,
-    Stop,
-    HandlePrintError {
-        error_action: PrintErrorAction,
-        print_error: u32,
-        printer_job_id: String,
-        sequence_id: u64,
-    },
-    ToggleLight,
-    SetChamberLight(bool),
-    SetPrintSpeed(u8),
-    SetFanSpeed {
-        fan_index: u8,
-        speed_percent: u8,
-        airduct: bool,
-    },
-    SelectExtruder(u32),
-    Home {
-        axes: Vec<PrinterAxis>,
-        required_feature: Option<BambuDeviceFeature>,
-    },
-    MoveAxes {
-        x_mm: Option<f64>,
-        y_mm: Option<f64>,
-        z_mm: Option<f64>,
-        feedrate_mm_per_min: Option<f64>,
-        required_feature: Option<BambuDeviceFeature>,
-    },
-    SetHotendTemperature {
-        temperature_celsius: u16,
-        wait: bool,
-        extruder_id: Option<u32>,
-    },
-    SetBedTemperature {
-        temperature_celsius: u16,
-        wait: bool,
-    },
-    SetChamberTemperature {
-        temperature_celsius: u16,
-        wait: bool,
-    },
-    AmsRereadRfid {
-        ams_id: u32,
-        slot_id: u32,
-    },
-    AmsLoadFilament {
-        ams_id: u32,
-        slot_id: u32,
-        global_tray_id: Option<u32>,
-        external_id: Option<String>,
-        extruder_id: Option<u32>,
-    },
-    AmsUnloadFilament {
-        ams_id: u32,
-        slot_id: u32,
-        global_tray_id: Option<u32>,
-        external_id: Option<String>,
-        extruder_id: Option<u32>,
-    },
-    AmsStartDrying {
-        ams_id: u32,
-        temperature_celsius: u16,
-        duration_hours: u16,
-        filament: String,
-        rotate_tray: bool,
-    },
-    AmsStopDrying {
-        ams_id: u32,
-    },
-    GcodeLine {
-        param: String,
-    },
-    GetAutoNozzleMapping(H2cAutoNozzleMappingRequest),
-    NozzleHolderCtrl {
-        action: u32,
-    },
-    NozzleInfoConfirm {
-        id: u32,
-    },
-    HolderNozzleRefresh {
-        id: u32,
-    },
-}
-
-impl PrinterOperation {
-    pub(crate) fn required_feature(&self) -> Option<BambuDeviceFeature> {
-        match self {
-            Self::Home {
-                required_feature, ..
-            }
-            | Self::MoveAxes {
-                required_feature, ..
-            } => *required_feature,
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PrinterAxis {
-    X,
-    Y,
-    Z,
-}
 
 pub(super) async fn dispatch_printer_operation<T>(
     endpoint: &BambuPrinterEndpoint,
@@ -136,7 +27,7 @@ where
     T: BambuMqttTransport + Send + Sync,
 {
     let expected_auto_mapping = match &operation {
-        PrinterOperation::GetAutoNozzleMapping(request) => Some(request.clone()),
+        PrinterOperation::GetAutoNozzleMapping { request } => Some(request.clone()),
         _ => None,
     };
     let topics = BambuMqttTopics::for_serial(&endpoint.serial);
@@ -145,8 +36,10 @@ where
         .with_context(|| format!("subscribe to report topic {}", topics.report))?;
     let observed_features = feature_lease.as_ref().and_then(DeviceFeatureLease::get);
     let commands = match operation {
-        PrinterOperation::ToggleLight => light::chamber_light_commands(mqtt, &topics, None).await?,
-        PrinterOperation::SetChamberLight(on) => {
+        PrinterOperation::ToggleLight {} => {
+            light::chamber_light_commands(mqtt, &topics, None).await?
+        }
+        PrinterOperation::SetChamberLight { on } => {
             light::chamber_light_commands(mqtt, &topics, Some(on)).await?
         }
         operation => vec![

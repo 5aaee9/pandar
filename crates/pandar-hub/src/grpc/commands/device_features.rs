@@ -259,7 +259,7 @@ async fn required_feature_gate_failure(
     if required.is_empty() {
         return Ok(None);
     }
-    if !operation.operation.has_valid_required_device_features() {
+    if operation.operation.validate().is_err() {
         return Ok(Some(
             "persisted printer operation has invalid required-device-feature semantics".to_owned(),
         ));

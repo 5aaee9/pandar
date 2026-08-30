@@ -251,7 +251,7 @@ async fn configured_operate_printer_unknown_serial_rejects_before_publish() {
     );
 
     let err = gateway
-        .operate_printer("UNKNOWN", PrinterOperation::Pause)
+        .operate_printer("UNKNOWN", PrinterOperation::Pause {})
         .await
         .unwrap_err();
 

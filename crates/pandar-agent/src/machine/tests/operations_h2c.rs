@@ -53,7 +53,10 @@ async fn auto_mapping_matches_command_and_sequence() {
     ]);
 
     let result = gateway
-        .operate_printer("SERIAL1", PrinterOperation::GetAutoNozzleMapping(request()))
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::GetAutoNozzleMapping { request: request() },
+        )
         .await
         .unwrap();
     let report = serde_json::to_value(result.mqtt_report.unwrap()).unwrap();
@@ -75,7 +78,10 @@ async fn auto_mapping_preserves_correlated_printer_failure() {
     })]);
 
     let result = gateway
-        .operate_printer("SERIAL1", PrinterOperation::GetAutoNozzleMapping(request()))
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::GetAutoNozzleMapping { request: request() },
+        )
         .await
         .unwrap();
     let report = serde_json::to_value(result.mqtt_report.unwrap()).unwrap();

@@ -52,17 +52,35 @@ async fn printer_operation_required_features_reach_gateway_as_typed_axis_semanti
                 "SERIAL1".to_string(),
                 MachinePrinterOperation::Home {
                     axes: Vec::new(),
-                    required_feature: Some(BambuDeviceFeature::MqttHoming),
+                    required_device_features: vec![
+                        pandar_core::RequiredDeviceFeature::BambuMqttHoming
+                    ],
                 },
             ),
             (
                 "SERIAL1".to_string(),
                 MachinePrinterOperation::MoveAxes {
-                    x_mm: None,
-                    y_mm: Some(-10.0),
-                    z_mm: None,
+                    movements: [
+                        None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                            axis: pandar_core::PrinterAxis::X,
+                            delta_mm
+                        }),
+                        Some(-10.0).map(|delta_mm| pandar_core::PrinterAxisMovement {
+                            axis: pandar_core::PrinterAxis::Y,
+                            delta_mm
+                        }),
+                        None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                            axis: pandar_core::PrinterAxis::Z,
+                            delta_mm
+                        }),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .collect(),
                     feedrate_mm_per_min: None,
-                    required_feature: Some(BambuDeviceFeature::MqttAxisControl),
+                    required_device_features: vec![
+                        pandar_core::RequiredDeviceFeature::BambuMqttAxisControl
+                    ],
                 },
             ),
         ]
@@ -136,7 +154,7 @@ async fn printer_operation_publish_failure_emits_ack_then_failure_with_redacted_
     }
     assert_eq!(
         gateway.operations().await,
-        vec![("SERIAL1".to_string(), MachinePrinterOperation::Resume)]
+        vec![("SERIAL1".to_string(), MachinePrinterOperation::Resume {})]
     );
 }
 
@@ -182,7 +200,7 @@ async fn printer_operation_does_not_reject_missing_local_model() {
         gateway.operations().await,
         vec![(
             "SERIAL1".to_string(),
-            MachinePrinterOperation::SetPrintSpeed(4)
+            MachinePrinterOperation::SetPrintSpeed { speed_mode: 4 }
         )]
     );
 }

@@ -24,7 +24,13 @@ pub(crate) async fn operate_printer_with_feature_selection<T, F>(
 where
     T: BambuMqttTransport + Send + Sync,
 {
-    let Some(required_feature) = operation.required_feature() else {
+    operation.validate().map_err(anyhow::Error::new)?;
+    let Some(required_feature) = operation
+        .required_device_features()
+        .first()
+        .copied()
+        .map(pandar_core::RequiredDeviceFeature::bambu_feature)
+    else {
         return inner
             .lock()
             .await

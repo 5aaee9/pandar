@@ -1,23 +1,19 @@
-use crate::machine::PrinterOperation as MachinePrinterOperation;
+use anyhow::Context;
+use pandar_core::PrinterOperation;
 use pandar_protocol::agent::v1::printer_operation;
-
-const MIN_AMS_DRYING_TEMPERATURE_CELSIUS: u32 = 45;
-const MAX_AMS_DRYING_TEMPERATURE_CELSIUS: u32 = 85;
-const MIN_AMS_DRYING_DURATION_HOURS: u32 = 1;
-const MAX_AMS_DRYING_DURATION_HOURS: u32 = 24;
 
 pub(super) fn parse_ams_operation(
     operation: &printer_operation::Operation,
-) -> anyhow::Result<MachinePrinterOperation> {
+) -> anyhow::Result<PrinterOperation> {
     match operation {
         printer_operation::Operation::AmsRereadRfid(operation) => {
-            Ok(MachinePrinterOperation::AmsRereadRfid {
+            Ok(PrinterOperation::AmsRereadRfid {
                 ams_id: operation.ams_id,
                 slot_id: operation.slot_id,
             })
         }
         printer_operation::Operation::AmsLoadFilament(operation) => {
-            Ok(MachinePrinterOperation::AmsLoadFilament {
+            Ok(PrinterOperation::AmsLoadFilament {
                 ams_id: operation.ams_id,
                 slot_id: operation.slot_id,
                 global_tray_id: Some(operation.global_tray_id),
@@ -27,7 +23,7 @@ pub(super) fn parse_ams_operation(
             })
         }
         printer_operation::Operation::AmsUnloadFilament(operation) => {
-            Ok(MachinePrinterOperation::AmsUnloadFilament {
+            Ok(PrinterOperation::AmsUnloadFilament {
                 ams_id: operation.ams_id,
                 slot_id: operation.slot_id,
                 global_tray_id: Some(operation.global_tray_id),
@@ -37,30 +33,18 @@ pub(super) fn parse_ams_operation(
             })
         }
         printer_operation::Operation::AmsStartDrying(operation) => {
-            if !(MIN_AMS_DRYING_TEMPERATURE_CELSIUS..=MAX_AMS_DRYING_TEMPERATURE_CELSIUS)
-                .contains(&operation.temperature_celsius)
-            {
-                anyhow::bail!(
-                    "invalid printer operation drying temperature; expected {MIN_AMS_DRYING_TEMPERATURE_CELSIUS}..={MAX_AMS_DRYING_TEMPERATURE_CELSIUS}"
-                );
-            }
-            if !(MIN_AMS_DRYING_DURATION_HOURS..=MAX_AMS_DRYING_DURATION_HOURS)
-                .contains(&operation.duration_hours)
-            {
-                anyhow::bail!(
-                    "invalid printer operation drying duration; expected {MIN_AMS_DRYING_DURATION_HOURS}..={MAX_AMS_DRYING_DURATION_HOURS}"
-                );
-            }
-            Ok(MachinePrinterOperation::AmsStartDrying {
+            Ok(PrinterOperation::AmsStartDrying {
                 ams_id: operation.ams_id,
-                temperature_celsius: operation.temperature_celsius as u16,
-                duration_hours: operation.duration_hours as u16,
+                temperature_celsius: u16::try_from(operation.temperature_celsius)
+                    .context("printer operation drying temperature exceeds uint16")?,
+                duration_hours: u16::try_from(operation.duration_hours)
+                    .context("printer operation drying duration exceeds uint16")?,
                 filament: operation.filament.clone(),
                 rotate_tray: operation.rotate_tray,
             })
         }
         printer_operation::Operation::AmsStopDrying(operation) => {
-            Ok(MachinePrinterOperation::AmsStopDrying {
+            Ok(PrinterOperation::AmsStopDrying {
                 ams_id: operation.ams_id,
             })
         }
@@ -68,13 +52,13 @@ pub(super) fn parse_ams_operation(
     }
 }
 
-pub(super) fn refresh_materials_after_operation(operation: &MachinePrinterOperation) -> bool {
+pub(super) fn refresh_materials_after_operation(operation: &PrinterOperation) -> bool {
     matches!(
         operation,
-        MachinePrinterOperation::AmsRereadRfid { .. }
-            | MachinePrinterOperation::AmsLoadFilament { .. }
-            | MachinePrinterOperation::AmsUnloadFilament { .. }
-            | MachinePrinterOperation::AmsStartDrying { .. }
-            | MachinePrinterOperation::AmsStopDrying { .. }
+        PrinterOperation::AmsRereadRfid { .. }
+            | PrinterOperation::AmsLoadFilament { .. }
+            | PrinterOperation::AmsUnloadFilament { .. }
+            | PrinterOperation::AmsStartDrying { .. }
+            | PrinterOperation::AmsStopDrying { .. }
     )
 }

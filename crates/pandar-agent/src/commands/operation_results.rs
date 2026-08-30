@@ -6,32 +6,7 @@ use crate::machine::{
 };
 
 pub(super) fn printer_operation_action(operation: &MachinePrinterOperation) -> &'static str {
-    match operation {
-        MachinePrinterOperation::Pause => "pause",
-        MachinePrinterOperation::Resume => "resume",
-        MachinePrinterOperation::Stop => "stop",
-        MachinePrinterOperation::HandlePrintError { .. } => "handle_print_error",
-        MachinePrinterOperation::ToggleLight => "toggle_light",
-        MachinePrinterOperation::SetChamberLight(_) => "set_chamber_light",
-        MachinePrinterOperation::SetPrintSpeed(_) => "set_print_speed",
-        MachinePrinterOperation::SetFanSpeed { .. } => "set_fan_speed",
-        MachinePrinterOperation::SelectExtruder(_) => "select_extruder",
-        MachinePrinterOperation::Home { .. } => "home",
-        MachinePrinterOperation::MoveAxes { .. } => "move_axes",
-        MachinePrinterOperation::SetHotendTemperature { .. } => "set_hotend_temperature",
-        MachinePrinterOperation::SetBedTemperature { .. } => "set_bed_temperature",
-        MachinePrinterOperation::SetChamberTemperature { .. } => "set_chamber_temperature",
-        MachinePrinterOperation::AmsRereadRfid { .. } => "ams_reread_rfid",
-        MachinePrinterOperation::AmsLoadFilament { .. } => "ams_load_filament",
-        MachinePrinterOperation::AmsUnloadFilament { .. } => "ams_unload_filament",
-        MachinePrinterOperation::AmsStartDrying { .. } => "ams_start_drying",
-        MachinePrinterOperation::AmsStopDrying { .. } => "ams_stop_drying",
-        MachinePrinterOperation::GcodeLine { .. } => "gcode_line",
-        MachinePrinterOperation::GetAutoNozzleMapping(_) => "get_auto_nozzle_mapping",
-        MachinePrinterOperation::NozzleHolderCtrl { .. } => "nozzle_holder_ctrl",
-        MachinePrinterOperation::NozzleInfoConfirm { .. } => "nozzle_info_confirm",
-        MachinePrinterOperation::HolderNozzleRefresh { .. } => "holder_nozzle_refresh",
-    }
+    operation.action()
 }
 
 pub(super) fn printer_operation_result_json(
@@ -132,7 +107,7 @@ struct OperationResultFields {
 impl OperationResultFields {
     fn from(operation: &MachinePrinterOperation) -> Self {
         match operation {
-            MachinePrinterOperation::SetPrintSpeed(speed_mode) => Self {
+            MachinePrinterOperation::SetPrintSpeed { speed_mode } => Self {
                 speed_mode: Some(*speed_mode),
                 ..Self::default()
             },
@@ -146,7 +121,7 @@ impl OperationResultFields {
                 airduct: Some(*airduct),
                 ..Self::default()
             },
-            MachinePrinterOperation::SelectExtruder(extruder_id) => Self {
+            MachinePrinterOperation::SelectExtruder { extruder_id } => Self {
                 extruder_id: Some(*extruder_id),
                 ..Self::default()
             },
@@ -155,18 +130,23 @@ impl OperationResultFields {
                 ..Self::default()
             },
             MachinePrinterOperation::MoveAxes {
-                x_mm,
-                y_mm,
-                z_mm,
+                movements,
                 feedrate_mm_per_min,
                 ..
-            } => Self {
-                x_mm: *x_mm,
-                y_mm: *y_mm,
-                z_mm: *z_mm,
-                feedrate_mm_per_min: *feedrate_mm_per_min,
-                ..Self::default()
-            },
+            } => {
+                let mut result = Self {
+                    feedrate_mm_per_min: feedrate_mm_per_min.map(f64::from),
+                    ..Self::default()
+                };
+                for movement in movements {
+                    match movement.axis {
+                        MachinePrinterAxis::X => result.x_mm = Some(movement.delta_mm),
+                        MachinePrinterAxis::Y => result.y_mm = Some(movement.delta_mm),
+                        MachinePrinterAxis::Z => result.z_mm = Some(movement.delta_mm),
+                    }
+                }
+                result
+            }
             MachinePrinterOperation::SetHotendTemperature {
                 temperature_celsius,
                 wait,
@@ -189,7 +169,7 @@ impl OperationResultFields {
                 wait: Some(*wait),
                 ..Self::default()
             },
-            MachinePrinterOperation::SetChamberLight(on) => Self {
+            MachinePrinterOperation::SetChamberLight { on } => Self {
                 light_on: Some(*on),
                 ..Self::default()
             },
@@ -246,13 +226,13 @@ impl OperationResultFields {
                 nozzle_id: Some(*id),
                 ..Self::default()
             },
-            MachinePrinterOperation::Pause
-            | MachinePrinterOperation::Resume
-            | MachinePrinterOperation::Stop
+            MachinePrinterOperation::Pause {}
+            | MachinePrinterOperation::Resume {}
+            | MachinePrinterOperation::Stop {}
             | MachinePrinterOperation::HandlePrintError { .. }
-            | MachinePrinterOperation::ToggleLight
+            | MachinePrinterOperation::ToggleLight {}
             | MachinePrinterOperation::GcodeLine { .. }
-            | MachinePrinterOperation::GetAutoNozzleMapping(_) => Self::default(),
+            | MachinePrinterOperation::GetAutoNozzleMapping { .. } => Self::default(),
         }
     }
 }

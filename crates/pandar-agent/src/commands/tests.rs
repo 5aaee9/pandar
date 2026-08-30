@@ -27,7 +27,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use link_support::*;
 use operation_support::*;
-use pandar_core::{BambuDeviceFeature, BambuDeviceFeatures, PrinterFirmwareModule};
+use pandar_core::{BambuDeviceFeatures, PrinterFirmwareModule};
 use reports::{ams_ready_report, get_version_report};
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, sync::mpsc};

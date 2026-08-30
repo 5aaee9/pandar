@@ -3,12 +3,7 @@ use super::{
     payload::{PrintErrorCommand, PrintPayload, json_payload},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PrintErrorAction {
-    Resume,
-    Ignore,
-    Stop,
-}
+pub use pandar_core::PrintErrorAction;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HandlePrintErrorCommand {

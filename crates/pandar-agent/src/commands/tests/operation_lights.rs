@@ -44,7 +44,10 @@ async fn printer_operation_toggle_light_dispatches_typed_action() {
     }
     assert_eq!(
         gateway.operations().await,
-        vec![("SERIAL1".to_string(), MachinePrinterOperation::ToggleLight)]
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::ToggleLight {}
+        )]
     );
 }
 
@@ -95,7 +98,7 @@ async fn printer_operation_set_chamber_light_dispatches_requested_state() {
         gateway.operations().await,
         vec![(
             "SERIAL1".to_string(),
-            MachinePrinterOperation::SetChamberLight(true)
+            MachinePrinterOperation::SetChamberLight { on: true }
         )]
     );
 }

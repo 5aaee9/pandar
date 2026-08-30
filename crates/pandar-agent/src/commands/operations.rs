@@ -1,5 +1,7 @@
 use anyhow::Context;
-use pandar_core::BambuDeviceFeature;
+use pandar_core::{
+    PrintErrorAction, PrinterAxis, PrinterAxisMovement, PrinterOperation, RequiredDeviceFeature,
+};
 use tokio::sync::mpsc;
 
 mod ams;
@@ -13,22 +15,11 @@ use super::{
 use crate::{
     AgentConfig,
     commands::operation_results::{printer_operation_action, printer_operation_result_json},
-    machine::{
-        PrinterAxis as MachinePrinterAxis, PrinterOperation as MachinePrinterOperation,
-        mqtt::PrintErrorAction as MachinePrintErrorAction,
-    },
 };
 use pandar_protocol::agent::v1::{
     AgentEvent, Axis, DeviceFeature, PrintErrorAction as ProtoPrintErrorAction,
     PrinterOperation as ProtoPrinterOperation, printer_operation,
 };
-
-const MAX_MOVE_DELTA_MM: f64 = 50.0;
-const MIN_MOVE_FEEDRATE_MM_PER_MIN: u32 = 1;
-const MAX_MOVE_FEEDRATE_MM_PER_MIN: u32 = 12_000;
-const MAX_HOTEND_TEMPERATURE_CELSIUS: u32 = 300;
-const MAX_BED_TEMPERATURE_CELSIUS: u32 = 120;
-const MAX_CHAMBER_TEMPERATURE_CELSIUS: u32 = 70;
 
 pub(super) async fn emit_events<G>(
     config: &AgentConfig,
@@ -131,11 +122,10 @@ where
     Ok(())
 }
 
-fn parse_printer_operation(
-    command: &ProtoPrinterOperation,
-) -> anyhow::Result<MachinePrinterOperation> {
-    let required_feature = parse_required_device_feature(&command.required_device_features)?;
-    if required_feature.is_some()
+fn parse_printer_operation(command: &ProtoPrinterOperation) -> anyhow::Result<PrinterOperation> {
+    let required_device_features =
+        parse_required_device_features(&command.required_device_features)?;
+    if !required_device_features.is_empty()
         && !matches!(
             command.operation.as_ref(),
             Some(printer_operation::Operation::Home(_))
@@ -144,132 +134,79 @@ fn parse_printer_operation(
     {
         anyhow::bail!("required device feature is only valid for home or move_axes");
     }
-    match command.operation.as_ref() {
-        Some(printer_operation::Operation::Pause(_)) => Ok(MachinePrinterOperation::Pause),
-        Some(printer_operation::Operation::Resume(_)) => Ok(MachinePrinterOperation::Resume),
-        Some(printer_operation::Operation::Stop(_)) => Ok(MachinePrinterOperation::Stop),
-        Some(printer_operation::Operation::ToggleLight(_)) => {
-            Ok(MachinePrinterOperation::ToggleLight)
-        }
+    let operation = match command.operation.as_ref() {
+        Some(printer_operation::Operation::Pause(_)) => PrinterOperation::Pause {},
+        Some(printer_operation::Operation::Resume(_)) => PrinterOperation::Resume {},
+        Some(printer_operation::Operation::Stop(_)) => PrinterOperation::Stop {},
+        Some(printer_operation::Operation::ToggleLight(_)) => PrinterOperation::ToggleLight {},
         Some(printer_operation::Operation::SetChamberLight(operation)) => {
-            Ok(MachinePrinterOperation::SetChamberLight(operation.on))
+            PrinterOperation::SetChamberLight { on: operation.on }
         }
         Some(printer_operation::Operation::SetPrintSpeed(operation)) => {
-            match operation.speed_mode {
-                1..=4 => Ok(MachinePrinterOperation::SetPrintSpeed(
-                    operation.speed_mode as u8,
-                )),
-                _ => anyhow::bail!("invalid printer operation speed_mode; expected 1..=4"),
+            PrinterOperation::SetPrintSpeed {
+                speed_mode: u8::try_from(operation.speed_mode)
+                    .context("printer operation speed_mode exceeds uint8")?,
             }
         }
         Some(printer_operation::Operation::SetFanSpeed(operation)) => {
-            if !(1..=3).contains(&operation.fan_index) {
-                anyhow::bail!("invalid printer operation fan_index; expected 1..=3");
-            }
-            if operation.speed_percent > 100 {
-                anyhow::bail!("invalid printer operation fan speed; expected <= 100");
-            }
-            Ok(MachinePrinterOperation::SetFanSpeed {
-                fan_index: operation.fan_index as u8,
-                speed_percent: operation.speed_percent as u8,
+            PrinterOperation::SetFanSpeed {
+                fan_index: u8::try_from(operation.fan_index)
+                    .context("printer operation fan_index exceeds uint8")?,
+                speed_percent: u8::try_from(operation.speed_percent)
+                    .context("printer operation fan speed exceeds uint8")?,
                 airduct: operation.airduct,
-            })
+            }
         }
         Some(printer_operation::Operation::SelectExtruder(operation)) => {
-            match operation.extruder_id {
-                0..=1 => Ok(MachinePrinterOperation::SelectExtruder(
-                    operation.extruder_id,
-                )),
-                _ => anyhow::bail!("invalid printer operation extruder_id; expected 0..=1"),
+            PrinterOperation::SelectExtruder {
+                extruder_id: operation.extruder_id,
             }
         }
-        Some(printer_operation::Operation::Home(operation)) => {
-            let axes = operation
+        Some(printer_operation::Operation::Home(operation)) => PrinterOperation::Home {
+            axes: operation
                 .axes
                 .iter()
                 .copied()
                 .map(parse_printer_axis)
-                .collect::<anyhow::Result<Vec<_>>>()?;
-            match required_feature {
-                None => {}
-                Some(BambuDeviceFeature::MqttHoming) if axes.is_empty() => {}
-                Some(_) => anyhow::bail!(
-                    "required device feature does not match empty-axis home semantics"
-                ),
-            }
-            Ok(MachinePrinterOperation::Home {
-                axes,
-                required_feature,
-            })
-        }
-        Some(printer_operation::Operation::MoveAxes(operation)) => {
-            let mut x_mm = None;
-            let mut y_mm = None;
-            let mut z_mm = None;
-            for movement in &operation.movements {
-                validate_move_delta(movement.delta_mm)?;
-                match parse_printer_axis(movement.axis)? {
-                    MachinePrinterAxis::X if x_mm.is_none() => x_mm = Some(movement.delta_mm),
-                    MachinePrinterAxis::Y if y_mm.is_none() => y_mm = Some(movement.delta_mm),
-                    MachinePrinterAxis::Z if z_mm.is_none() => z_mm = Some(movement.delta_mm),
-                    _ => anyhow::bail!("printer operation move_axes contains duplicate axis"),
-                }
-            }
-            if x_mm.is_none() && y_mm.is_none() && z_mm.is_none() {
-                anyhow::bail!("printer operation move_axes requires at least one axis");
-            }
-            let feedrate_mm_per_min = parse_move_feedrate(operation.feedrate_mm_per_min)?;
-            match required_feature {
-                None => {}
-                Some(BambuDeviceFeature::MqttAxisControl)
-                    if [x_mm, y_mm, z_mm].into_iter().flatten().count() == 1
-                        && feedrate_mm_per_min.is_none()
-                        && [x_mm, y_mm, z_mm]
-                            .into_iter()
-                            .flatten()
-                            .all(|delta| matches!(delta.abs(), 1.0 | 10.0)) => {}
-                Some(_) => anyhow::bail!(
-                    "required device feature does not match modern axis movement semantics"
-                ),
-            }
-            Ok(MachinePrinterOperation::MoveAxes {
-                x_mm,
-                y_mm,
-                z_mm,
-                feedrate_mm_per_min,
-                required_feature,
-            })
-        }
+                .collect::<anyhow::Result<Vec<_>>>()?,
+            required_device_features,
+        },
+        Some(printer_operation::Operation::MoveAxes(operation)) => PrinterOperation::MoveAxes {
+            movements: operation
+                .movements
+                .iter()
+                .map(|movement| {
+                    Ok(PrinterAxisMovement {
+                        axis: parse_printer_axis(movement.axis)?,
+                        delta_mm: movement.delta_mm,
+                    })
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?,
+            feedrate_mm_per_min: (operation.feedrate_mm_per_min != 0)
+                .then_some(operation.feedrate_mm_per_min),
+            required_device_features,
+        },
         Some(printer_operation::Operation::SetHotendTemperature(operation)) => {
-            if operation.temperature_celsius > MAX_HOTEND_TEMPERATURE_CELSIUS {
-                anyhow::bail!("invalid printer operation hotend temperature; expected <= 300");
-            }
-            if operation.extruder_id.is_some_and(|value| value > 1) {
-                anyhow::bail!("invalid printer operation extruder_id; expected 0..=1");
-            }
-            Ok(MachinePrinterOperation::SetHotendTemperature {
-                temperature_celsius: operation.temperature_celsius as u16,
+            PrinterOperation::SetHotendTemperature {
+                temperature_celsius: u16::try_from(operation.temperature_celsius)
+                    .context("printer operation hotend temperature exceeds uint16")?,
                 wait: operation.wait,
                 extruder_id: operation.extruder_id,
-            })
+            }
         }
         Some(printer_operation::Operation::SetBedTemperature(operation)) => {
-            if operation.temperature_celsius > MAX_BED_TEMPERATURE_CELSIUS {
-                anyhow::bail!("invalid printer operation bed temperature; expected <= 120");
-            }
-            Ok(MachinePrinterOperation::SetBedTemperature {
-                temperature_celsius: operation.temperature_celsius as u16,
+            PrinterOperation::SetBedTemperature {
+                temperature_celsius: u16::try_from(operation.temperature_celsius)
+                    .context("printer operation bed temperature exceeds uint16")?,
                 wait: operation.wait,
-            })
+            }
         }
         Some(printer_operation::Operation::SetChamberTemperature(operation)) => {
-            if operation.temperature_celsius > MAX_CHAMBER_TEMPERATURE_CELSIUS {
-                anyhow::bail!("invalid printer operation chamber temperature; expected <= 70");
-            }
-            Ok(MachinePrinterOperation::SetChamberTemperature {
-                temperature_celsius: operation.temperature_celsius as u16,
+            PrinterOperation::SetChamberTemperature {
+                temperature_celsius: u16::try_from(operation.temperature_celsius)
+                    .context("printer operation chamber temperature exceeds uint16")?,
                 wait: operation.wait,
-            })
+            }
         }
         Some(
             operation @ (printer_operation::Operation::AmsRereadRfid(_)
@@ -277,92 +214,68 @@ fn parse_printer_operation(
             | printer_operation::Operation::AmsUnloadFilament(_)
             | printer_operation::Operation::AmsStartDrying(_)
             | printer_operation::Operation::AmsStopDrying(_)),
-        ) => ams::parse_ams_operation(operation),
+        ) => ams::parse_ams_operation(operation)?,
         Some(printer_operation::Operation::HandlePrintError(operation)) => {
             let error_action = match ProtoPrintErrorAction::try_from(operation.error_action) {
-                Ok(ProtoPrintErrorAction::Resume) => MachinePrintErrorAction::Resume,
-                Ok(ProtoPrintErrorAction::Ignore) => MachinePrintErrorAction::Ignore,
-                Ok(ProtoPrintErrorAction::Stop) => MachinePrintErrorAction::Stop,
+                Ok(ProtoPrintErrorAction::Resume) => PrintErrorAction::Resume,
+                Ok(ProtoPrintErrorAction::Ignore) => PrintErrorAction::Ignore,
+                Ok(ProtoPrintErrorAction::Stop) => PrintErrorAction::Stop,
                 Ok(ProtoPrintErrorAction::Unspecified) | Err(_) => {
                     anyhow::bail!("invalid printer operation error_action")
                 }
             };
-            if !(1..=i32::MAX as u32).contains(&operation.print_error) {
-                anyhow::bail!(
-                    "invalid printer operation print_error; expected 1..={}",
-                    i32::MAX
-                );
-            }
-            Ok(MachinePrinterOperation::HandlePrintError {
+            PrinterOperation::HandlePrintError {
                 error_action,
                 print_error: operation.print_error,
                 printer_job_id: operation.printer_job_id.clone(),
                 sequence_id: operation.sequence_id,
-            })
+            }
         }
-        Some(printer_operation::Operation::GcodeLine(operation)) => {
-            Ok(MachinePrinterOperation::GcodeLine {
-                param: operation.param.clone(),
-            })
-        }
+        Some(printer_operation::Operation::GcodeLine(operation)) => PrinterOperation::GcodeLine {
+            param: operation.param.clone(),
+        },
         Some(printer_operation::Operation::GetAutoNozzleMapping(operation)) => {
-            h2c::parse_auto_nozzle_mapping(operation)
+            h2c::parse_auto_nozzle_mapping(operation)?
         }
         Some(printer_operation::Operation::NozzleHolderCtrl(operation)) => {
-            h2c::parse_nozzle_holder_ctrl(operation.action)
+            PrinterOperation::NozzleHolderCtrl {
+                action: operation.action,
+            }
         }
         Some(printer_operation::Operation::NozzleInfoConfirm(operation)) => {
-            h2c::parse_nozzle_info_confirm(operation.id)
+            PrinterOperation::NozzleInfoConfirm { id: operation.id }
         }
         Some(printer_operation::Operation::HolderNozzleRefresh(operation)) => {
-            h2c::parse_holder_nozzle_refresh(operation.id)
+            PrinterOperation::HolderNozzleRefresh { id: operation.id }
         }
         None => anyhow::bail!("missing printer operation"),
-    }
+    };
+    operation.validate().map_err(anyhow::Error::new)?;
+    Ok(operation)
 }
 
-fn parse_required_device_feature(values: &[i32]) -> anyhow::Result<Option<BambuDeviceFeature>> {
+fn parse_required_device_features(values: &[i32]) -> anyhow::Result<Vec<RequiredDeviceFeature>> {
     let value = match values {
-        [] => return Ok(None),
+        [] => return Ok(Vec::new()),
         [value] => *value,
         _ => anyhow::bail!("printer operation contains duplicate required device feature values"),
     };
     match DeviceFeature::try_from(value) {
-        Ok(DeviceFeature::BambuMqttHoming) => Ok(Some(BambuDeviceFeature::MqttHoming)),
-        Ok(DeviceFeature::BambuMqttAxisControl) => Ok(Some(BambuDeviceFeature::MqttAxisControl)),
+        Ok(DeviceFeature::BambuMqttHoming) => Ok(vec![RequiredDeviceFeature::BambuMqttHoming]),
+        Ok(DeviceFeature::BambuMqttAxisControl) => {
+            Ok(vec![RequiredDeviceFeature::BambuMqttAxisControl])
+        }
         Ok(DeviceFeature::Unspecified) | Err(_) => {
             anyhow::bail!("invalid required device feature value {value}")
         }
     }
 }
 
-fn validate_move_delta(delta_mm: f64) -> anyhow::Result<()> {
-    if delta_mm.is_finite() && delta_mm != 0.0 && delta_mm.abs() <= MAX_MOVE_DELTA_MM {
-        Ok(())
-    } else {
-        anyhow::bail!(
-            "invalid printer operation move_axes delta_mm; expected finite nonzero value within 50mm"
-        )
-    }
-}
-
-fn parse_move_feedrate(feedrate_mm_per_min: u32) -> anyhow::Result<Option<f64>> {
-    if feedrate_mm_per_min == 0 {
-        return Ok(None);
-    }
-    if (MIN_MOVE_FEEDRATE_MM_PER_MIN..=MAX_MOVE_FEEDRATE_MM_PER_MIN).contains(&feedrate_mm_per_min)
-    {
-        Ok(Some(feedrate_mm_per_min as f64))
-    } else {
-        anyhow::bail!("invalid printer operation move_axes feedrate; expected 1..=12000")
-    }
-}
-
-fn parse_printer_axis(axis: i32) -> anyhow::Result<MachinePrinterAxis> {
+fn parse_printer_axis(axis: i32) -> anyhow::Result<PrinterAxis> {
     match Axis::try_from(axis) {
-        Ok(Axis::X) => Ok(MachinePrinterAxis::X),
-        Ok(Axis::Y) => Ok(MachinePrinterAxis::Y),
-        Ok(Axis::Z) => Ok(MachinePrinterAxis::Z),
+        Ok(Axis::X) => Ok(PrinterAxis::X),
+        Ok(Axis::Y) => Ok(PrinterAxis::Y),
+        Ok(Axis::Z) => Ok(PrinterAxis::Z),
         Ok(Axis::Unspecified) | Err(_) => anyhow::bail!("invalid printer operation axis"),
     }
 }

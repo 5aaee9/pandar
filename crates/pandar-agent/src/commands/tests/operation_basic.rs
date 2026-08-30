@@ -39,7 +39,7 @@ async fn printer_operation_valid_emits_ack_and_success_with_result_json() {
     }
     assert_eq!(
         gateway.operations().await,
-        vec![("SERIAL1".to_string(), MachinePrinterOperation::Pause)]
+        vec![("SERIAL1".to_string(), MachinePrinterOperation::Pause {})]
     );
 }
 

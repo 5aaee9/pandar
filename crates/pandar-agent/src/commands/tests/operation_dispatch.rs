@@ -41,7 +41,7 @@ async fn printer_operation_select_extruder_dispatches_typed_details() {
         gateway.operations().await,
         vec![(
             "SERIAL1".to_string(),
-            MachinePrinterOperation::SelectExtruder(1)
+            MachinePrinterOperation::SelectExtruder { extruder_id: 1 }
         )]
     );
 }
@@ -90,11 +90,25 @@ async fn printer_operation_move_axes_dispatches_typed_details() {
         vec![(
             "SERIAL1".to_string(),
             MachinePrinterOperation::MoveAxes {
-                x_mm: Some(10.0),
-                y_mm: None,
-                z_mm: Some(-0.5),
-                feedrate_mm_per_min: Some(3000.0),
-                required_feature: None,
+                movements: [
+                    Some(10.0).map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::X,
+                        delta_mm
+                    }),
+                    None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::Y,
+                        delta_mm
+                    }),
+                    Some(-0.5).map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::Z,
+                        delta_mm
+                    }),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+                feedrate_mm_per_min: Some(3000),
+                required_device_features: Vec::new(),
             }
         )]
     );

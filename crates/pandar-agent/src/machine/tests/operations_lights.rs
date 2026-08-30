@@ -10,7 +10,7 @@ async fn configured_operate_printer_publishes_pause_to_request_topic() {
     );
 
     gateway
-        .operate_printer("SERIAL1", PrinterOperation::Pause)
+        .operate_printer("SERIAL1", PrinterOperation::Pause {})
         .await
         .unwrap();
 
@@ -36,7 +36,10 @@ async fn configured_operate_printer_select_extruder_publishes_reference_command(
     );
 
     gateway
-        .operate_printer("SERIAL1", PrinterOperation::SelectExtruder(1))
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::SelectExtruder { extruder_id: 1 },
+        )
         .await
         .unwrap();
 
@@ -62,7 +65,7 @@ async fn configured_operate_printer_toggle_light_sends_bambu_studio_light_nodes(
     );
 
     gateway
-        .operate_printer("SERIAL1", PrinterOperation::ToggleLight)
+        .operate_printer("SERIAL1", PrinterOperation::ToggleLight {})
         .await
         .unwrap();
 
@@ -105,7 +108,7 @@ async fn configured_operate_printer_toggle_light_matches_bambu_studio_light_node
     );
 
     gateway
-        .operate_printer("SERIAL1", PrinterOperation::ToggleLight)
+        .operate_printer("SERIAL1", PrinterOperation::ToggleLight {})
         .await
         .unwrap();
 
@@ -145,7 +148,7 @@ async fn configured_operate_printer_set_chamber_light_uses_requested_state() {
     );
 
     gateway
-        .operate_printer("SERIAL1", PrinterOperation::SetChamberLight(true))
+        .operate_printer("SERIAL1", PrinterOperation::SetChamberLight { on: true })
         .await
         .unwrap();
 
@@ -188,7 +191,7 @@ async fn configured_operate_printer_light_returns_primary_success_when_light2_fa
     );
 
     let result = gateway
-        .operate_printer("SERIAL1", PrinterOperation::SetChamberLight(true))
+        .operate_printer("SERIAL1", PrinterOperation::SetChamberLight { on: true })
         .await
         .unwrap();
 
@@ -220,7 +223,7 @@ async fn configured_operate_printer_returns_matching_mqtt_sequence_result() {
     );
 
     let result = gateway
-        .operate_printer("SERIAL1", PrinterOperation::Pause)
+        .operate_printer("SERIAL1", PrinterOperation::Pause {})
         .await
         .unwrap();
 

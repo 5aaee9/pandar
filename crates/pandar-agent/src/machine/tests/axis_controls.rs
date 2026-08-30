@@ -108,7 +108,7 @@ async fn axis_controls_legacy_home_preserves_requested_axis_order() {
     assert_eq!(
         published_print_param(PrinterOperation::Home {
             axes: vec![PrinterAxis::Z, PrinterAxis::X, PrinterAxis::Y],
-            required_feature: None,
+            required_device_features: Vec::new(),
         })
         .await,
         "G28 Z X Y"
@@ -116,7 +116,7 @@ async fn axis_controls_legacy_home_preserves_requested_axis_order() {
     assert_eq!(
         published_print_param(PrinterOperation::Home {
             axes: vec![PrinterAxis::X],
-            required_feature: None,
+            required_device_features: Vec::new(),
         })
         .await,
         "G28 X"
@@ -124,7 +124,7 @@ async fn axis_controls_legacy_home_preserves_requested_axis_order() {
     assert_eq!(
         published_print_param(PrinterOperation::Home {
             axes: Vec::new(),
-            required_feature: None,
+            required_device_features: Vec::new(),
         })
         .await,
         "G28"
@@ -136,41 +136,97 @@ async fn axis_controls_legacy_move_uses_studio_seven_line_g1_envelope() {
     for (operation, expected_move) in [
         (
             PrinterOperation::MoveAxes {
-                x_mm: Some(1.0),
-                y_mm: None,
-                z_mm: None,
-                feedrate_mm_per_min: Some(3000.0),
-                required_feature: None,
+                movements: [
+                    Some(1.0).map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::X,
+                        delta_mm,
+                    }),
+                    None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::Y,
+                        delta_mm,
+                    }),
+                    None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::Z,
+                        delta_mm,
+                    }),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+                feedrate_mm_per_min: Some(3000),
+                required_device_features: Vec::new(),
             },
             "G1 X1 F3000",
         ),
         (
             PrinterOperation::MoveAxes {
-                x_mm: None,
-                y_mm: Some(-10.0),
-                z_mm: None,
-                feedrate_mm_per_min: Some(3000.0),
-                required_feature: None,
+                movements: [
+                    None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::X,
+                        delta_mm,
+                    }),
+                    Some(-10.0).map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::Y,
+                        delta_mm,
+                    }),
+                    None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::Z,
+                        delta_mm,
+                    }),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+                feedrate_mm_per_min: Some(3000),
+                required_device_features: Vec::new(),
             },
             "G1 Y-10 F3000",
         ),
         (
             PrinterOperation::MoveAxes {
-                x_mm: None,
-                y_mm: None,
-                z_mm: Some(10.0),
-                feedrate_mm_per_min: Some(900.0),
-                required_feature: None,
+                movements: [
+                    None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::X,
+                        delta_mm,
+                    }),
+                    None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::Y,
+                        delta_mm,
+                    }),
+                    Some(10.0).map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::Z,
+                        delta_mm,
+                    }),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+                feedrate_mm_per_min: Some(900),
+                required_device_features: Vec::new(),
             },
             "G1 Z10 F900",
         ),
         (
             PrinterOperation::MoveAxes {
-                x_mm: Some(0.123456789),
-                y_mm: None,
-                z_mm: None,
+                movements: [
+                    Some(0.123456789).map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::X,
+                        delta_mm,
+                    }),
+                    None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::Y,
+                        delta_mm,
+                    }),
+                    None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                        axis: pandar_core::PrinterAxis::Z,
+                        delta_mm,
+                    }),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
                 feedrate_mm_per_min: None,
-                required_feature: None,
+                required_device_features: Vec::new(),
             },
             "G1 X0.123456789",
         ),
@@ -205,7 +261,7 @@ async fn axis_controls_modern_home_uses_exact_back_to_center_payload() {
     fixture
         .operate(PrinterOperation::Home {
             axes: Vec::new(),
-            required_feature: Some(BambuDeviceFeature::MqttHoming),
+            required_device_features: vec![pandar_core::RequiredDeviceFeature::BambuMqttHoming],
         })
         .await
         .unwrap();
@@ -239,19 +295,16 @@ async fn axis_controls_modern_move_preserves_signed_xyz_direction_and_mode() {
                 BambuDeviceFeatures::from_bits(1_u64 << BambuDeviceFeature::MqttAxisControl.bit()),
             )
             .await;
-        let (x_mm, y_mm, z_mm) = match axis {
-            PrinterAxis::X => (Some(delta), None, None),
-            PrinterAxis::Y => (None, Some(delta), None),
-            PrinterAxis::Z => (None, None, Some(delta)),
-        };
-
         fixture
             .operate(PrinterOperation::MoveAxes {
-                x_mm,
-                y_mm,
-                z_mm,
+                movements: vec![pandar_core::PrinterAxisMovement {
+                    axis,
+                    delta_mm: delta,
+                }],
                 feedrate_mm_per_min: None,
-                required_feature: Some(BambuDeviceFeature::MqttAxisControl),
+                required_device_features: vec![
+                    pandar_core::RequiredDeviceFeature::BambuMqttAxisControl,
+                ],
             })
             .await
             .unwrap();
@@ -283,7 +336,7 @@ async fn axis_controls_cached_missing_feature_fails_closed_and_reemits_exact_bit
     let error = fixture
         .operate(PrinterOperation::Home {
             axes: Vec::new(),
-            required_feature: Some(BambuDeviceFeature::MqttHoming),
+            required_device_features: vec![pandar_core::RequiredDeviceFeature::BambuMqttHoming],
         })
         .await
         .unwrap_err();
@@ -306,7 +359,7 @@ async fn axis_controls_cold_zero_probe_fails_closed_and_emits_zero() {
     let error = fixture
         .operate(PrinterOperation::Home {
             axes: Vec::new(),
-            required_feature: Some(BambuDeviceFeature::MqttHoming),
+            required_device_features: vec![pandar_core::RequiredDeviceFeature::BambuMqttHoming],
         })
         .await
         .unwrap_err();
@@ -329,11 +382,27 @@ async fn axis_controls_cold_nonzero_missing_bit_preserves_exact_observation() {
 
     let error = fixture
         .operate(PrinterOperation::MoveAxes {
-            x_mm: Some(1.0),
-            y_mm: None,
-            z_mm: None,
+            movements: [
+                Some(1.0).map(|delta_mm| pandar_core::PrinterAxisMovement {
+                    axis: pandar_core::PrinterAxis::X,
+                    delta_mm,
+                }),
+                None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                    axis: pandar_core::PrinterAxis::Y,
+                    delta_mm,
+                }),
+                None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                    axis: pandar_core::PrinterAxis::Z,
+                    delta_mm,
+                }),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
             feedrate_mm_per_min: None,
-            required_feature: Some(BambuDeviceFeature::MqttAxisControl),
+            required_device_features: vec![
+                pandar_core::RequiredDeviceFeature::BambuMqttAxisControl,
+            ],
         })
         .await
         .unwrap_err();
@@ -359,7 +428,7 @@ async fn axis_controls_invalid_missing_and_timed_out_probes_invalidate_without_o
         let error = fixture
             .operate(PrinterOperation::Home {
                 axes: Vec::new(),
-                required_feature: Some(BambuDeviceFeature::MqttHoming),
+                required_device_features: vec![pandar_core::RequiredDeviceFeature::BambuMqttHoming],
             })
             .await
             .unwrap_err();
@@ -381,7 +450,7 @@ async fn axis_controls_requirement_free_operation_never_probes_or_downgrades_fro
     fixture
         .operate(PrinterOperation::Home {
             axes: vec![PrinterAxis::X],
-            required_feature: None,
+            required_device_features: Vec::new(),
         })
         .await
         .unwrap();
@@ -402,7 +471,7 @@ async fn axis_controls_cold_supported_probe_publishes_pushall_before_modern_oper
     fixture
         .operate(PrinterOperation::Home {
             axes: Vec::new(),
-            required_feature: Some(BambuDeviceFeature::MqttHoming),
+            required_device_features: vec![pandar_core::RequiredDeviceFeature::BambuMqttHoming],
         })
         .await
         .unwrap();
@@ -425,17 +494,33 @@ async fn axis_controls_shared_cache_converges_from_supported_to_exact_zero() {
     fixture
         .operate(PrinterOperation::Home {
             axes: Vec::new(),
-            required_feature: Some(BambuDeviceFeature::MqttHoming),
+            required_device_features: vec![pandar_core::RequiredDeviceFeature::BambuMqttHoming],
         })
         .await
         .unwrap();
     fixture
         .operate(PrinterOperation::MoveAxes {
-            x_mm: None,
-            y_mm: Some(-10.0),
-            z_mm: None,
+            movements: [
+                None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                    axis: pandar_core::PrinterAxis::X,
+                    delta_mm,
+                }),
+                Some(-10.0).map(|delta_mm| pandar_core::PrinterAxisMovement {
+                    axis: pandar_core::PrinterAxis::Y,
+                    delta_mm,
+                }),
+                None.map(|delta_mm| pandar_core::PrinterAxisMovement {
+                    axis: pandar_core::PrinterAxis::Z,
+                    delta_mm,
+                }),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
             feedrate_mm_per_min: None,
-            required_feature: Some(BambuDeviceFeature::MqttAxisControl),
+            required_device_features: vec![
+                pandar_core::RequiredDeviceFeature::BambuMqttAxisControl,
+            ],
         })
         .await
         .unwrap();
@@ -445,7 +530,7 @@ async fn axis_controls_shared_cache_converges_from_supported_to_exact_zero() {
     fixture
         .operate(PrinterOperation::Home {
             axes: Vec::new(),
-            required_feature: Some(BambuDeviceFeature::MqttHoming),
+            required_device_features: vec![pandar_core::RequiredDeviceFeature::BambuMqttHoming],
         })
         .await
         .unwrap_err();
@@ -476,7 +561,7 @@ async fn axis_controls_required_publish_is_linearized_with_feature_writers() {
         operation_fixture
             .operate(PrinterOperation::Home {
                 axes: Vec::new(),
-                required_feature: Some(BambuDeviceFeature::MqttHoming),
+                required_device_features: vec![pandar_core::RequiredDeviceFeature::BambuMqttHoming],
             })
             .await
     });
@@ -502,7 +587,7 @@ async fn axis_controls_required_publish_is_linearized_with_feature_writers() {
         operation_fixture
             .operate(PrinterOperation::Home {
                 axes: Vec::new(),
-                required_feature: Some(BambuDeviceFeature::MqttHoming),
+                required_device_features: vec![pandar_core::RequiredDeviceFeature::BambuMqttHoming],
             })
             .await
     });
@@ -534,7 +619,7 @@ async fn axis_controls_requirement_free_operation_does_not_take_feature_lease() 
         Duration::from_secs(1),
         fixture.operate(PrinterOperation::Home {
             axes: vec![PrinterAxis::X],
-            required_feature: None,
+            required_device_features: Vec::new(),
         }),
     )
     .await
