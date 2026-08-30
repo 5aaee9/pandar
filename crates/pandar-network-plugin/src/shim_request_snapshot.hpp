@@ -57,13 +57,11 @@ bool printer_request_snapshot_current(
     const PrinterRequestSnapshot& snapshot
 ) {
     if (!agent) return false;
-    if (pandar_plugin_connection_studio_snapshot_current(
-            agent->connection_session(),
-            snapshot.account_epoch,
-            snapshot.cache_generation
-        ) == 0) return false;
-    return pandar_plugin_firmware_session_generation_current(
-        agent->firmware_session(), snapshot.firmware_generation
+    return pandar_plugin_core_printer_request_snapshot_current(
+        agent->plugin_core,
+        snapshot.account_epoch,
+        snapshot.cache_generation,
+        snapshot.firmware_generation
     ) != 0;
 }
 

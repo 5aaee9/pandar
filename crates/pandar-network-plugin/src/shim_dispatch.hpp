@@ -23,7 +23,6 @@ struct PluginDispatchBridge {
     void (*refresh_local_webserver)(void*);
     void (*trace)(void*, const uint8_t*, std::size_t);
     void (*invoke_http_error)(void*, uint32_t, const uint8_t*, std::size_t);
-    int32_t (*logged_out)(void*);
     int32_t (*sync_firmware)(void*, void*);
     void (*retry_no_auth)(void*);
     int32_t (*invoke_local_connected_with_body)(
@@ -117,24 +116,11 @@ void shim_dispatch_invoke_http_error(
     );
 }
 
-int32_t shim_dispatch_logged_out(void* context) {
-    auto* agent = static_cast<Agent*>(context);
-    std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-    return agent->token.empty() ? 1 : 0;
-}
-
 int32_t shim_dispatch_sync_firmware(void* context, void*) {
     auto* agent = static_cast<Agent*>(context);
     if (!agent->firmware_session()) return 0;
     std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-    const auto observation =
-        pandar_plugin_core_reserve_firmware_observation(agent->plugin_core);
-    pandar_plugin_connection_sync_firmware(
-        agent->connection_session(),
-        agent->firmware_session(),
-        observation.generation,
-        observation.sequence
-    );
+    pandar_plugin_core_sync_firmware(agent->plugin_core);
     return 0;
 }
 
@@ -174,7 +160,6 @@ const PluginDispatchBridge kDispatchBridge = {
     shim_dispatch_refresh_local_webserver,
     shim_dispatch_trace,
     shim_dispatch_invoke_http_error,
-    shim_dispatch_logged_out,
     shim_dispatch_sync_firmware,
     shim_dispatch_retry_no_auth,
     shim_invoke_local_connected_with_body,

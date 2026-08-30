@@ -50,7 +50,6 @@ pub struct PluginDispatchBridge {
     pub refresh_local_webserver: extern "C" fn(*mut c_void),
     pub trace: extern "C" fn(*mut c_void, *const u8, usize),
     pub invoke_http_error: extern "C" fn(*mut c_void, u32, *const u8, usize),
-    pub logged_out: extern "C" fn(*mut c_void) -> i32,
     pub sync_firmware: extern "C" fn(*mut c_void, *mut c_void) -> i32,
     pub retry_no_auth: extern "C" fn(*mut c_void),
     pub invoke_local_connected_with_body:

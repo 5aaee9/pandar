@@ -62,9 +62,7 @@ int32_t pandar_plugin_connection_set_dispatch_waker(
 );
 int32_t pandar_plugin_connection_set_account_epoch(void*, uint64_t);
 PluginConnectionResult pandar_plugin_connection_take_transition(void*);
-int32_t pandar_plugin_connection_sync_firmware(
-    void*, void*, uint64_t, uint64_t
-);
+
 int32_t pandar_plugin_connection_visit_printers(
     void*, void*, PluginConnectionPrinterVisitor
 );

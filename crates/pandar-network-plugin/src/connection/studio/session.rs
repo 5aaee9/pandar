@@ -91,6 +91,14 @@ impl ConnectionSession {
             && state.studio.cache_generation == cache_generation
     }
 
+    pub(crate) fn is_logged_out(&self) -> bool {
+        self.state
+            .lock()
+            .expect("connection state")
+            .token
+            .is_empty()
+    }
+
     pub(crate) fn studio_account_request_admitted(&self) -> bool {
         !self
             .state

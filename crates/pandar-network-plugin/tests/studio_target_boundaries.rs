@@ -90,6 +90,22 @@ fn cpp_shim_contains_no_low_level_session_lifecycle() {
 
 #[test]
 fn cpp_shim_contains_no_delivery_or_freshness_decisions() {
+    let all_shims = read_all_shim_sources();
+    for forbidden in [
+        "reserve_printer_refresh_observation",
+        "with_printer_refresh_firmware",
+        "begin_firmware_observation",
+        "FirmwareObservationTicket",
+        "PluginCoreFirmwareObservation",
+        "pandar_plugin_core_reserve_firmware_observation",
+        "pandar_plugin_connection_studio_snapshot_current",
+        "pandar_plugin_connection_sync_firmware(",
+        "pandar_plugin_studio_request_snapshot_current",
+        "agent->token.empty()",
+    ] {
+        assert_absent(&all_shims, forbidden);
+    }
+
     let connection = read_sources(&["shim_connection.hpp"]);
     for forbidden in [
         "pandar_plugin_studio_claim_delivery(",

@@ -4,13 +4,6 @@ pub type PrinterRefreshObservationReservation = extern "C" fn(*mut c_void);
 pub type PrinterRefreshTransaction = unsafe extern "C" fn(*mut c_void) -> i32;
 pub type PrinterRefreshWithLock =
     unsafe extern "C" fn(*mut c_void, *mut c_void, Option<PrinterRefreshTransaction>) -> i32;
-pub type PrinterRefreshFirmwareTransaction =
-    unsafe extern "C" fn(*mut c_void, *mut c_void, u64, u64) -> i32;
-pub type PrinterRefreshWithFirmware = unsafe extern "C" fn(
-    *mut c_void,
-    *mut c_void,
-    Option<PrinterRefreshFirmwareTransaction>,
-) -> i32;
 pub type ConnectionPrinterVisitor = extern "C" fn(
     *mut c_void,
     *const u8,
@@ -30,8 +23,6 @@ pub type ConnectionDeviceVisitor = extern "C" fn(*mut c_void, *const u8, usize, 
 pub struct PluginPrinterRefreshAdapter {
     pub context: *mut c_void,
     pub with_refresh_lock: Option<PrinterRefreshWithLock>,
-    pub reserve_observation: Option<PrinterRefreshObservationReservation>,
-    pub with_firmware_observation: Option<PrinterRefreshWithFirmware>,
     pub collect_offline: Option<ConnectionDeviceVisitor>,
 }
 

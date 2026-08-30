@@ -12,9 +12,9 @@ PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http
     if (!lease) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     refresh_local_webserver_config(a);
     std::unique_lock<std::mutex> request(a->printer_refresh_request_mutex);
-    PrinterRefreshAdapterState adapter_state{a, {}, {}};
-    auto lifecycle = pandar_plugin_printer_refresh_with_session(
-        a->connection_session(),
+    PrinterRefreshAdapterState adapter_state{a, {}};
+    auto lifecycle = pandar_plugin_core_printer_refresh(
+        a->plugin_core,
         kPrinterRefreshStudioPrintInfo,
         a,
         with_current_account,

@@ -21,6 +21,8 @@ use crate::{
     studio_policy::login_observation::{
         pandar_plugin_account_identity_create, pandar_plugin_account_login_observation_clear,
     },
+    studio_print::{PluginStudioSnapshot, pandar_plugin_studio_request_snapshot_current},
+    studio_status::FirmwareProjection,
 };
 
 pub(crate) struct PluginCore {
@@ -53,6 +55,29 @@ impl PluginCore {
     fn account_ptr(&self) -> *mut c_void {
         std::ptr::from_ref(&self.account).cast_mut().cast()
     }
+
+    pub(crate) fn connection(&self) -> &ConnectionSession {
+        &self.connection
+    }
+
+    pub(crate) fn observe_firmware_projection(
+        &self,
+        projection: &FirmwareProjection,
+    ) -> anyhow::Result<()> {
+        let observation = self.reserve_firmware_observation();
+        self.firmware
+            .observe_printers(projection, observation.generation, observation.sequence)
+    }
+
+    fn reserve_firmware_observation(&self) -> FirmwareObservation {
+        FirmwareObservation {
+            generation: self.firmware.generation(),
+            sequence: self
+                .firmware_observation_sequence
+                .fetch_add(1, Ordering::Relaxed)
+                .wrapping_add(1),
+        }
+    }
 }
 
 impl Drop for PluginCore {
@@ -64,13 +89,12 @@ impl Drop for PluginCore {
     }
 }
 
-#[repr(C)]
-pub struct PluginCoreFirmwareObservation {
-    pub generation: u64,
-    pub sequence: u64,
+struct FirmwareObservation {
+    generation: u64,
+    sequence: u64,
 }
 
-unsafe fn core<'a>(core: *mut c_void) -> Option<&'a PluginCore> {
+pub(crate) unsafe fn core<'a>(core: *mut c_void) -> Option<&'a PluginCore> {
     unsafe { core.cast::<PluginCore>().as_ref() }
 }
 
@@ -130,22 +154,65 @@ pub unsafe extern "C" fn pandar_plugin_core_account_identity(core_ptr: *mut c_vo
 #[unsafe(no_mangle)]
 /// # Safety
 /// `core_ptr` must point to a live PluginCore for the duration of the call.
-pub unsafe extern "C" fn pandar_plugin_core_reserve_firmware_observation(
+pub unsafe extern "C" fn pandar_plugin_core_printer_request_snapshot_current(
     core_ptr: *mut c_void,
-) -> PluginCoreFirmwareObservation {
+    account_epoch: u64,
+    cache_generation: u64,
+    firmware_generation: u64,
+) -> i32 {
+    unsafe { core(core_ptr) }.is_some_and(|core| {
+        core.connection
+            .studio_request_snapshot_current(account_epoch, cache_generation)
+            && core.firmware.generation_is_current(firmware_generation)
+    }) as i32
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `core_ptr` must point to a live PluginCore for the duration of the call.
+pub unsafe extern "C" fn pandar_plugin_core_sync_firmware(core_ptr: *mut c_void) -> i32 {
     let Some(core) = (unsafe { core(core_ptr) }) else {
-        return PluginCoreFirmwareObservation {
-            generation: 0,
-            sequence: 0,
-        };
+        return 1;
     };
-    PluginCoreFirmwareObservation {
-        generation: core.firmware.generation(),
-        sequence: core
-            .firmware_observation_sequence
-            .fetch_add(1, Ordering::Relaxed)
-            .wrapping_add(1),
+    let observation = core.reserve_firmware_observation();
+    let Some(projection) = core.connection.cached_firmware_projection() else {
+        return 1;
+    };
+    match core
+        .firmware
+        .observe_printers(&projection, observation.generation, observation.sequence)
+    {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("pandar streamed firmware projection failed: {error:#}");
+            1
+        }
     }
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `core_ptr` must point to a live PluginCore and both snapshots and their byte views must remain
+/// valid for this synchronous call.
+pub unsafe extern "C" fn pandar_plugin_core_studio_request_snapshot_current(
+    core_ptr: *mut c_void,
+    expected: *const PluginStudioSnapshot,
+    current: *const PluginStudioSnapshot,
+) -> i32 {
+    let Some((core, expected)) = (unsafe { core(core_ptr) }).zip(unsafe { expected.as_ref() })
+    else {
+        return 0;
+    };
+    if unsafe { pandar_plugin_studio_request_snapshot_current(expected, current) } == 0 {
+        return 0;
+    }
+    i32::from(
+        core.connection
+            .studio_request_snapshot_current(expected.account_epoch, expected.cache_generation)
+            && core
+                .firmware
+                .generation_is_current(expected.firmware_generation),
+    )
 }
 
 #[unsafe(no_mangle)]
@@ -239,12 +306,80 @@ mod tests {
             pandar_plugin_core_firmware_session(core)
         });
         assert_ne!(unsafe { pandar_plugin_core_account_identity(core) }, 0);
-        let first = unsafe { pandar_plugin_core_reserve_firmware_observation(core) };
-        let second = unsafe { pandar_plugin_core_reserve_firmware_observation(core) };
+        let core_ref = unsafe { super::core(core) }.unwrap();
+        let first = core_ref.reserve_firmware_observation();
+        let second = core_ref.reserve_firmware_observation();
         assert_eq!(first.generation, 1);
         assert_eq!(first.sequence, 1);
         assert_eq!(second.generation, 1);
         assert_eq!(second.sequence, 2);
+        let (snapshot, _) = unsafe { super::core(core) }
+            .unwrap()
+            .connection
+            .studio_request_snapshot("printer".to_owned());
+        assert_eq!(
+            unsafe {
+                pandar_plugin_core_printer_request_snapshot_current(
+                    core,
+                    snapshot.account_epoch,
+                    snapshot.cache_generation,
+                    1,
+                )
+            },
+            1
+        );
+        assert_eq!(
+            unsafe {
+                pandar_plugin_core_printer_request_snapshot_current(
+                    core,
+                    snapshot.account_epoch,
+                    snapshot.cache_generation,
+                    2,
+                )
+            },
+            0
+        );
+        let empty = crate::studio_print::PluginBytes {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
+        let current = PluginStudioSnapshot {
+            hub_url: empty,
+            token: empty,
+            printer_id: empty,
+            printer_authorized: 1,
+            account_transition_pending: 0,
+            account_epoch: snapshot.account_epoch,
+            cache_generation: snapshot.cache_generation,
+            firmware_generation: 1,
+        };
+        assert_eq!(
+            unsafe { pandar_plugin_core_studio_request_snapshot_current(core, &current, &current) },
+            1
+        );
+        let stale_firmware = PluginStudioSnapshot {
+            firmware_generation: 2,
+            ..current
+        };
+        assert_eq!(
+            unsafe {
+                pandar_plugin_core_studio_request_snapshot_current(
+                    core,
+                    &stale_firmware,
+                    &stale_firmware,
+                )
+            },
+            0
+        );
+        assert!(
+            !unsafe { super::core(core) }
+                .unwrap()
+                .connection
+                .is_logged_out()
+        );
         unsafe { pandar_plugin_core_destroy(core) };
+
+        let logged_out = PluginCore::new("http://127.0.0.1:8080".to_owned(), String::new());
+        assert!(logged_out.connection.is_logged_out());
     }
 }

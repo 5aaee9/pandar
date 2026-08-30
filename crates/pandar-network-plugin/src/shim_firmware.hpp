@@ -13,13 +13,6 @@ std::string string_from_firmware_allocation(uint8_t* ptr, std::size_t len, std::
     return value;
 }
 
-FirmwareObservationTicket begin_firmware_observation(Agent* agent) {
-    if (!agent) return {};
-    const auto observation =
-        pandar_plugin_core_reserve_firmware_observation(agent->plugin_core);
-    return {observation.generation, observation.sequence};
-}
-
 void start_firmware_dispatcher(Agent* agent) {
     if (!agent || agent->firmware_thread.joinable()) return;
     agent->firmware_thread_stop = false;

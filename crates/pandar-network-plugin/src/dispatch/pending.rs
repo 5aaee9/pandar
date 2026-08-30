@@ -141,7 +141,7 @@ pub unsafe extern "C" fn pandar_plugin_dispatch_pending(
     };
     (bridge.sync_firmware)(agent, firmware_session_ptr);
     dispatch_pending_deliveries(bridge, agent, session_ptr, session);
-    let logged_out = (bridge.logged_out)(agent) != 0;
+    let logged_out = session.is_logged_out();
     if no_auth_retry_due != 0 && logged_out {
         (bridge.retry_no_auth)(agent);
         dispatch_pending_deliveries(bridge, agent, session_ptr, session);

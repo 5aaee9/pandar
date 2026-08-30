@@ -29,8 +29,6 @@ PluginStudioRequestState pandar_plugin_studio_request_snapshot(
         const uint8_t*, std::size_t
     )
 );
-int32_t pandar_plugin_connection_studio_snapshot_current(void*, uint64_t, uint64_t);
-
 } // extern "C"
 
 constexpr int32_t kStudioCloudListener = 1;

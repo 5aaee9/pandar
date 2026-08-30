@@ -143,7 +143,8 @@ PluginHttpResult pandar_plugin_studio_get_model_task_with_session(
     void*, StudioModelTaskCancelled
 );
 PluginHttpResult pandar_plugin_studio_slice_unavailable();
-std::int32_t pandar_plugin_studio_request_snapshot_current(
+std::int32_t pandar_plugin_core_studio_request_snapshot_current(
+    void*,
     const PluginStudioSnapshot*,
     const PluginStudioSnapshot*
 );

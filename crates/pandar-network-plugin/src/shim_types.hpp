@@ -200,11 +200,6 @@ struct PluginFirmwareCallbackResult {
     int32_t tunnel;
 };
 
-struct PluginCoreFirmwareObservation {
-    uint64_t generation;
-    uint64_t sequence;
-};
-
 void* pandar_plugin_core_create(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t
@@ -213,7 +208,10 @@ void pandar_plugin_core_destroy(void*);
 void* pandar_plugin_core_connection_session(void*);
 void* pandar_plugin_core_firmware_session(void*);
 uint64_t pandar_plugin_core_account_identity(void*);
-PluginCoreFirmwareObservation pandar_plugin_core_reserve_firmware_observation(void*);
+int32_t pandar_plugin_core_printer_request_snapshot_current(
+    void*, uint64_t, uint64_t, uint64_t
+);
+int32_t pandar_plugin_core_sync_firmware(void*);
 
 const char* pandar_plugin_network_agent_version();
 #if defined(PANDAR_STUDIO_AMS_SYNC)
@@ -386,11 +384,5 @@ struct Agent {
 
 void start_model_task_worker(Agent*);
 void stop_model_task_worker(Agent*);
-
-struct FirmwareObservationTicket {
-    std::uint64_t generation = 0;
-    std::uint64_t sequence = 0;
-};
-
 
 } // namespace pandar::network_plugin

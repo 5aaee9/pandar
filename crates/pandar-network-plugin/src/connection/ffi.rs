@@ -154,32 +154,6 @@ pub extern "C" fn pandar_plugin_connection_take_stream_error(
 }
 
 #[unsafe(no_mangle)]
-/// # Safety
-/// `firmware_session_ptr` must point to a live Rust firmware session.
-pub unsafe extern "C" fn pandar_plugin_connection_sync_firmware(
-    session_ptr: *mut c_void,
-    firmware_session_ptr: *mut c_void,
-    generation: u64,
-    observation_sequence: u64,
-) -> i32 {
-    let (Some(session), Some(firmware_session)) = (session(session_ptr), unsafe {
-        crate::firmware::session_ref(firmware_session_ptr)
-    }) else {
-        return 1;
-    };
-    let Some(projection) = session.cached_firmware_projection() else {
-        return 1;
-    };
-    match firmware_session.observe_printers(&projection, generation, observation_sequence) {
-        Ok(()) => 0,
-        Err(error) => {
-            eprintln!("pandar streamed firmware projection failed: {error:#}");
-            1
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_connection_visit_printers(
     session_ptr: *mut c_void,
     context: *mut c_void,

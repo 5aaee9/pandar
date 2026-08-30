@@ -92,8 +92,9 @@ inline void run_model_task_request(
     const auto current_snapshot = printer_request_snapshot(agent, {});
     const auto expected = plugin_studio_snapshot(account_context.current_snapshot);
     const auto current = plugin_studio_snapshot(current_snapshot);
-    if (pandar_plugin_studio_request_snapshot_current(&expected, &current) == 0 ||
-        !printer_request_snapshot_current(agent, account_context.current_snapshot)) return;
+    if (pandar_plugin_core_studio_request_snapshot_current(
+            agent->plugin_core, &expected, &current
+        ) == 0) return;
 
     target->job_id = adapter.job_id;
     target->design_id = adapter.design_id;

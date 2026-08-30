@@ -1,15 +1,16 @@
 use crate::{
     PluginHttpResult,
     account::lifecycle::{PluginWithCurrentAccount, current_expected},
-    firmware::session_ref as firmware_session,
-    invalid_input, result, stable_error_body,
+    invalid_input,
+    plugin_core::{PluginCore, core as plugin_core},
+    result, stable_error_body,
     studio_status::FirmwareProjection,
 };
 use std::ffi::c_void;
 use std::time::Duration;
 
 use super::{
-    ConnectionSession, PluginConnectionResult, PluginPrinterRefreshAdapter, ffi::session,
+    ConnectionSession, PluginConnectionResult, PluginPrinterRefreshAdapter,
     projection::CachedPrinterProjection,
 };
 
@@ -31,20 +32,24 @@ pub struct PluginPrinterRefreshLifecycleResult {
 /// Serves the Studio print-info / background printer payload from the cached
 /// stream projection only. The Hub is never contacted on this path.
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_printer_refresh_with_session(
-    session_ptr: *mut c_void,
+/// # Safety
+/// `core_ptr` must point to a live PluginCore for the duration of the call. `account_context`,
+/// `adapter.context`, and every supplied callback must remain valid for this synchronous call and
+/// satisfy the callback-specific pointer contracts.
+pub unsafe extern "C" fn pandar_plugin_core_printer_refresh(
+    core_ptr: *mut c_void,
     mode: i32,
     account_context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
     adapter: PluginPrinterRefreshAdapter,
 ) -> PluginPrinterRefreshLifecycleResult {
-    let Some(session) = session(session_ptr) else {
+    let Some(core) = (unsafe { plugin_core(core_ptr) }) else {
         return failure(invalid_input("invalid_printer_refresh_session"));
     };
+    let session = core.connection();
     if !matches!(mode, STUDIO_PRINT_INFO | BACKGROUND_REFRESH)
         || adapter.with_refresh_lock.is_none()
         || adapter.collect_offline.is_none()
-        || adapter.reserve_observation.is_some() != adapter.with_firmware_observation.is_some()
     {
         return failure(invalid_input("invalid_printer_refresh_adapter"));
     }
@@ -88,6 +93,7 @@ pub extern "C" fn pandar_plugin_printer_refresh_with_session(
     };
 
     let mut finalized = Finalization {
+        core,
         session,
         adapter,
         account_epoch: expected.account_epoch,
@@ -149,6 +155,7 @@ unsafe extern "C" fn begin_admission(context: *mut c_void) -> i32 {
 }
 
 struct Finalization<'a> {
+    core: &'a PluginCore,
     session: &'a ConnectionSession,
     adapter: PluginPrinterRefreshAdapter,
     account_epoch: u64,
@@ -167,40 +174,9 @@ unsafe extern "C" fn finalize_serve(context: *mut c_void) -> i32 {
         .printer_cache_snapshot_current(finalization.account_epoch, finalization.printer_epoch);
     if finalization.snapshot_current
         && let Some(projection) = finalization.firmware
-        && let Some(reserve_observation) = finalization.adapter.reserve_observation
-        && let Some(with_firmware_observation) = finalization.adapter.with_firmware_observation
+        && let Err(error) = finalization.core.observe_firmware_projection(projection)
     {
-        reserve_observation(finalization.adapter.context);
-        let status = unsafe {
-            with_firmware_observation(
-                finalization.adapter.context,
-                std::ptr::from_ref(projection).cast_mut().cast(),
-                Some(observe_firmware_projection),
-            )
-        };
-        if status != 0 {
-            eprintln!("pandar firmware projection handoff failed");
-        }
-    }
-
-    unsafe extern "C" fn observe_firmware_projection(
-        projection_context: *mut c_void,
-        session_ptr: *mut c_void,
-        generation: u64,
-        observation_sequence: u64,
-    ) -> i32 {
-        let Some(projection) =
-            (unsafe { projection_context.cast::<FirmwareProjection>().as_ref() })
-        else {
-            return 1;
-        };
-        let Some(session) = (unsafe { firmware_session(session_ptr) }) else {
-            return 1;
-        };
-        if let Err(error) = session.observe_printers(projection, generation, observation_sequence) {
-            eprintln!("pandar firmware printer observation failed: {error:#}");
-        }
-        0
+        eprintln!("pandar firmware printer observation failed: {error:#}");
     }
     finalization.connection = finalization.session.take_transition();
     let collect_offline = finalization

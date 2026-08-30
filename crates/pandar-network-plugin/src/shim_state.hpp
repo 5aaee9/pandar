@@ -10,18 +10,9 @@ using PluginPrinterRefreshTransaction = std::int32_t (*)(void*);
 using PluginPrinterRefreshWithLock = std::int32_t (*)(
     void*, void*, PluginPrinterRefreshTransaction
 );
-using PluginPrinterRefreshFirmwareTransaction = std::int32_t (*)(
-    void*, void*, std::uint64_t, std::uint64_t
-);
-using PluginPrinterRefreshWithFirmware = std::int32_t (*)(
-    void*, void*, PluginPrinterRefreshFirmwareTransaction
-);
-
 struct PluginPrinterRefreshAdapter {
     void* context;
     PluginPrinterRefreshWithLock with_refresh_lock;
-    void (*reserve_observation)(void*);
-    PluginPrinterRefreshWithFirmware with_firmware_observation;
     PluginConnectionDeviceVisitor collect_offline;
 };
 
@@ -35,7 +26,7 @@ struct PluginPrinterRefreshLifecycleResult {
 constexpr std::int32_t kPrinterRefreshStudioPrintInfo = 1;
 constexpr std::int32_t kPrinterRefreshBackground = 2;
 
-extern "C" PluginPrinterRefreshLifecycleResult pandar_plugin_printer_refresh_with_session(
+extern "C" PluginPrinterRefreshLifecycleResult pandar_plugin_core_printer_refresh(
     void*, std::int32_t, void*, PluginWithCurrentAccount, PluginPrinterRefreshAdapter
 );
 
@@ -63,11 +54,9 @@ void trace_plugin_event(const Agent* agent, const std::string& event, const std:
 std::string body_from_result(PluginHttpResult result);
 void refresh_local_webserver_config(Agent* agent);
 bool try_no_auth_session(Agent* agent, bool initial_attempt);
-FirmwareObservationTicket begin_firmware_observation(Agent* agent);
 
 struct PrinterRefreshAdapterState {
     Agent* agent;
-    FirmwareObservationTicket observation;
     std::vector<IssuedOfflineDelivery> offline;
 };
 
@@ -82,33 +71,6 @@ extern "C" std::int32_t with_printer_refresh_lock(
     return transaction(transaction_context);
 }
 
-extern "C" void reserve_printer_refresh_observation(void* context) noexcept {
-    auto* adapter = static_cast<PrinterRefreshAdapterState*>(context);
-    adapter->observation = begin_firmware_observation(adapter->agent);
-}
-
-extern "C" std::int32_t with_printer_refresh_firmware(
-    void* context,
-    void* projection_context,
-    PluginPrinterRefreshFirmwareTransaction transaction
-) noexcept {
-    auto* adapter = static_cast<PrinterRefreshAdapterState*>(context);
-    if (!adapter || !adapter->agent || !adapter->agent->firmware_session() || !transaction) return 0;
-    if (pandar_plugin_firmware_session_generation_current(
-            adapter->agent->firmware_session(),
-            adapter->observation.generation
-        ) == 0) {
-        // The account/config transition that bumped the generation also
-        // invalidated this reserved observation; skip the stale handoff.
-        return 0;
-    }
-    return transaction(
-        projection_context,
-        adapter->agent->firmware_session(),
-        adapter->observation.generation,
-        adapter->observation.sequence
-    );
-}
 
 extern "C" void collect_printer_refresh_offline(
     void* context,
@@ -127,8 +89,6 @@ PluginPrinterRefreshAdapter printer_refresh_adapter(PrinterRefreshAdapterState* 
     return {
         state,
         with_printer_refresh_lock,
-        reserve_printer_refresh_observation,
-        with_printer_refresh_firmware,
         collect_printer_refresh_offline,
     };
 }
