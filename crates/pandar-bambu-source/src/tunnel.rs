@@ -1,12 +1,10 @@
 use std::{
     io::Write,
-    net::{Shutdown, TcpStream},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
-        mpsc::{Receiver, TryRecvError, sync_channel},
+        mpsc::TryRecvError,
     },
-    thread::JoinHandle,
     time::{Duration, Instant},
 };
 
@@ -18,8 +16,11 @@ use crate::{
     },
     config::RelayConfig,
     error::{SessionError, SessionTerminal, error_chain, set_last_error},
-    reader::read_frames,
 };
+
+mod lifecycle;
+
+use lifecycle::TunnelLifecycle;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const READ_TIMEOUT: Duration = Duration::from_secs(15);
@@ -53,11 +54,8 @@ pub(crate) struct Shared {
 pub(crate) struct Tunnel {
     config: RelayConfig,
     shared: Arc<Shared>,
-    receiver: Mutex<Option<Receiver<Vec<u8>>>>,
-    worker: Mutex<Option<JoinHandle<()>>>,
-    socket: Mutex<Option<TcpStream>>,
+    lifecycle: TunnelLifecycle,
     current_sample: Mutex<Vec<u8>>,
-    opened: AtomicBool,
 }
 
 impl Tunnel {
@@ -71,11 +69,8 @@ impl Tunnel {
                 closing: AtomicBool::new(false),
                 stats: Mutex::new(Stats::default()),
             }),
-            receiver: Mutex::new(None),
-            worker: Mutex::new(None),
-            socket: Mutex::new(None),
+            lifecycle: TunnelLifecycle::new(),
             current_sample: Mutex::new(Vec::new()),
-            opened: AtomicBool::new(false),
         }
     }
 
@@ -112,54 +107,11 @@ impl Tunnel {
     }
 
     pub(crate) fn open(&self) -> i32 {
-        if self.opened.swap(true, Ordering::AcqRel) {
-            return BAMBU_SUCCESS;
-        }
-        self.shared.reset();
-        match self.open_inner() {
-            Ok(()) => BAMBU_SUCCESS,
-            Err(error) => {
-                self.opened.store(false, Ordering::Release);
-                let message = error_chain(&error);
-                self.shared.finish_failure(error);
-                set_last_error(&message);
-                BAMBU_INVALID
-            }
-        }
-    }
-
-    fn open_inner(&self) -> Result<(), SessionError> {
-        let mut stream = TcpStream::connect_timeout(&self.config.address, CONNECT_TIMEOUT)
-            .map_err(|error| SessionError::transport("connecting to the loopback relay", error))?;
-        stream
-            .set_nodelay(true)
-            .map_err(|error| SessionError::transport("configuring TCP_NODELAY", error))?;
-        stream
-            .set_read_timeout(Some(READ_TIMEOUT))
-            .map_err(|error| SessionError::transport("configuring the read timeout", error))?;
-        stream
-            .set_write_timeout(Some(READ_TIMEOUT))
-            .map_err(|error| SessionError::transport("configuring the write timeout", error))?;
-        send_relay_handshake(&mut stream, &self.config.auth)?;
-        let control = stream
-            .try_clone()
-            .map_err(|error| SessionError::transport("cloning the relay socket", error))?;
-        let (sender, receiver) = sync_channel(FRAME_QUEUE_CAPACITY);
-        *self.receiver.lock().expect("source receiver") = Some(receiver);
-        *self.socket.lock().expect("source socket") = Some(control);
-        *self.shared.stats.lock().expect("source stats") = Stats {
-            started: Some(Instant::now()),
-            ..Stats::default()
-        };
-        let shared = Arc::clone(&self.shared);
-        *self.worker.lock().expect("source worker") = Some(std::thread::spawn(move || {
-            read_frames(stream, sender, &shared);
-        }));
-        Ok(())
+        self.lifecycle.open(&self.config, &self.shared)
     }
 
     pub(crate) fn start_stream(&self, video: bool) -> i32 {
-        if !video || !self.opened.load(Ordering::Acquire) {
+        if !video || !self.lifecycle.is_running() {
             return BAMBU_INVALID;
         }
         if self
@@ -191,11 +143,10 @@ impl Tunnel {
         if output.is_null() {
             return BAMBU_INVALID;
         }
-        let receiver = self.receiver.lock().expect("source receiver");
-        let Some(receiver) = receiver.as_ref() else {
+        let Some(frame) = self.lifecycle.try_read() else {
             return BAMBU_INVALID;
         };
-        match receiver.try_recv() {
+        match frame {
             Ok(frame) => {
                 let mut current = self.current_sample.lock().expect("source current sample");
                 *current = frame;
@@ -254,16 +205,7 @@ impl Tunnel {
     }
 
     pub(crate) fn close(&self) {
-        self.opened.store(false, Ordering::Release);
-        self.shared.closing.store(true, Ordering::Release);
-        if let Some(stream) = self.socket.lock().expect("source socket").take() {
-            let _ = stream.shutdown(Shutdown::Both);
-        }
-        self.receiver.lock().expect("source receiver").take();
-        if let Some(worker) = self.worker.lock().expect("source worker").take() {
-            let _ = worker.join();
-        }
-        self.shared.finish_eof();
+        self.lifecycle.close(&self.shared);
     }
 }
 
@@ -300,18 +242,23 @@ impl Shared {
     }
 
     pub(crate) fn finish_failure(&self, error: SessionError) {
+        let message = error_chain(&error);
+        if self.record_failure(error) {
+            self.log_error(&message);
+        }
+    }
+
+    fn record_failure(&self, error: SessionError) -> bool {
         if self.closing.load(Ordering::Acquire) {
             self.finish_eof();
-            return;
+            return false;
         }
-        let message = error_chain(&error);
         let mut terminal = self.terminal.lock().expect("source terminal");
         if terminal.is_some() {
-            return;
+            return false;
         }
         *terminal = Some(SessionTerminal::Failure(error));
-        drop(terminal);
-        self.log_error(&message);
+        true
     }
 
     fn log_error(&self, message: &str) {
