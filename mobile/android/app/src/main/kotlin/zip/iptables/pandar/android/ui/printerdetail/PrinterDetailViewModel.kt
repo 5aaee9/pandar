@@ -2,16 +2,19 @@ package zip.iptables.pandar.android.ui.printerdetail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import zip.iptables.pandar.android.core.di.AppContainer
-import zip.iptables.pandar.android.domain.model.Command
+import zip.iptables.pandar.android.data.repository.PandarDataSource
+import zip.iptables.pandar.android.domain.model.PandarState
 import zip.iptables.pandar.android.domain.model.Printer
 import zip.iptables.pandar.android.domain.model.PrinterAxis
 import zip.iptables.pandar.android.domain.model.PrinterControlIntent
@@ -27,73 +30,130 @@ data class PrinterDetailUiState(
     val toast: String? = null,
 )
 
+internal data class PrinterDetailRequestState(
+    val sessionGeneration: Long = 0,
+    val loading: Boolean = true,
+    val inFlight: Boolean = false,
+    val dismissedCommandId: String? = null,
+    val error: String? = null,
+    val toast: String? = null,
+)
+
+internal fun printerDetailUiState(
+    domain: PandarState,
+    printerId: String,
+    request: PrinterDetailRequestState,
+): PrinterDetailUiState {
+    val current = request.takeIf { it.sessionGeneration == domain.sessionGeneration }
+        ?: PrinterDetailRequestState(sessionGeneration = domain.sessionGeneration)
+    val command = domain.latestCommandsByPrinter[printerId]
+    return PrinterDetailUiState(
+        loading = current.loading,
+        printer = domain.printers.find { it.id == printerId },
+        inFlight = current.inFlight,
+        lastCommandId = command?.id,
+        lastCommandStatus = command?.status,
+        error = current.error,
+        toast = command
+            ?.takeUnless { it.id == current.dismissedCommandId }
+            ?.let { "Command ${it.id.take(8)}: ${it.status}" }
+            ?: current.toast,
+    )
+}
+
 class PrinterDetailViewModel(
-    private val container: AppContainer,
+    private val pandar: PandarDataSource,
     private val printerId: String,
 ) : ViewModel() {
+    private val request = MutableStateFlow(
+        PrinterDetailRequestState(sessionGeneration = pandar.state.value.sessionGeneration),
+    )
+    private var loadJob: Job? = null
+    private var controlJob: Job? = null
 
-    private val _state = MutableStateFlow(PrinterDetailUiState())
-    val state: StateFlow<PrinterDetailUiState> = _state.asStateFlow()
+    val state: StateFlow<PrinterDetailUiState> = combine(
+        pandar.state,
+        request,
+    ) { domain, request -> printerDetailUiState(domain, printerId, request) }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            printerDetailUiState(pandar.state.value, printerId, request.value),
+        )
 
     init {
         viewModelScope.launch {
-            container.pandar.printers.collect { printers ->
-                printers.find { it.id == printerId }?.let { printer ->
-                    _state.update { it.copy(printer = printer) }
-                }
-            }
-        }
-        viewModelScope.launch {
-            container.pandar.latestCommandsByPrinter
-                .map { it[printerId] }
-                .drop(1)
-                .filterNotNull()
-                .collect { cmd ->
-                    _state.update {
-                        it.copy(
-                            lastCommandId = cmd.id,
-                            lastCommandStatus = cmd.status,
-                            toast = "Command ${cmd.id.take(8)}: ${cmd.status}",
-                        )
+            pandar.state
+                .map { it.sessionGeneration to it.hasSession }
+                .distinctUntilChanged()
+                .collect { (generation, hasSession) ->
+                    if (request.value.sessionGeneration != generation) {
+                        loadJob?.cancel()
+                        controlJob?.cancel()
+                        request.value = PrinterDetailRequestState(sessionGeneration = generation)
+                        if (hasSession) load()
                     }
                 }
         }
-        load()
+        if (pandar.state.value.hasSession) load()
     }
 
     fun load() {
-        viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null) }
+        loadJob?.cancel()
+        val generation = pandar.state.value.sessionGeneration
+        loadJob = viewModelScope.launch {
+            updateRequest(generation) { it.copy(loading = true, error = null) }
             try {
-                container.pandar.refreshPrinter(printerId)
-                _state.update { it.copy(loading = false) }
-            } catch (t: Throwable) {
-                _state.update { it.copy(loading = false, error = t.message ?: "Failed to load printer") }
-            }
-        }
-    }
-
-    private fun sendControl(action: suspend () -> Command) {
-        viewModelScope.launch {
-            _state.update { it.copy(inFlight = true, toast = null) }
-            try {
-                val cmd = action()
-                _state.update {
+                pandar.refreshPrinter(printerId)
+                updateRequest(generation) { it.copy(loading = false) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                updateRequest(generation) {
                     it.copy(
-                        inFlight = false,
-                        lastCommandId = cmd.id,
-                        lastCommandStatus = cmd.status,
-                        toast = "Command ${cmd.id.take(8)}: ${cmd.status}",
+                        loading = false,
+                        error = error.message ?: "Failed to load printer",
                     )
                 }
-            } catch (t: Throwable) {
-                _state.update { it.copy(inFlight = false, error = t.message ?: "Control failed", toast = "Control failed") }
             }
         }
     }
 
-    private fun control(intent: PrinterControlIntent) = sendControl {
-        container.pandar.control(printerId, intent)
+    private fun control(intent: PrinterControlIntent) {
+        val generation = pandar.state.value.sessionGeneration
+        val commandId = pandar.state.value.latestCommandsByPrinter[printerId]?.id
+        controlJob = viewModelScope.launch {
+            updateRequest(generation) {
+                it.copy(
+                    inFlight = true,
+                    dismissedCommandId = commandId,
+                    toast = null,
+                )
+            }
+            try {
+                pandar.control(printerId, intent)
+                updateRequest(generation) { it.copy(inFlight = false) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                updateRequest(generation) {
+                    it.copy(
+                        inFlight = false,
+                        error = error.message ?: "Control failed",
+                        toast = "Control failed",
+                    )
+                }
+            }
+        }
+    }
+
+    private fun updateRequest(
+        generation: Long,
+        transform: (PrinterDetailRequestState) -> PrinterDetailRequestState,
+    ) {
+        request.update { current ->
+            if (current.sessionGeneration == generation) transform(current) else current
+        }
     }
 
     fun pause() = control(PrinterControlIntent.Pause)

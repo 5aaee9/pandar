@@ -27,8 +27,12 @@ import org.junit.Test
 import zip.iptables.pandar.android.core.util.Logger
 import zip.iptables.pandar.android.data.remote.ApiModule
 import zip.iptables.pandar.android.data.remote.HubSession
+import zip.iptables.pandar.android.data.remote.HubSessionContext
+import zip.iptables.pandar.android.data.remote.dto.PrinterEventDto
 
 class PrinterEventsSessionLifecycleTest {
+    private var nextSessionEpoch = 0L
+
     @Test
     fun `session changes replace the authenticated socket and sign out stops it`() {
         runBlocking {
@@ -38,7 +42,7 @@ class PrinterEventsSessionLifecycleTest {
             server.enqueue(webSocketResponse())
             server.start()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val sessions = MutableStateFlow<HubSession?>(null)
+            val sessions = MutableStateFlow<HubSessionContext?>(null)
             val repository = repository()
 
             try {
@@ -83,7 +87,7 @@ class PrinterEventsSessionLifecycleTest {
             server.enqueue(webSocketResponse(secondSocket))
             server.start()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val sessions = MutableStateFlow<HubSession?>(null)
+            val sessions = MutableStateFlow<HubSessionContext?>(null)
             val repository = repository()
             val frameReceived = CountDownLatch(1)
             val releaseFrame = CountDownLatch(1)
@@ -128,6 +132,108 @@ class PrinterEventsSessionLifecycleTest {
     }
 
     @Test
+    fun `queued frame survives a socket reconnect within the same session context`() {
+        runBlocking {
+            val server = MockWebServer()
+            val firstSocket = RecordingWebSocketListener()
+            val secondSocket = RecordingWebSocketListener()
+            server.enqueue(webSocketResponse(firstSocket))
+            server.enqueue(webSocketResponse(secondSocket))
+            server.start()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val sessions = MutableStateFlow<HubSessionContext?>(null)
+            val repository = repository()
+            val frameReceived = CountDownLatch(1)
+            val releaseFrame = CountDownLatch(1)
+            val applied = CountDownLatch(1)
+
+            try {
+                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    repository.events.collect { frame ->
+                        frameReceived.countDown()
+                        releaseFrame.await()
+                        repository.consumeIfCurrent(frame) { applied.countDown() }
+                    }
+                }
+                repository.start(scope, sessions)
+                sessions.value = session(server, "tenant-1", "token-1")
+                assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+                assertEquals(true, firstSocket.opened.await(5, TimeUnit.SECONDS))
+                firstSocket.socket.get().send(PRINTER_EVENT)
+                assertEquals(true, frameReceived.await(5, TimeUnit.SECONDS))
+
+                repository.reconnect()
+                assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+                assertEquals(true, secondSocket.opened.await(5, TimeUnit.SECONDS))
+                releaseFrame.countDown()
+
+                assertEquals(true, applied.await(5, TimeUnit.SECONDS))
+            } finally {
+                releaseFrame.countDown()
+                repository.stop()
+                scope.cancel()
+                server.shutdown()
+            }
+        }
+    }
+
+    @Test
+    fun `event buffer overflow requests a REST resynchronization`() {
+        runBlocking {
+            val server = MockWebServer()
+            val socket = RecordingWebSocketListener()
+            server.enqueue(webSocketResponse(socket))
+            server.start()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val sessions = MutableStateFlow<HubSessionContext?>(null)
+            val repository = repository()
+            val firstFrame = CompletableDeferred<Unit>()
+            val releaseFrames = CompletableDeferred<Unit>()
+            val resync = CompletableDeferred<HubSessionContext>()
+            val recoveredCommand = CompletableDeferred<PrinterEventsRepository.SessionEvent>()
+
+            try {
+                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    repository.events.collect {
+                        firstFrame.complete(Unit)
+                        releaseFrames.await()
+                    }
+                }
+                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    repository.resyncRequests.collect { resync.complete(it) }
+                }
+                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    repository.commandRecoveryRequests.collect {
+                        repository.drainDroppedCommands().firstOrNull()?.let {
+                            recoveredCommand.complete(it)
+                        }
+                    }
+                }
+                repository.start(scope, sessions)
+                val session = session(server, "tenant-1", "token-1")
+                sessions.value = session
+                assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+                assertEquals(true, socket.opened.await(5, TimeUnit.SECONDS))
+
+                socket.socket.get().send(PRINTER_EVENT)
+                withTimeout(5_000) { firstFrame.await() }
+                repeat(80) { socket.socket.get().send(PRINTER_EVENT) }
+                socket.socket.get().send(COMMAND_EVENT)
+
+                assertEquals(session, withTimeout(5_000) { resync.await() })
+                val recovered = withTimeout(5_000) { recoveredCommand.await() }
+                val command = recovered.event as PrinterEventDto.CommandResult
+                assertEquals("completed", command.command.status)
+            } finally {
+                releaseFrames.complete(Unit)
+                repository.stop()
+                scope.cancel()
+                server.shutdown()
+            }
+        }
+    }
+
+    @Test
     fun `rejected authorization invalidates once and waits for a new session`() {
         runBlocking {
             val server = MockWebServer()
@@ -138,7 +244,7 @@ class PrinterEventsSessionLifecycleTest {
             val releaseInvalidation = CompletableDeferred<Unit>()
             val invalidationFinished = CompletableDeferred<Unit>()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val sessions = MutableStateFlow<HubSession?>(null)
+            val sessions = MutableStateFlow<HubSessionContext?>(null)
             val repository = repository { _ ->
                 invalidationStarted.complete(Unit)
                 releaseInvalidation.await()
@@ -188,7 +294,13 @@ class PrinterEventsSessionLifecycleTest {
         server: MockWebServer,
         tenantId: String,
         token: String,
-    ): HubSession = HubSession.create(server.url("/").toString(), tenantId, token)!!
+    ): HubSessionContext {
+        nextSessionEpoch += 1
+        return HubSessionContext(
+            HubSession.create(server.url("/").toString(), tenantId, token)!!,
+            nextSessionEpoch,
+        )
+    }
 
     private fun webSocketResponse(
         listener: WebSocketListener = object : WebSocketListener() {},
@@ -205,6 +317,13 @@ class PrinterEventsSessionLifecycleTest {
     }
 
     companion object {
+        private val COMMAND_EVENT = """
+            {"type":"command_result","command":{
+              "id":"command-1","tenant_id":"tenant-1","agent_id":"agent-1",
+              "printer_id":"p1","kind":"printer_operation","status":"completed",
+              "payload_json":"{}","created_at":"created","updated_at":"updated"}}
+        """.trimIndent()
+
         private val PRINTER_EVENT = """
             {"type":"printer_snapshot","printer":{
               "id":"p1","tenant_id":"t1","agent_id":"a1","serial_number":"SN001",

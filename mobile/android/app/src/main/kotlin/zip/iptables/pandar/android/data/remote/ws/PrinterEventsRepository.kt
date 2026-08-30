@@ -4,6 +4,7 @@ import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -24,6 +26,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import zip.iptables.pandar.android.core.util.Logger
 import zip.iptables.pandar.android.data.remote.HubSession
+import zip.iptables.pandar.android.data.remote.HubSessionContext
 import zip.iptables.pandar.android.data.remote.appJson
 import zip.iptables.pandar.android.data.remote.dto.PrinterEventDto
 import kotlin.math.min
@@ -37,10 +40,20 @@ class PrinterEventsRepository(
     private val logger: Logger,
 ) {
 
-    internal data class SessionEvent(val generation: Long, val event: PrinterEventDto)
+    internal data class SessionEvent(
+        val generation: Long,
+        val sequence: Long,
+        val session: HubSessionContext,
+        val event: PrinterEventDto,
+    )
 
     private val _events = MutableSharedFlow<SessionEvent>(extraBufferCapacity = 64)
     internal val events: SharedFlow<SessionEvent> = _events.asSharedFlow()
+    private val resyncChannel = Channel<HubSessionContext>(Channel.CONFLATED)
+    internal val resyncRequests: Flow<HubSessionContext> = resyncChannel.receiveAsFlow()
+    private val droppedCommands = linkedMapOf<String, SessionEvent>()
+    private val commandRecoveryChannel = Channel<Unit>(Channel.CONFLATED)
+    internal val commandRecoveryRequests: Flow<Unit> = commandRecoveryChannel.receiveAsFlow()
 
     private val _liveState = MutableStateFlow(LiveState.DISCONNECTED)
     val liveState: StateFlow<LiveState> = _liveState.asStateFlow()
@@ -50,14 +63,20 @@ class PrinterEventsRepository(
     private val sessionMonitor = Any()
     private var nextSessionGeneration = 0L
     private var activeSessionGeneration: Long? = null
-    private var rejectedSession: HubSession? = null
+    private var deliverySessionContext: HubSessionContext? = null
+    private var sequenceSession: HubSessionContext? = null
+    private var nextFrameSequence = 0L
+    private var rejectedSession: HubSessionContext? = null
 
-    fun start(scope: CoroutineScope, sessions: Flow<HubSession?>) {
+    fun start(scope: CoroutineScope, sessions: Flow<HubSessionContext?>) {
         if (loopJob?.isActive == true) return
         loopJob = scope.launch {
             combine(sessions, reconnectGeneration) { session, generation ->
                 session to generation
             }.collectLatest { (session, _) ->
+                synchronized(sessionMonitor) {
+                    deliverySessionContext = session
+                }
                 if (session == null) {
                     clearRejectedSession()
                     _liveState.value = LiveState.DISCONNECTED
@@ -68,7 +87,7 @@ class PrinterEventsRepository(
                     return@collectLatest
                 }
                 clearRejectedSession()
-                val fence = activateSession()
+                val fence = activateSession(session)
                 try {
                     connectLoop(scope, session, fence)
                 } finally {
@@ -81,6 +100,8 @@ class PrinterEventsRepository(
     fun stop() {
         synchronized(sessionMonitor) {
             activeSessionGeneration = null
+            deliverySessionContext = null
+            droppedCommands.clear()
             _liveState.value = LiveState.DISCONNECTED
         }
         loopJob?.cancel()
@@ -93,15 +114,25 @@ class PrinterEventsRepository(
 
     internal fun consumeIfCurrent(frame: SessionEvent, consume: (PrinterEventDto) -> Unit) {
         synchronized(sessionMonitor) {
-            if (activeSessionGeneration == frame.generation) {
+            if (deliverySessionContext == frame.session) {
                 consume(frame.event)
             }
         }
     }
 
+
+    internal fun drainDroppedCommands(): List<SessionEvent> = synchronized(sessionMonitor) {
+        droppedCommands.values.toList().also { droppedCommands.clear() }
+    }
+
+    internal fun currentEventSequence(session: HubSessionContext): Long =
+        synchronized(sessionMonitor) {
+            if (sequenceSession == session) nextFrameSequence else 0
+        }
+
     private suspend fun connectLoop(
         scope: CoroutineScope,
-        session: HubSession,
+        session: HubSessionContext,
         fence: SessionFence,
     ) {
         val backoff = ReconnectBackoff(
@@ -134,12 +165,12 @@ class PrinterEventsRepository(
 
     private suspend fun openOnce(
         scope: CoroutineScope,
-        session: HubSession,
+        session: HubSessionContext,
         fence: SessionFence,
     ): Outcome {
         val requestBuilder = Request.Builder()
-            .url(session.printerEventsUrl)
-            .addHeader("Authorization", "Bearer ${session.accessToken}")
+            .url(session.identity.printerEventsUrl)
+            .addHeader("Authorization", "Bearer ${session.identity.accessToken}")
         return suspendCancellableCoroutine { cont: CancellableContinuation<Outcome> ->
             // Track whether at least one frame was received. Per spec §4.2, a socket that opens and
             // then closes immediately without any frame is treated as a probable auth failure.
@@ -205,13 +236,17 @@ class PrinterEventsRepository(
         }
     }
 
-    private fun activateSession(): SessionFence = synchronized(sessionMonitor) {
+    private fun activateSession(session: HubSessionContext): SessionFence = synchronized(sessionMonitor) {
         nextSessionGeneration += 1
         activeSessionGeneration = nextSessionGeneration
-        SessionFence(nextSessionGeneration)
+        if (sequenceSession != session) {
+            sequenceSession = session
+            nextFrameSequence = 0
+        }
+        SessionFence(nextSessionGeneration, session)
     }
 
-    private fun isRejectedSession(session: HubSession): Boolean = synchronized(sessionMonitor) {
+    private fun isRejectedSession(session: HubSessionContext): Boolean = synchronized(sessionMonitor) {
         rejectedSession == session
     }
 
@@ -221,20 +256,23 @@ class PrinterEventsRepository(
         }
     }
 
-    private fun settleRejectedSession(scope: CoroutineScope, session: HubSession) {
+    private fun settleRejectedSession(scope: CoroutineScope, session: HubSessionContext) {
         scope.launch {
             if (!tokenRefresher()) {
-                invalidateSession(session)
+                invalidateSession(session.identity)
             }
         }
     }
 
-    private inner class SessionFence(private val generation: Long) {
+    private inner class SessionFence(
+        private val generation: Long,
+        private val session: HubSessionContext,
+    ) {
         fun isActive(): Boolean = synchronized(sessionMonitor) {
             activeSessionGeneration == generation
         }
 
-        fun reject(session: HubSession): Boolean = synchronized(sessionMonitor) {
+        fun reject(session: HubSessionContext): Boolean = synchronized(sessionMonitor) {
             if (activeSessionGeneration == generation && rejectedSession != session) {
                 rejectedSession = session
                 true
@@ -254,7 +292,21 @@ class PrinterEventsRepository(
         fun emit(event: PrinterEventDto) {
             synchronized(sessionMonitor) {
                 if (activeSessionGeneration == generation) {
-                    _events.tryEmit(SessionEvent(generation, event))
+                    nextFrameSequence += 1
+                    val frame = SessionEvent(
+                        generation,
+                        nextFrameSequence,
+                        session,
+                        event,
+                    )
+                    if (!_events.tryEmit(frame)) {
+                        val command = event as? PrinterEventDto.CommandResult
+                        command?.command?.printerId?.let { printerId ->
+                            droppedCommands[printerId] = frame
+                            commandRecoveryChannel.trySend(Unit)
+                        }
+                        resyncChannel.trySend(session)
+                    }
                 }
             }
         }

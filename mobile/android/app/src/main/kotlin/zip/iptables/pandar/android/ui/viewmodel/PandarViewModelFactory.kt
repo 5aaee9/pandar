@@ -19,12 +19,14 @@ object PandarViewModelFactory {
 
     fun create(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
         initializer { MainActivityViewModel(container) }
-        initializer { PrintersViewModel(container) }
-        initializer { JobsViewModel(container) }
+        initializer {
+            PrintersViewModel(container.pandar, container::reconnectLiveUpdates)
+        }
+        initializer { JobsViewModel(container.pandar) }
         initializer { SettingsViewModel(container) }
     }
 
     fun createDetail(container: AppContainer, printerId: String): ViewModelProvider.Factory = viewModelFactory {
-        initializer { PrinterDetailViewModel(container, printerId) }
+        initializer { PrinterDetailViewModel(container.pandar, printerId) }
     }
 }

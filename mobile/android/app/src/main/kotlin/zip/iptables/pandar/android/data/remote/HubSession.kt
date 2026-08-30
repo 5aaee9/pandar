@@ -2,11 +2,19 @@ package zip.iptables.pandar.android.data.remote
 
 import okhttp3.HttpUrl
 
+data class HubSessionContext(
+    val identity: HubSession,
+    val epoch: Long,
+) {
+    override fun toString(): String =
+        "HubSessionContext(identity=$identity, epoch=$epoch)"
+}
+
 data class HubSession(
     val baseUrl: HttpUrl,
     val tenantId: String,
     val accessToken: String,
-) {
+) : TokenProvider {
     val printerEventsUrl: String
         get() {
             val httpBase = baseUrl.toString().trimEnd('/')
@@ -17,6 +25,8 @@ data class HubSession(
             }
             return "$wsBase/api/v1/tenants/$tenantId/printer-events"
         }
+
+    override fun currentToken(): String = accessToken
 
     override fun toString(): String =
         "HubSession(baseUrl=$baseUrl, tenantId=$tenantId, accessToken=[REDACTED])"

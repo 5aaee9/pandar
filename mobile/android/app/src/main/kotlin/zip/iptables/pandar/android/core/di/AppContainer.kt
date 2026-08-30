@@ -6,17 +6,20 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 import okhttp3.OkHttpClient
 import zip.iptables.pandar.android.core.util.Logger
 import zip.iptables.pandar.android.data.auth.AuthRepository
 import zip.iptables.pandar.android.data.remote.ApiModule
+import zip.iptables.pandar.android.data.remote.HubApiSession
 import zip.iptables.pandar.android.data.remote.HubSession
+import zip.iptables.pandar.android.data.remote.HubSessionContext
 import zip.iptables.pandar.android.data.remote.secureHubHttpUrl
 import zip.iptables.pandar.android.data.remote.PandarApi
 import zip.iptables.pandar.android.data.remote.ws.PrinterEventsRepository
@@ -32,12 +35,11 @@ class AppContainer(context: Context) {
 
     val logger: Logger = AndroidLogger
 
-    private val _apiState = MutableStateFlow<PandarApi?>(null)
-    val apiState: StateFlow<PandarApi?> = _apiState.asStateFlow()
+    private val configuredApi = MutableStateFlow<PandarApi?>(null)
 
-    val auth: AuthRepository = AuthRepository(settings, { apiState.value }, scope, logger)
+    val auth: AuthRepository = AuthRepository(settings, { configuredApi.value }, scope, logger)
 
-    val okHttpClient: OkHttpClient by lazy {
+    private val okHttpClient: OkHttpClient by lazy {
         ApiModule.okHttp(
             tokenProvider = settings,
             tokenRefresher = { auth.refresh() },
@@ -45,6 +47,22 @@ class AppContainer(context: Context) {
             logger = logger,
         )
     }
+
+    private var nextHubSessionEpoch = 0L
+    private val hubSessions: StateFlow<HubSessionContext?> = settings.settings
+        .map { snapshot ->
+            HubSession.create(
+                snapshot.hubBaseUrl,
+                snapshot.tenantId,
+                snapshot.accessToken,
+            )
+        }
+        .distinctUntilChanged()
+        .map { identity ->
+            nextHubSessionEpoch += 1
+            identity?.let { HubSessionContext(it, nextHubSessionEpoch) }
+        }
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
     private val printerEvents: PrinterEventsRepository = PrinterEventsRepository(
         client = ApiModule.webSocketHttp(),
@@ -54,10 +72,11 @@ class AppContainer(context: Context) {
     )
 
     val pandar: PandarRepository = PandarRepository(
-        apiProvider = { apiState.value ?: throw IllegalStateException("Hub base URL is not configured.") },
-        tenantProvider = { settings.currentTenant() },
+        sessions = hubSessions,
+        apiSession = ::apiSession,
         ws = printerEvents,
         scope = scope,
+        logger = logger,
     )
 
     init {
@@ -74,21 +93,26 @@ class AppContainer(context: Context) {
         }
         printerEvents.start(
             scope,
-            settings.settings
-                .map { snapshot ->
-                    HubSession.create(
-                        snapshot.hubBaseUrl,
-                        snapshot.tenantId,
-                        snapshot.accessToken,
-                    )
-                }
-                .distinctUntilChanged(),
+            pandar.readySessions,
         )
     }
 
     private fun rebuildApi(baseUrl: String?) {
         val httpUrl = secureHubHttpUrl(baseUrl)
-        _apiState.value = httpUrl?.let { ApiModule.pandarApi(it, okHttpClient) }
+        configuredApi.value = httpUrl?.let { ApiModule.pandarApi(it, okHttpClient) }
+    }
+
+    private fun apiSession(context: HubSessionContext): HubApiSession {
+        val identity = context.identity
+        val client = ApiModule.okHttp(
+            tokenProvider = identity,
+            tokenRefresher = { auth.refresh() },
+            clearTokens = {
+                scope.launch { settings.clearSessionIfCurrent(identity) }
+            },
+            logger = logger,
+        )
+        return HubApiSession(context, ApiModule.pandarApi(identity.baseUrl, client))
     }
 
     /** Force the live WebSocket to reconnect (used by pull-to-refresh when the stream is down). */

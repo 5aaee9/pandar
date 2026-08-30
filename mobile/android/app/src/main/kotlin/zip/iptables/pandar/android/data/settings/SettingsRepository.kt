@@ -91,8 +91,6 @@ class SettingsRepository(
     }
 
     override fun currentToken(): String? = lastSnapshot?.accessToken
-
-    fun currentTenant(): String? = lastSnapshot?.tenantId
 }
 
 private fun androidx.datastore.preferences.core.MutablePreferences.putOrRemove(
