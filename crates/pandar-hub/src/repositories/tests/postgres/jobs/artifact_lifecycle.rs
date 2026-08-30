@@ -184,3 +184,25 @@ async fn postgres_cleanup_deletion_failure_retries_when_configured() {
     crate::repositories::tests::cleanup::lifecycle::exercise_cleanup_deletion_failure(database)
         .await;
 }
+
+#[tokio::test]
+async fn postgres_deletion_drain_continues_after_failure_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    crate::repositories::tests::cleanup::lifecycle::exercise_deletion_drain_continues(database)
+        .await;
+}
+
+#[tokio::test]
+async fn postgres_concurrent_deletion_drains_claim_once_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    crate::repositories::tests::cleanup::lifecycle::exercise_concurrent_deletion_drains(database)
+        .await;
+}

@@ -104,6 +104,7 @@ pub async fn run_from_env() -> anyhow::Result<()> {
     tracing::info!(%grpc_bind_addr, "pandar-hub gRPC listening");
     tracing::info!(%observability_bind_addr, "pandar-hub observability listening");
     let _session_expiry = runtime::spawn_session_expiry(state.clone());
+    let _artifact_lifecycle = runtime::spawn_artifact_lifecycle(state.clone());
     let _control_plane = start_control_plane(state.clone()).await?;
     let http = axum::serve(listener, routes::router(state.clone()));
     let observability = axum::serve(

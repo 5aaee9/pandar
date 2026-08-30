@@ -12,6 +12,38 @@ use crate::{
 const STALE_SESSION_TIMEOUT: Duration = Duration::from_secs(45);
 const STALE_SESSION_SWEEP_INTERVAL: Duration = Duration::from_secs(15);
 const STALE_LIVE_COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
+const ARTIFACT_LIFECYCLE_INTERVAL: Duration = Duration::from_secs(30);
+
+pub fn spawn_artifact_lifecycle(state: AppState) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let owner = state.instance_id().to_string();
+        let mut ticker = tokio::time::interval(ARTIFACT_LIFECYCLE_INTERVAL);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            if let Err(err) =
+                crate::artifacts::lifecycle::reap_expired_reservations(state.database()).await
+            {
+                tracing::error!(
+                    error = %crate::redaction::redact_secrets(&format!("{err:#}")),
+                    "failed to reap expired artifact reservations"
+                );
+            }
+            if let Err(err) = crate::artifacts::lifecycle::drain_deletions_for_owner(
+                state.database(),
+                state.artifact_storage(),
+                &owner,
+            )
+            .await
+            {
+                tracing::warn!(
+                    error = %crate::redaction::redact_secrets(&format!("{err:#}")),
+                    "failed to drain queued artifact deletions"
+                );
+            }
+        }
+    })
+}
 
 pub fn spawn_session_expiry(state: AppState) -> JoinHandle<()> {
     tokio::spawn(async move {

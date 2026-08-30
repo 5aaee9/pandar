@@ -1,8 +1,9 @@
 use anyhow::Context;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
-    QueryOrder,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait,
+    QueryFilter, QueryOrder, QuerySelect,
 };
+use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     db::{ConnectionDialectExt, Database, UniqueConstraint, is_unique_violation},
@@ -10,6 +11,9 @@ use crate::{
 };
 
 use super::ArtifactStorage;
+
+const DELETION_BATCH_SIZE: u64 = 64;
+const DELETION_LEASE_SECONDS: i64 = 300;
 
 pub(crate) async fn enqueue_deletion<C>(connection: &C, storage_path: &str) -> anyhow::Result<()>
 where
@@ -21,6 +25,8 @@ where
         storage_path: Set(storage_path.to_owned()),
         attempts: Set(0),
         last_error: Set(None),
+        lease_owner: Set(None),
+        lease_expires_at: Set(None),
         created_at: Set(now.clone()),
         updated_at: Set(now),
     }
@@ -39,50 +45,141 @@ pub async fn drain_deletions(
     database: &Database,
     storage: &dyn ArtifactStorage,
 ) -> anyhow::Result<u64> {
+    drain_deletions_for_owner(database, storage, &uuid::Uuid::new_v4().to_string()).await
+}
+
+pub(crate) async fn drain_deletions_for_owner(
+    database: &Database,
+    storage: &dyn ArtifactStorage,
+    owner: &str,
+) -> anyhow::Result<u64> {
+    let claimed = claim_deletions(database, owner).await?;
     let connection = database.sea_orm_connection();
-    let queued = artifact_deletions::Entity::find()
-        .order_by_asc(artifact_deletions::Column::CreatedAt)
-        .all(&connection)
-        .await
-        .context("failed to load queued artifact deletions")?;
     let mut deleted = 0;
-    for deletion in queued {
+    let mut first_error = None;
+
+    for deletion in claimed {
         if let Err(err) = storage.delete_artifact(&deletion.storage_path).await {
             let redacted = crate::redaction::redact_secrets(&format!("{err:#}"));
-            if let Err(update_err) = update_deletion_failure(&connection, &deletion, redacted).await
+            if let Err(update_err) =
+                update_deletion_failure(database, &deletion, owner, redacted).await
             {
                 tracing::error!(
                     error = %format!("{update_err:#}"),
                     "failed to persist artifact deletion retry"
                 );
             }
-            return Err(err).context("failed to delete queued artifact [redacted]");
+            let err = err.context("failed to delete queued artifact [redacted]");
+            if first_error.is_none() {
+                first_error = Some(err);
+            } else {
+                tracing::warn!(
+                    error = %crate::redaction::redact_secrets(&format!("{err:#}")),
+                    "additional queued artifact deletion failed"
+                );
+            }
+            continue;
         }
-        artifact_deletions::Entity::delete_by_id(&deletion.id)
+
+        let result = artifact_deletions::Entity::delete_many()
+            .filter(artifact_deletions::Column::Id.eq(&deletion.id))
+            .filter(artifact_deletions::Column::LeaseOwner.eq(owner))
             .exec(&connection)
             .await
-            .context("failed to finalize queued artifact deletion")?;
-        deleted += 1;
+            .context("failed to finalize queued artifact deletion");
+        match result {
+            Ok(result) => deleted += result.rows_affected,
+            Err(err) if first_error.is_none() => first_error = Some(err),
+            Err(err) => tracing::error!(
+                error = %format!("{err:#}"),
+                "additional queued artifact deletion finalization failed"
+            ),
+        }
     }
-    Ok(deleted)
+
+    match first_error {
+        Some(err) => Err(err),
+        None => Ok(deleted),
+    }
 }
 
-async fn update_deletion_failure<C>(
-    connection: &C,
-    deletion: &artifact_deletions::Model,
-    error: String,
-) -> anyhow::Result<()>
-where
-    C: ConnectionTrait,
-{
-    let mut active: artifact_deletions::ActiveModel = deletion.clone().into();
-    active.attempts = Set(deletion.attempts.saturating_add(1));
-    active.last_error = Set(Some(error));
-    active.updated_at = Set(pandar_core::created_at_now());
-    active
-        .update(connection)
+async fn claim_deletions(
+    database: &Database,
+    owner: &str,
+) -> anyhow::Result<Vec<artifact_deletions::Model>> {
+    let tx = database
+        .begin_write_transaction()
         .await
-        .context("failed to update queued artifact deletion")?;
+        .context("failed to begin artifact deletion claim transaction")?;
+    let now = OffsetDateTime::now_utc();
+    let now_text = now
+        .format(&Rfc3339)
+        .context("failed to format artifact deletion claim timestamp")?;
+    let lease_expires_at = (now + Duration::seconds(DELETION_LEASE_SECONDS))
+        .format(&Rfc3339)
+        .context("failed to format artifact deletion lease expiry")?;
+    let query = artifact_deletions::Entity::find()
+        .filter(
+            Condition::any()
+                .add(artifact_deletions::Column::LeaseOwner.is_null())
+                .add(artifact_deletions::Column::LeaseExpiresAt.lte(now_text.clone())),
+        )
+        .order_by_asc(artifact_deletions::Column::CreatedAt)
+        .order_by_asc(artifact_deletions::Column::Id)
+        .limit(DELETION_BATCH_SIZE);
+    let claimed = tx
+        .lock_for_update(query)
+        .all(&tx)
+        .await
+        .context("failed to load queued artifact deletion batch")?;
+    for deletion in &claimed {
+        let mut active: artifact_deletions::ActiveModel = deletion.clone().into();
+        active.lease_owner = Set(Some(owner.to_owned()));
+        active.lease_expires_at = Set(Some(lease_expires_at.clone()));
+        active.updated_at = Set(now_text.clone());
+        active
+            .update(&tx)
+            .await
+            .context("failed to claim queued artifact deletion")?;
+    }
+    tx.commit()
+        .await
+        .context("failed to commit artifact deletion claim transaction")?;
+    Ok(claimed)
+}
+
+async fn update_deletion_failure(
+    database: &Database,
+    deletion: &artifact_deletions::Model,
+    owner: &str,
+    error: String,
+) -> anyhow::Result<()> {
+    let tx = database
+        .begin_write_transaction()
+        .await
+        .context("failed to begin artifact deletion retry transaction")?;
+    let query = artifact_deletions::Entity::find_by_id(&deletion.id)
+        .filter(artifact_deletions::Column::LeaseOwner.eq(owner));
+    if let Some(current) = tx
+        .lock_for_update(query)
+        .one(&tx)
+        .await
+        .context("failed to load claimed artifact deletion retry")?
+    {
+        let mut active: artifact_deletions::ActiveModel = current.into();
+        active.attempts = Set(deletion.attempts.saturating_add(1));
+        active.last_error = Set(Some(error));
+        active.lease_owner = Set(None);
+        active.lease_expires_at = Set(None);
+        active.updated_at = Set(pandar_core::created_at_now());
+        active
+            .update(&tx)
+            .await
+            .context("failed to update queued artifact deletion")?;
+    }
+    tx.commit()
+        .await
+        .context("failed to commit artifact deletion retry transaction")?;
     Ok(())
 }
 

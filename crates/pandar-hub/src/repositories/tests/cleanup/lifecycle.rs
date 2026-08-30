@@ -104,3 +104,106 @@ pub(in crate::repositories::tests) async fn exercise_cleanup_deletion_failure(da
         0
     );
 }
+
+#[tokio::test]
+async fn deletion_drain_continues_after_individual_storage_failure() {
+    exercise_deletion_drain_continues(sqlite_database().await).await;
+}
+
+pub(in crate::repositories::tests) async fn exercise_deletion_drain_continues(database: Database) {
+    let failed_path = "cleanup/fails.3mf";
+    let healthy_path = "cleanup/deletes.3mf";
+    let connection = database.sea_orm_connection();
+    crate::artifacts::lifecycle::enqueue_deletion(&connection, failed_path)
+        .await
+        .unwrap();
+    crate::artifacts::lifecycle::enqueue_deletion(&connection, healthy_path)
+        .await
+        .unwrap();
+    let storage = RecordingArtifactStorage::failing_path(failed_path);
+
+    let error = crate::artifacts::lifecycle::drain_deletions(&database, &storage)
+        .await
+        .unwrap_err();
+
+    assert!(format!("{error:#}").contains("delete failed"));
+    let mut attempted = storage.deleted();
+    attempted.sort();
+    let mut expected = vec![failed_path.to_owned(), healthy_path.to_owned()];
+    expected.sort();
+    assert_eq!(attempted, expected);
+    let remaining = crate::entities::artifact_deletions::Entity::find()
+        .one(&connection)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(remaining.storage_path, failed_path);
+    assert_eq!(remaining.attempts, 1);
+    assert!(remaining.last_error.unwrap().contains("delete failed"));
+    assert!(remaining.lease_owner.is_none());
+    assert!(remaining.lease_expires_at.is_none());
+}
+
+#[tokio::test]
+async fn concurrent_deletion_drains_claim_each_object_once() {
+    exercise_concurrent_deletion_drains(sqlite_database().await).await;
+}
+
+pub(in crate::repositories::tests) async fn exercise_concurrent_deletion_drains(
+    database: Database,
+) {
+    let paths = ["cleanup/one.3mf", "cleanup/two.3mf", "cleanup/three.3mf"];
+    let connection = database.sea_orm_connection();
+    for path in paths {
+        crate::artifacts::lifecycle::enqueue_deletion(&connection, path)
+            .await
+            .unwrap();
+    }
+    let storage = RecordingArtifactStorage::default();
+
+    let (first, second) = tokio::join!(
+        crate::artifacts::lifecycle::drain_deletions(&database, &storage),
+        crate::artifacts::lifecycle::drain_deletions(&database, &storage),
+    );
+
+    assert_eq!(first.unwrap() + second.unwrap(), paths.len() as u64);
+    let mut deleted = storage.deleted();
+    deleted.sort();
+    let mut expected = paths.map(str::to_owned);
+    expected.sort();
+    assert_eq!(deleted, expected);
+    assert_eq!(
+        crate::artifacts::lifecycle::queued_deletion_count(&database)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn deletion_drain_claims_one_bounded_batch() {
+    let database = sqlite_database().await;
+    let connection = database.sea_orm_connection();
+    for index in 0..=64 {
+        crate::artifacts::lifecycle::enqueue_deletion(
+            &connection,
+            &format!("cleanup/bounded-{index}.3mf"),
+        )
+        .await
+        .unwrap();
+    }
+    let storage = RecordingArtifactStorage::default();
+
+    assert_eq!(
+        crate::artifacts::lifecycle::drain_deletions(&database, &storage)
+            .await
+            .unwrap(),
+        64
+    );
+    assert_eq!(
+        crate::artifacts::lifecycle::queued_deletion_count(&database)
+            .await
+            .unwrap(),
+        1
+    );
+}
