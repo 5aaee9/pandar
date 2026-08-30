@@ -3,7 +3,10 @@ use std::{
     io::{self, Read, Write},
     net::TcpListener,
     ptr,
-    sync::{Arc, Barrier, Mutex},
+    sync::{
+        Arc, Barrier, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -35,6 +38,17 @@ unsafe extern "C" fn collect_log(context: *mut c_void, _level: i32, message: *co
         .unwrap()
         .push(text);
     unsafe { Bambu_FreeLogMsg(message) };
+}
+
+struct ReentrantCloseContext {
+    tunnel: *mut c_void,
+    returned: AtomicBool,
+}
+
+unsafe extern "C" fn close_from_stream_info(context: *mut c_void, _info: *mut BambuStreamInfo) {
+    let context = unsafe { &*(context.cast::<ReentrantCloseContext>()) };
+    unsafe { Bambu_Close(context.tunnel) };
+    context.returned.store(true, Ordering::Release);
 }
 
 unsafe extern "C" fn retain_log_pointer(
@@ -214,6 +228,59 @@ fn local_relay_yields_mjpeg_samples_through_the_studio_abi() {
         Bambu_Close(tunnel);
         Bambu_Destroy(tunnel);
     }
+    server.join().unwrap();
+}
+
+#[test]
+fn stream_info_callback_can_close_its_own_reader_worker() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let auth = "0123456789abcdef0123456789abcdef";
+    let jpeg = vec![
+        0xff, 0xd8, 0xff, 0xc0, 0x00, 0x07, 0x08, 0x01, 0xe0, 0x02, 0x80, 0xff, 0xd9,
+    ];
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut presented = [0_u8; 32];
+        stream.read_exact(&mut presented).unwrap();
+        assert_eq!(&presented, auth.as_bytes());
+        stream
+            .write_all(&(jpeg.len() as u32).to_le_bytes())
+            .unwrap();
+        stream.write_all(&jpeg).unwrap();
+    });
+    let url = CString::new(format!(
+        "bambu:///local/127.0.0.1?port={port}&auth={auth}&device=SERIAL"
+    ))
+    .unwrap();
+    let mut tunnel: *mut c_void = ptr::null_mut();
+    assert_eq!(
+        unsafe { Bambu_Create(&mut tunnel, url.as_ptr()) },
+        BAMBU_SUCCESS
+    );
+    let context = Box::new(ReentrantCloseContext {
+        tunnel,
+        returned: AtomicBool::new(false),
+    });
+    unsafe {
+        Bambu_SetStreamInfoCallback(
+            tunnel,
+            Some(close_from_stream_info),
+            std::ptr::from_ref(&*context).cast_mut().cast(),
+        );
+    }
+    assert_eq!(unsafe { Bambu_Open(tunnel) }, BAMBU_SUCCESS);
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !context.returned.load(Ordering::Acquire) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(context.returned.load(Ordering::Acquire));
+    while unsafe { Bambu_StartStream(tunnel, true) } != BAMBU_INVALID && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(unsafe { Bambu_StartStream(tunnel, true) }, BAMBU_INVALID);
+    unsafe { Bambu_Destroy(tunnel) };
     server.join().unwrap();
 }
 

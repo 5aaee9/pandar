@@ -18,10 +18,14 @@ use crate::{
 use super::{FRAME_QUEUE_CAPACITY, READ_TIMEOUT, Shared, Stats, send_relay_handshake};
 
 pub(super) struct TunnelLifecycle {
-    state: Mutex<State>,
-    changed: Condvar,
+    inner: Arc<LifecycleInner>,
     #[cfg(test)]
     pause: Mutex<Option<Arc<LifecycleTestPause>>>,
+}
+
+struct LifecycleInner {
+    state: Mutex<State>,
+    changed: Condvar,
 }
 
 enum State {
@@ -39,21 +43,23 @@ struct Session {
 impl TunnelLifecycle {
     pub(super) fn new() -> Self {
         Self {
-            state: Mutex::new(State::Closed),
-            changed: Condvar::new(),
+            inner: Arc::new(LifecycleInner {
+                state: Mutex::new(State::Closed),
+                changed: Condvar::new(),
+            }),
             #[cfg(test)]
             pause: Mutex::new(None),
         }
     }
 
     pub(super) fn open(&self, config: &RelayConfig, shared: &Arc<Shared>) -> i32 {
-        let mut state = self.state.lock().expect("source lifecycle");
+        let mut state = self.inner.state.lock().expect("source lifecycle");
         loop {
             match &*state {
                 State::Running(_) => return BAMBU_SUCCESS,
                 State::Closed => break,
                 State::Closing(_) => {
-                    state = self.changed.wait(state).expect("source lifecycle");
+                    state = self.inner.changed.wait(state).expect("source lifecycle");
                 }
             }
         }
@@ -80,24 +86,24 @@ impl TunnelLifecycle {
 
     pub(super) fn is_running(&self) -> bool {
         matches!(
-            *self.state.lock().expect("source lifecycle"),
+            *self.inner.state.lock().expect("source lifecycle"),
             State::Running(_)
         )
     }
 
     pub(super) fn try_read(&self) -> Option<Result<Vec<u8>, TryRecvError>> {
-        let state = self.state.lock().expect("source lifecycle");
+        let state = self.inner.state.lock().expect("source lifecycle");
         let State::Running(session) = &*state else {
             return None;
         };
         Some(session.receiver.try_recv())
     }
 
-    pub(super) fn close(&self, shared: &Shared) {
+    pub(super) fn close(&self, shared: &Arc<Shared>) {
         #[cfg(test)]
         self.pause_close();
         let session = {
-            let mut state = self.state.lock().expect("source lifecycle");
+            let mut state = self.inner.state.lock().expect("source lifecycle");
             loop {
                 match &*state {
                     State::Closed => {
@@ -108,7 +114,7 @@ impl TunnelLifecycle {
                         if worker_id == &std::thread::current().id() {
                             return;
                         }
-                        state = self.changed.wait(state).expect("source lifecycle");
+                        state = self.inner.changed.wait(state).expect("source lifecycle");
                     }
                     State::Running(session) => {
                         shared
@@ -125,6 +131,17 @@ impl TunnelLifecycle {
                 }
             }
         };
+        let closes_own_worker = session.worker.thread().id() == std::thread::current().id();
+        let inner = Arc::clone(&self.inner);
+        let shared = Arc::clone(shared);
+        if closes_own_worker {
+            std::thread::spawn(move || Self::finish_close(inner, shared, session));
+        } else {
+            Self::finish_close(inner, shared, session);
+        }
+    }
+
+    fn finish_close(inner: Arc<LifecycleInner>, shared: Arc<Shared>, session: Session) {
         let Session {
             receiver,
             worker,
@@ -134,8 +151,8 @@ impl TunnelLifecycle {
         drop(receiver);
         let _ = worker.join();
         shared.finish_eof();
-        *self.state.lock().expect("source lifecycle") = State::Closed;
-        self.changed.notify_all();
+        *inner.state.lock().expect("source lifecycle") = State::Closed;
+        inner.changed.notify_all();
     }
 
     #[cfg(test)]
