@@ -3089,6 +3089,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "pandar-quality"
+version = "0.1.4"
+
+[[package]]
 name = "pandar-studio-hook"
 version = "0.1.4"
 dependencies = [

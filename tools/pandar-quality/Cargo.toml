@@ -1,0 +1,6 @@
+[package]
+name = "pandar-quality"
+version = "0.1.4"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true

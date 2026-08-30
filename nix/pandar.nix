@@ -72,7 +72,42 @@
           || rel == "frontend/plugin-local/dist"
           || lib.hasPrefix "frontend/plugin-local/dist/" rel
           || rel == "proto"
-          || lib.hasPrefix "proto/" rel;
+          || lib.hasPrefix "proto/" rel
+          || rel == "tools"
+          || rel == "tools/pandar-quality"
+          || lib.hasPrefix "tools/pandar-quality/" rel;
+      };
+
+      moduleSizeSrc = lib.cleanSourceWith {
+        src = root;
+        filter =
+          path: type:
+          let
+            rel = lib.removePrefix "${toString root}/" (toString path);
+            generated = lib.any (
+              component:
+              builtins.elem component [
+                "node_modules"
+                ".next"
+                ".gradle"
+                "build"
+                "dist"
+                "generated"
+                "out"
+                "target"
+              ]
+            ) (lib.splitString "/" rel);
+          in
+          !generated
+          && (
+            rel == "crates"
+            || lib.hasPrefix "crates/" rel
+            || rel == "frontend"
+            || lib.hasPrefix "frontend/" rel
+            || rel == "mobile"
+            || rel == "mobile/android"
+            || lib.hasPrefix "mobile/android/" rel
+          );
       };
 
       nativeBuildInputs = [
@@ -130,6 +165,7 @@
           --prefix PATH : ${lib.makeBinPath [ pkgs.ffmpeg ]}
       '';
       pandar-cli = buildRustPackage "pandar-cli" "-p pandar-app --bin pandar";
+      pandar-quality = buildRustPackage "pandar-quality" "-p pandar-quality --bin pandar-quality";
       pandar-network-plugin = craneLib.buildPackage (
         commonArgs
         // {
@@ -140,6 +176,13 @@
           doCheck = false;
         }
       );
+
+      pandarModuleSizeCheck =
+        pkgs.runCommand "pandar-module-size" { nativeBuildInputs = [ pandar-quality ]; }
+          ''
+            pandar-quality module-size ${moduleSizeSrc}
+            touch "$out"
+          '';
 
       pandarAuthLibraryPath = lib.makeLibraryPath [
         pkgs.sqlite
@@ -698,6 +741,7 @@
 
         pandar-auth-migrate = pandarAuthMigrateCheck;
         pandar-auth-jwt-smoke = pandarAuthJwtSmokeCheck;
+        pandar-module-size = pandarModuleSizeCheck;
         pandar-auth-cookie-smoke = pandarAuthCookieSmokeCheck;
         pandar-web-auth-redirect-smoke = pandarWebAuthRedirectSmokeCheck;
         pandar-nixos-module = pandarNixosModuleCheck;

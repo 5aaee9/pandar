@@ -146,7 +146,7 @@ Printer cameras stream through the owning live Agent for whitelisted models (A1,
 
 ## Frontend Runtime
 
-Run `npm --prefix frontend run lint`, `npm run test:web`, and `npm run typecheck:web` before submitting frontend changes. The workspace production-module guard (`cargo test -p pandar-core --test module_size`) enforces the 400-line limit across Rust, C/C++ headers and sources, and frontend TypeScript/TSX while excluding tests and generated output.
+Run `npm --prefix frontend run lint`, `npm run test:web`, and `npm run typecheck:web` before submitting frontend changes. The dedicated workspace quality tool (`cargo run -p pandar-quality -- module-size`) enforces the 400-line limit across production Rust, C/C++ headers and sources, frontend TypeScript/TSX, and Android Kotlin while excluding tests and generated output. Nix and the Checks workflow run the same `pandar-module-size` gate. Network-plugin ownership and freshness architecture is verified through the compiled `studio_abi_probe` and Studio contract binaries; source inspection is reserved for negative rules that prohibit business policy in the C++ shim.
 
 Server-side frontend code reads the hub through `APP_API_URL`, defaulting to `http://localhost:8080` when unset. Browser code never calls the hub directly; reads and mutations cross the Hub proxy (`frontend/app/hub-proxy.ts` and the `frontend/app/api/tenants/[tenantId]/` routes). `APP_BASE_URL` remains the frontend's public URL for deployment wiring. The public `/.well-known/pandar` document advertises `APP_PUBLIC_API_URL`, falling back to `APP_API_URL`, so Studio can derive its Hub URL from the Web URL; set `APP_PUBLIC_API_URL` when the server-side Hub address is not reachable from Studio.
 

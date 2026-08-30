@@ -9,6 +9,7 @@ members = [
     "crates/pandar-protocol",
     "crates/pandar-studio-profile",
     "crates/pandar-studio-hook",
+    "tools/pandar-quality",
 ]
 exclude = [
     "tools/release-smoke",

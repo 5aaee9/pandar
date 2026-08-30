@@ -145,6 +145,7 @@ jobs:
           nix build --show-trace \
             .#checks.x86_64-linux.pandar-fmt \
             .#checks.x86_64-linux.pandar-clippy \
+            .#checks.x86_64-linux.pandar-module-size \
             .#checks.x86_64-linux.pandar-nextest \
             .#checks.x86_64-linux.pandar-nixos-module \
             .#checks.x86_64-linux.pandar-nixos-options-doc

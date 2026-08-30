@@ -1,82 +1,155 @@
-#[test]
-fn printer_transport_credentials_do_not_cross_the_plugin_abi() {
-    let rust_sources = [
-        include_str!("../src/studio_status/list.rs"),
-        include_str!("../src/connection.rs"),
-        include_str!("../src/connection/ffi.rs"),
-        include_str!("../src/studio_abi.rs"),
-    ]
-    .join("\n");
-    for forbidden in [
-        "dev_access_code",
-        "access_code",
-        "host_ptr",
-        "host_len",
-        "pub(crate) host",
-    ] {
-        assert!(
-            !rust_sources.contains(forbidden),
-            "printer transport secret crossed the Rust plugin ABI: {forbidden}"
-        );
-    }
+use std::path::{Path, PathBuf};
 
-    let cxx_sources = [
-        include_str!("../src/shim_types.hpp"),
-        include_str!("../src/shim_connection.hpp"),
-        include_str!("../src/shim_state.hpp"),
-        include_str!("../src/shim_printer_cache.hpp"),
-        include_str!("../src/shim_dispatch.hpp"),
-    ]
-    .join("\n");
+#[test]
+fn cpp_shim_contains_no_transport_or_status_policy() {
+    let credential_sources = read_sources(&[
+        "shim_types.hpp",
+        "shim_connection.hpp",
+        "shim_state.hpp",
+        "shim_printer_cache.hpp",
+        "shim_dispatch.hpp",
+    ]);
     for forbidden in ["printer_connections", "host_ptr", "access_ptr"] {
-        assert!(
-            !cxx_sources.contains(forbidden),
-            "printer transport secret crossed the compiled C++ cache ABI: {forbidden}"
-        );
+        assert_absent(&credential_sources, forbidden);
     }
-}
 
-#[test]
-fn unknown_printer_identity_is_not_replaced_with_a_different_model_or_state() {
-    for source in [
-        include_str!("../src/studio_status/list.rs"),
-        include_str!("../src/studio_status/device.rs"),
-        include_str!("../src/shim_printer_cache.hpp"),
+    let status_sources = read_sources(&[
+        "shim_dispatch.hpp",
+        "shim_abi_content.hpp",
+        "shim_printer_cache.hpp",
+    ]);
+    for forbidden in [
+        r#"R"({"print"#,
+        r#"\"wifi_signal\""#,
+        r#"\"sdcard\""#,
+        r#"\"ipcam_dev\""#,
+        r#"\"liveview\""#,
+        r#"\"rtsp_url\""#,
+        r#"\"support_chamber\""#,
+        r#"\"support_mqtt_alive\""#,
+        "camera_url_for(",
+        "bambu:///",
+        "rtsps://",
+        "rtsp://",
+        "\"C11\"",
+        "\"IDLE\"",
     ] {
-        assert!(
-            !source.contains("C11"),
-            "unknown model was replaced with C11"
-        );
-        assert!(
-            !source.contains("\"IDLE\""),
-            "unknown state was replaced with IDLE"
-        );
+        assert_absent(&status_sources, forbidden);
     }
 }
 
 #[test]
-fn rust_owns_file_transfer_errors_and_firmware_identity_admission() {
-    let transfer = include_str!("../src/file_transfer.rs");
-    let firmware = include_str!("../src/shim_firmware.hpp");
-    let firmware_request = include_str!("../src/shim_firmware_request.hpp");
-    let policy = include_str!("../src/studio_policy.rs");
-    let firmware_ffi = include_str!("../src/firmware/ffi.rs");
+fn cpp_account_and_request_adapters_contain_no_policy() {
+    let sources = read_sources(&[
+        "shim_profile.hpp",
+        "shim_firmware.hpp",
+        "shim_no_auth.hpp",
+        "shim_abi_content.hpp",
+        "shim_abi_operations.hpp",
+        "shim_abi_account.hpp",
+        "shim_abi_user.hpp",
+    ]);
+    for forbidden in [
+        r#"R"({"#,
+        "agent->token.empty() || agent->profile_json.empty()",
+        "agent->hub_url != expected_hub",
+        "hub_url != agent->hub_url",
+        "snapshot.token.empty() || snapshot.printer_id.empty()",
+        "user_info.empty() || user_info == \"{}\"",
+        "return !a->token.empty()",
+        "*http_code = 501",
+        "http_code = 501",
+        "normalized_dev_id.empty() || printer_id.empty()",
+    ] {
+        assert_absent(&sources, forbidden);
+    }
+}
 
-    assert!(!transfer.contains(r#"R"({"#));
+#[test]
+fn cpp_shim_contains_no_low_level_session_lifecycle() {
+    let sources = read_all_shim_sources();
+    for forbidden in [
+        "pandar_plugin_create_no_auth_session",
+        "pandar_plugin_no_auth_rotation_claim",
+        "pandar_plugin_no_auth_retry_arm",
+        "pandar_plugin_no_auth_retry_active",
+        "pandar_plugin_no_auth_retry_begin",
+        "pandar_plugin_no_auth_retry_complete",
+        "pandar_plugin_account_stage_revoke",
+        "pandar_plugin_account_revoke_pending",
+        "pandar_plugin_account_revoke_staged",
+        "pandar_plugin_account_logout_action",
+        "pandar_plugin_delete_session",
+        "pandar_plugin_printer_refresh(",
+        "get_printers_with_token_refresh",
+        "last_error",
+    ] {
+        assert_absent(&sources, forbidden);
+    }
+}
+
+#[test]
+fn cpp_shim_contains_no_delivery_or_freshness_decisions() {
+    let connection = read_sources(&["shim_connection.hpp"]);
+    for forbidden in [
+        "pandar_plugin_studio_claim_delivery(",
+        "pandar_plugin_studio_complete_delivery(",
+        "pandar_plugin_connection_claim_delivery(",
+    ] {
+        assert_absent(&connection, forbidden);
+    }
+
+    let request_snapshot = read_sources(&["shim_request_snapshot.hpp"]);
+    for forbidden in [
+        "agent->hub_url != snapshot.hub_url",
+        "agent->token != snapshot.token",
+        "pandar_plugin_studio_account_request_admitted",
+        "pandar_plugin_studio_account_request_current",
+    ] {
+        assert_absent(&request_snapshot, forbidden);
+    }
+
+    let account = read_sources(&["shim_account_transaction.hpp"]);
+    assert_absent(&account, "had_login");
+}
+
+fn assert_absent(source: &str, forbidden: &str) {
     assert!(
-        transfer.contains(r#"stable_error_body("unsupported_file_transfer")"#)
-            && policy.contains("pandar_plugin_studio_file_transfer_unavailable")
+        !source.contains(forbidden),
+        "C++ shim contains forbidden policy marker {forbidden}"
     );
-    assert!(!firmware.contains("normalized_dev_id.empty() || printer_id.empty()"));
-    let dispatch = include_str!("../src/dispatch.rs");
-    let dispatch_message = include_str!("../src/dispatch/message.rs");
-    let joined = [dispatch, dispatch_message].join("\n");
-    assert!(
-        joined.contains("studio_request_admitted(")
-            && joined.contains("firmware_session.send(")
-            && firmware_request.contains("snapshot.firmware_generation")
-            && firmware_ffi
-                .contains("studio_dev_id.trim().is_empty() || printer_id.trim().is_empty()")
-            && firmware_ffi.contains("invalid_input(\"invalid_firmware_request\")")
-    );
+}
+
+fn read_sources(names: &[&str]) -> String {
+    names
+        .iter()
+        .map(|name| std::fs::read_to_string(source_root().join(name)).expect("C++ shim source"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn read_all_shim_sources() -> String {
+    let mut paths = std::fs::read_dir(source_root())
+        .expect("plugin source directory")
+        .map(|entry| entry.expect("plugin source entry").path())
+        .filter(|path| is_shim_source(path))
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths
+        .iter()
+        .map(|path| std::fs::read_to_string(path).expect("C++ shim source"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn is_shim_source(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            name == "shim.cpp" || (name.starts_with("shim_") && name.ends_with(".hpp"))
+        })
+}
+
+fn source_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
 }
