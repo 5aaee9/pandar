@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shim_agent_lifetime.hpp"
 #include "shim_dispatch.hpp"
 #include "shim_personal_preset_types.hpp"
 
@@ -86,7 +87,7 @@ extern "C" void shim_account_invoke_http_error(
 
 extern "C" void shim_account_reset_personal_presets(void* opaque) {
     auto* agent = static_cast<Agent*>(opaque);
-    pandar_plugin_personal_preset_reset(agent->account_identity);
+    pandar_plugin_personal_preset_reset(agent->account_identity());
 }
 
 const PluginAccountSessionBridge kAccountSessionBridge{
@@ -100,9 +101,10 @@ const PluginAccountSessionBridge kAccountSessionBridge{
 
 void drain_account_callbacks(Agent* agent) {
     if (!agent) return;
-    pandar_plugin_account_session_drain(
-        agent->account_session,
-        agent->printer_refresh_session,
+    AgentCallLease lease(agent);
+    if (!lease) return;
+    pandar_plugin_core_account_drain(
+        agent->plugin_core,
         &kDispatchBridge,
         &kAccountSessionBridge,
         agent,
@@ -144,10 +146,8 @@ extern "C" std::int32_t with_current_account(
         PluginAccountMutation mutation{};
         status = transaction(rust_context, &current, &mutation);
         if (status == 0) {
-            status = pandar_plugin_account_session_apply(
-                agent->account_session,
-                agent->printer_refresh_session,
-                agent->firmware_session,
+            status = pandar_plugin_core_account_apply(
+                agent->plugin_core,
                 &kAccountSessionBridge,
                 agent,
                 &current,

@@ -10,7 +10,7 @@ PANDAR_ABI int bambu_network_get_user_tasks(
     BBL::TaskQueryParams query,
     std::string* http_body
 ) {
-    auto* current = as_agent(agent);
+    auto current = as_agent(agent);
     if (!current) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     refresh_local_webserver_config(current);
     const auto snapshot = printer_request_snapshot(current, {});
@@ -23,7 +23,7 @@ PANDAR_ABI int bambu_network_get_user_tasks(
         query.limit,
     };
     auto result = pandar_plugin_studio_get_tasks_with_session(
-        current->printer_refresh_session,
+        current->connection_session(),
         &account,
         snapshot.account_config_epoch,
         snapshot.session_kind,
@@ -45,14 +45,14 @@ PANDAR_ABI int bambu_network_get_task_plate_index(
     int* plate_index
 ) {
     if (plate_index) *plate_index = -1;
-    auto* current = as_agent(agent);
+    auto current = as_agent(agent);
     if (!current) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     refresh_local_webserver_config(current);
     const auto snapshot = printer_request_snapshot(current, {});
     StudioAccountSnapshotContext account_context{current, {}};
     const auto account = studio_account(snapshot, account_context);
     auto result = pandar_plugin_studio_get_plate_with_session(
-        current->printer_refresh_session,
+        current->connection_session(),
         &account,
         snapshot.account_config_epoch,
         snapshot.session_kind,
@@ -76,14 +76,14 @@ PANDAR_ABI int bambu_network_get_subtask_info(
     std::string* http_body
 ) {
     if (task_json) task_json->clear();
-    auto* current = as_agent(agent);
+    auto current = as_agent(agent);
     if (!current) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     refresh_local_webserver_config(current);
     const auto snapshot = printer_request_snapshot(current, {});
     StudioAccountSnapshotContext account_context{current, {}};
     const auto account = studio_account(snapshot, account_context);
     auto result = pandar_plugin_studio_get_subtask_with_session(
-        current->printer_refresh_session,
+        current->connection_session(),
         &account,
         snapshot.account_config_epoch,
         snapshot.session_kind,
@@ -109,7 +109,7 @@ PANDAR_ABI int bambu_network_get_slice_info(
     std::string* slice_json
 ) {
     if (slice_json) slice_json->clear();
-    auto* current = as_agent(agent);
+    auto current = as_agent(agent);
     if (!current) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     auto result = pandar_plugin_studio_slice_unavailable();
     body_from_result(result);

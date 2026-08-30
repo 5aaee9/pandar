@@ -137,17 +137,15 @@ enum class AccountPolicyAction : std::int32_t {
 };
 
 extern "C" {
-void* pandar_plugin_account_session_create();
-void pandar_plugin_account_session_destroy(void*);
-void pandar_plugin_account_session_apply_lifecycle_result(
+void pandar_plugin_core_account_apply_lifecycle_result(
     void*, const PluginLifecycleResult*
 );
-int32_t pandar_plugin_account_session_apply(
-    void*, void*, void*, const PluginAccountSessionBridge*, void*,
+int32_t pandar_plugin_core_account_apply(
+    void*, const PluginAccountSessionBridge*, void*,
     const PluginAccountView*, const PluginAccountMutation*
 );
-void pandar_plugin_account_session_drain(
-    void*, void*, const PluginDispatchBridge*, const PluginAccountSessionBridge*,
+void pandar_plugin_core_account_drain(
+    void*, const PluginDispatchBridge*, const PluginAccountSessionBridge*,
     void*, void*, PluginWithCurrentAccount
 );
 int32_t pandar_plugin_account_runtime_config(void*, PluginRuntimeConfigVisitor);
@@ -160,7 +158,6 @@ PluginHttpResult pandar_plugin_account_login_envelope(
     const uint8_t*, std::size_t
 );
 PluginHttpResult pandar_plugin_account_local_base_url(const uint8_t*, std::size_t);
-uint64_t pandar_plugin_account_identity_create();
 bool pandar_plugin_account_observe_login(
     uint64_t, uint64_t, const uint8_t*, std::size_t
 );

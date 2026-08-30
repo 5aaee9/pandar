@@ -17,7 +17,7 @@ PANDAR_ABI std::string bambu_network_get_version() {
 }
 
 PANDAR_ABI std::string bambu_network_get_user_id(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (a) refresh_local_webserver_config(a);
     if (!a) return {};
     std::lock_guard<std::recursive_mutex> refresh(a->printer_refresh_mutex);
@@ -25,7 +25,7 @@ PANDAR_ABI std::string bambu_network_get_user_id(void* agent) {
 }
 
 PANDAR_ABI std::string bambu_network_get_user_name(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (a) refresh_local_webserver_config(a);
     if (!a) return {};
     std::lock_guard<std::recursive_mutex> refresh(a->printer_refresh_mutex);
@@ -33,7 +33,7 @@ PANDAR_ABI std::string bambu_network_get_user_name(void* agent) {
 }
 
 PANDAR_ABI std::string bambu_network_get_user_avatar(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (a) refresh_local_webserver_config(a);
     if (!a) return {};
     std::lock_guard<std::recursive_mutex> refresh(a->printer_refresh_mutex);
@@ -41,7 +41,7 @@ PANDAR_ABI std::string bambu_network_get_user_avatar(void* agent) {
 }
 
 PANDAR_ABI std::string bambu_network_get_user_nickanme(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (a) refresh_local_webserver_config(a);
     if (!a) return {};
     std::lock_guard<std::recursive_mutex> refresh(a->printer_refresh_mutex);
@@ -49,9 +49,9 @@ PANDAR_ABI std::string bambu_network_get_user_nickanme(void* agent) {
 }
 
 PANDAR_ABI std::string bambu_network_build_login_cmd(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (a) refresh_local_webserver_config(a);
-    if (a) pandar_plugin_account_login_observation_clear(a->account_identity);
+    if (a) pandar_plugin_account_login_observation_clear(a->account_identity());
     return account_login_envelope(a, false);
 }
 
@@ -60,14 +60,14 @@ PANDAR_ABI std::string bambu_network_build_logout_cmd(void* agent) {
 }
 
 PANDAR_ABI std::string bambu_network_build_login_info(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (a) refresh_local_webserver_config(a);
-    if (a) pandar_plugin_account_login_observation_clear(a->account_identity);
+    if (a) pandar_plugin_account_login_observation_clear(a->account_identity());
     return account_login_envelope(a, false);
 }
 
 PANDAR_ABI std::string bambu_network_get_bambulab_host(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return {};
     auto result = rust_start_local_webserver(a);
     std::string body = body_from_result(result);
@@ -87,17 +87,17 @@ PANDAR_ABI std::string bambu_network_get_bambulab_host(void* agent) {
 }
 
 PANDAR_ABI std::string bambu_network_get_user_selected_machine(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return {};
     auto selected = body_from_result(
-        pandar_plugin_studio_selected(a->printer_refresh_session)
+        pandar_plugin_studio_selected(a->connection_session())
     );
     trace_plugin_event(a, std::string("get_user_selected_machine selected=") + selected);
     return selected;
 }
 
 PANDAR_ABI std::string bambu_network_get_studio_info_url(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     auto result = pandar_plugin_account_studio_info_url(
         a != nullptr,
         a && a->frontend_configured,
@@ -123,15 +123,8 @@ PANDAR_ABI bool bambu_network_check_debug_consistent(bool studio_debug) {
 
 PANDAR_ABI void* bambu_network_create_agent(std::string log_dir) {
     auto* agent = new Agent(std::move(log_dir));
-    agent->account_identity = pandar_plugin_account_identity_create();
-    agent->account_session = pandar_plugin_account_session_create();
-    if (!agent->account_session) {
-        delete agent;
-        return nullptr;
-    }
     RuntimeConfigCopy config;
     if (pandar_plugin_account_runtime_config(&config, copy_runtime_config) != 0) {
-        pandar_plugin_account_session_destroy(agent->account_session);
         delete agent;
         return nullptr;
     }
@@ -139,52 +132,45 @@ PANDAR_ABI void* bambu_network_create_agent(std::string log_dir) {
     agent->frontend_url = std::move(config.frontend_url);
     agent->hub_configured = config.hub_configured;
     agent->frontend_configured = config.frontend_configured;
-    agent->printer_refresh_session = pandar_plugin_printer_refresh_session_create(
+    agent->plugin_core = pandar_plugin_core_create(
         reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
         agent->hub_url.size(),
         reinterpret_cast<const uint8_t*>(agent->token.data()),
         agent->token.size()
     );
-    agent->firmware_session = pandar_plugin_firmware_session_create(
-        reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
-        agent->hub_url.size(),
-        reinterpret_cast<const uint8_t*>(agent->token.data()),
-        agent->token.size()
-    );
-    if (agent->printer_refresh_session) {
-        pandar_plugin_connection_set_dispatch_waker(
-            agent->printer_refresh_session, agent, shim_wake_status_dispatcher
-        );
+    if (!agent->plugin_core) {
+        delete agent;
+        return nullptr;
     }
-    if (agent->firmware_session) start_firmware_dispatcher(agent);
+    pandar_plugin_connection_set_dispatch_waker(
+        agent->connection_session(), agent, shim_wake_status_dispatcher
+    );
+    start_firmware_dispatcher(agent);
     start_status_heartbeat(agent);
     start_model_task_worker(agent);
     return agent;
 }
 
-PANDAR_ABI int bambu_network_destroy_agent(void* agent) {
-    auto* a = as_agent(agent);
+void reclaim_agent(Agent* a) {
     stop_model_task_worker(a);
     stop_status_heartbeat(a);
     stop_firmware_dispatcher(a);
+    a->lifetime.wait_for_leases();
     if (a) {
-        pandar_plugin_personal_preset_reset(a->account_identity);
-        pandar_plugin_account_login_observation_clear(a->account_identity);
         pandar_plugin_studio_set_listener(
-            a->printer_refresh_session, kStudioCloudListener, false
+            a->connection_session(), kStudioCloudListener, false
         );
         pandar_plugin_studio_set_listener(
-            a->printer_refresh_session, kStudioLocalListener, false
+            a->connection_session(), kStudioLocalListener, false
         );
         pandar_plugin_studio_set_listener(
-            a->printer_refresh_session, kStudioPrinterConnectedListener, false
+            a->connection_session(), kStudioPrinterConnectedListener, false
         );
         pandar_plugin_studio_set_listener(
-            a->printer_refresh_session, kStudioLocalConnectedListener, false
+            a->connection_session(), kStudioLocalConnectedListener, false
         );
-        pandar_plugin_firmware_session_destroy(a->firmware_session);
-        pandar_plugin_printer_refresh_session_destroy(a->printer_refresh_session);
-        pandar_plugin_account_session_destroy(a->account_session);
+        pandar_plugin_core_destroy(a->plugin_core);
+        a->plugin_core = nullptr;
         std::lock_guard<std::mutex> lock(a->status_mutex);
         a->on_message = {};
         a->on_local_message = {};
@@ -201,6 +187,21 @@ PANDAR_ABI int bambu_network_destroy_agent(void* agent) {
         a->on_server_error = {};
     }
     delete a;
+}
+
+void pandar::network_plugin::finalize_agent_destroy(Agent* a) {
+    if (!a || !a->lifetime.begin_finalizer()) return;
+    reclaim_agent(a);
+}
+
+PANDAR_ABI int bambu_network_destroy_agent(void* agent) {
+    auto* a = reinterpret_cast<Agent*>(agent);
+    if (!a) return BBL::BAMBU_NETWORK_SUCCESS;
+    if (!AgentCallLease::held_by_current_thread(a)) {
+        if (a->lifetime.request_destroy_and_begin_finalizer()) reclaim_agent(a);
+        return BBL::BAMBU_NETWORK_SUCCESS;
+    }
+    a->lifetime.request_destroy();
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
@@ -209,7 +210,7 @@ PANDAR_ABI int bambu_network_init_log(void* agent) {
 }
 
 PANDAR_ABI int bambu_network_set_config_dir(void* agent, std::string config_dir) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     {
         std::lock_guard<std::recursive_mutex> account(a->account_mutex);
@@ -218,7 +219,7 @@ PANDAR_ABI int bambu_network_set_config_dir(void* agent, std::string config_dir)
             a->config_dir = std::move(config_dir);
         }
         a->account_config_epoch.fetch_add(1, std::memory_order_release);
-        pandar_plugin_personal_preset_reset(a->account_identity);
+        pandar_plugin_personal_preset_reset(a->account_identity());
     }
     auto lifecycle = pandar_plugin_account_load_persisted(a, with_current_account);
     body_from_result(lifecycle.http);
@@ -226,7 +227,7 @@ PANDAR_ABI int bambu_network_set_config_dir(void* agent, std::string config_dir)
 }
 
 PANDAR_ABI int bambu_network_set_cert_file(void* agent, std::string folder, std::string filename) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     (void)folder;
     (void)filename;
@@ -234,15 +235,17 @@ PANDAR_ABI int bambu_network_set_cert_file(void* agent, std::string folder, std:
 }
 
 PANDAR_ABI int bambu_network_set_country_code(void* agent, std::string country_code) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     a->country_code = std::move(country_code);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
 PANDAR_ABI int bambu_network_start(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    AgentCallLease lease(a);
+    if (!lease) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     auto result = rust_start_local_webserver(a);
     body_from_result(result);
     if (static_cast<AccountPolicyAction>(pandar_plugin_account_response_action(result.status))
@@ -255,7 +258,7 @@ PANDAR_ABI int bambu_network_start(void* agent) {
 
 #define PANDAR_CALLBACK_SETTER(name, type, field) \
     PANDAR_ABI int name(void* agent, BBL::type callback) { \
-        auto* a = as_agent(agent); \
+        auto a = as_agent(agent); \
         if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE; \
         std::lock_guard<std::mutex> lock(a->status_mutex); \
         a->field = std::move(callback); \
@@ -274,7 +277,7 @@ PANDAR_CALLBACK_SETTER(bambu_network_set_server_callback, OnServerErrFn, on_serv
 #undef PANDAR_CALLBACK_SETTER
 
 PANDAR_ABI int bambu_network_set_on_server_connected_fn(void* agent, BBL::OnServerConnectedFn callback) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     {
         std::lock_guard<std::mutex> lock(a->status_mutex);
@@ -285,11 +288,11 @@ PANDAR_ABI int bambu_network_set_on_server_connected_fn(void* agent, BBL::OnServ
 }
 
 PANDAR_ABI int bambu_network_set_on_message_fn(void* agent, BBL::OnMessageFn callback) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     std::lock_guard<std::mutex> lock(a->status_mutex);
     if (pandar_plugin_studio_set_listener(
-            a->printer_refresh_session,
+            a->connection_session(),
             kStudioCloudListener,
             static_cast<bool>(callback)
         ) != 0) return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
@@ -298,11 +301,11 @@ PANDAR_ABI int bambu_network_set_on_message_fn(void* agent, BBL::OnMessageFn cal
 }
 
 PANDAR_ABI int bambu_network_set_on_local_message_fn(void* agent, BBL::OnMessageFn callback) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     std::lock_guard<std::mutex> lock(a->status_mutex);
     if (pandar_plugin_studio_set_listener(
-            a->printer_refresh_session,
+            a->connection_session(),
             kStudioLocalListener,
             static_cast<bool>(callback)
         ) != 0) return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
@@ -311,11 +314,11 @@ PANDAR_ABI int bambu_network_set_on_local_message_fn(void* agent, BBL::OnMessage
 }
 
 PANDAR_ABI int bambu_network_set_on_printer_connected_fn(void* agent, BBL::OnPrinterConnectedFn callback) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     std::lock_guard<std::mutex> lock(a->status_mutex);
     if (pandar_plugin_studio_set_listener(
-            a->printer_refresh_session,
+            a->connection_session(),
             kStudioPrinterConnectedListener,
             static_cast<bool>(callback)
         ) != 0) return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
@@ -324,11 +327,11 @@ PANDAR_ABI int bambu_network_set_on_printer_connected_fn(void* agent, BBL::OnPri
 }
 
 PANDAR_ABI int bambu_network_set_on_local_connect_fn(void* agent, BBL::OnLocalConnectedFn callback) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     std::lock_guard<std::mutex> lock(a->status_mutex);
     if (pandar_plugin_studio_set_listener(
-            a->printer_refresh_session,
+            a->connection_session(),
             kStudioLocalConnectedListener,
             static_cast<bool>(callback)
         ) != 0) return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
@@ -337,31 +340,31 @@ PANDAR_ABI int bambu_network_set_on_local_connect_fn(void* agent, BBL::OnLocalCo
 }
 
 PANDAR_ABI int bambu_network_connect_server(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     refresh_local_webserver_config(a);
     {
         std::lock_guard<std::recursive_mutex> refresh(a->printer_refresh_mutex);
-        pandar_plugin_connection_refresh(a->printer_refresh_session);
+        pandar_plugin_connection_refresh(a->connection_session());
     }
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
 PANDAR_ABI bool bambu_network_is_server_connected(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return false;
     std::lock_guard<std::recursive_mutex> refresh(a->printer_refresh_mutex);
-    return pandar_plugin_connection_is_connected(a->printer_refresh_session) != 0;
+    return pandar_plugin_connection_is_connected(a->connection_session()) != 0;
 }
 
 PANDAR_ABI int bambu_network_refresh_connection(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     return bambu_network_connect_server(agent);
 }
 
 PANDAR_ABI int bambu_network_start_subscribe(void* agent, std::string) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     return studio_disposition(a, StudioDisposition::StartSubscribe);
 }
@@ -371,11 +374,11 @@ PANDAR_ABI int bambu_network_stop_subscribe(void* agent, std::string) {
 }
 
 PANDAR_ABI int bambu_network_add_subscribe(void* agent, std::vector<std::string> dev_ids) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     for (const auto& dev_id : dev_ids) {
         if (dev_id.empty() || pandar_plugin_studio_add_subscription(
-                a->printer_refresh_session,
+                a->connection_session(),
                 reinterpret_cast<const uint8_t*>(dev_id.data()), dev_id.size()
             ) != 0) return BBL::BAMBU_NETWORK_ERR_CONNECT_FAILED;
     }
@@ -383,11 +386,11 @@ PANDAR_ABI int bambu_network_add_subscribe(void* agent, std::vector<std::string>
 }
 
 PANDAR_ABI int bambu_network_del_subscribe(void* agent, std::vector<std::string> dev_ids) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     for (const auto& dev_id : dev_ids) {
         if (dev_id.empty() || pandar_plugin_studio_del_subscription(
-                a->printer_refresh_session,
+                a->connection_session(),
                 reinterpret_cast<const uint8_t*>(dev_id.data()), dev_id.size()
             ) != 0) return BBL::BAMBU_NETWORK_ERR_CONNECT_FAILED;
     }

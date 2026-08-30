@@ -24,7 +24,7 @@ PrinterRequestSnapshot printer_request_snapshot(
         target.printer_id.assign(reinterpret_cast<const char*>(printer), printer_len);
     };
     const auto state = pandar_plugin_studio_request_snapshot(
-        agent->printer_refresh_session,
+        agent->connection_session(),
         reinterpret_cast<const uint8_t*>(normalized_dev_id.data()), normalized_dev_id.size(),
         &snapshot, copy
     );
@@ -35,7 +35,7 @@ PrinterRequestSnapshot printer_request_snapshot(
     snapshot.session_kind = agent->account_session_kind;
     snapshot.cache_generation = state.cache_generation;
     snapshot.firmware_generation =
-        pandar_plugin_firmware_session_generation(agent->firmware_session);
+        pandar_plugin_firmware_session_generation(agent->firmware_session());
     return snapshot;
 }
 
@@ -58,12 +58,12 @@ bool printer_request_snapshot_current(
 ) {
     if (!agent) return false;
     if (pandar_plugin_connection_studio_snapshot_current(
-            agent->printer_refresh_session,
+            agent->connection_session(),
             snapshot.account_epoch,
             snapshot.cache_generation
         ) == 0) return false;
     return pandar_plugin_firmware_session_generation_current(
-        agent->firmware_session, snapshot.firmware_generation
+        agent->firmware_session(), snapshot.firmware_generation
     ) != 0;
 }
 

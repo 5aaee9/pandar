@@ -39,8 +39,8 @@ extern "C" PluginPrinterRefreshLifecycleResult pandar_plugin_printer_refresh_wit
     void*, std::int32_t, void*, PluginWithCurrentAccount, PluginPrinterRefreshAdapter
 );
 
-Agent* as_agent(void* raw) {
-    return reinterpret_cast<Agent*>(raw);
+AgentAccess as_agent(void* raw) {
+    return AgentAccess(raw);
 }
 
 void trace_plugin_event(const Agent* agent, const std::string& message) {
@@ -93,9 +93,9 @@ extern "C" std::int32_t with_printer_refresh_firmware(
     PluginPrinterRefreshFirmwareTransaction transaction
 ) noexcept {
     auto* adapter = static_cast<PrinterRefreshAdapterState*>(context);
-    if (!adapter || !adapter->agent || !adapter->agent->firmware_session || !transaction) return 0;
+    if (!adapter || !adapter->agent || !adapter->agent->firmware_session() || !transaction) return 0;
     if (pandar_plugin_firmware_session_generation_current(
-            adapter->agent->firmware_session,
+            adapter->agent->firmware_session(),
             adapter->observation.generation
         ) == 0) {
         // The account/config transition that bumped the generation also
@@ -104,7 +104,7 @@ extern "C" std::int32_t with_printer_refresh_firmware(
     }
     return transaction(
         projection_context,
-        adapter->agent->firmware_session,
+        adapter->agent->firmware_session(),
         adapter->observation.generation,
         adapter->observation.sequence
     );

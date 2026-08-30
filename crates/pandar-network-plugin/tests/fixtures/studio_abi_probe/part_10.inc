@@ -191,6 +191,79 @@
             fail(agent, destroy_agent, "LAN-only printer was reclassified as a cloud tunnel");
         }
         destroy_agent(lan_agent);
+
+        void* reentrant_agent = create_agent("");
+        if (!reentrant_agent) {
+            fail(agent, destroy_agent, "reentrant destroy agent creation failed");
+        }
+        const auto reentrant_config_dir =
+            (std::filesystem::path(config_dir) / "reentrant-destroy").string();
+        std::atomic<int> reentrant_destroy_callbacks{0};
+        const std::string reentrant_profile =
+            R"({"token":"probe-token","user_id":"reentrant-user","user_name":"Reentrant User","tenant_id":"","tenant_name":""})";
+        if (set_config_dir(reentrant_agent, reentrant_config_dir) != 0 ||
+            set_user_login(reentrant_agent, [&, reentrant_agent](int, bool login) {
+                if (login) {
+                    ++reentrant_destroy_callbacks;
+                    destroy_agent(reentrant_agent);
+                }
+            }) != 0 ||
+            change_user(reentrant_agent, reentrant_profile) != 0 ||
+            reentrant_destroy_callbacks.load() != 1) {
+            fail(agent, destroy_agent, "account callback reentrant destroy was not deferred safely");
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        void* racing_agent = create_agent("");
+        if (!racing_agent) {
+            fail(agent, destroy_agent, "external destroy race agent creation failed");
+        }
+        const auto racing_config_dir =
+            (std::filesystem::path(config_dir) / "external-destroy-race").string();
+        std::atomic<bool> callback_entered{false};
+        std::atomic<bool> release_callback{false};
+        std::atomic<bool> destroy_entered{false};
+        std::atomic<bool> destroy_returned{false};
+        int change_rc = -1;
+        if (set_config_dir(racing_agent, racing_config_dir) != 0 ||
+            set_user_login(racing_agent, [&](int, bool login) {
+                if (!login) return;
+                callback_entered.store(true, std::memory_order_release);
+                while (!release_callback.load(std::memory_order_acquire)) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+            }) != 0) {
+            destroy_agent(racing_agent);
+            fail(agent, destroy_agent, "external destroy race setup failed");
+        }
+        std::thread account_change([&] {
+            change_rc = change_user(racing_agent, reentrant_profile);
+        });
+        if (!wait_until([&] { return callback_entered.load(std::memory_order_acquire); })) {
+            release_callback.store(true, std::memory_order_release);
+            account_change.join();
+            destroy_agent(racing_agent);
+            fail(agent, destroy_agent, "external destroy race callback did not enter");
+        }
+        std::thread external_destroy([&] {
+            destroy_entered.store(true, std::memory_order_release);
+            destroy_agent(racing_agent);
+            destroy_returned.store(true, std::memory_order_release);
+        });
+        if (!wait_until([&] { return destroy_entered.load(std::memory_order_acquire); })) {
+            release_callback.store(true, std::memory_order_release);
+            account_change.join();
+            external_destroy.join();
+            fail(agent, destroy_agent, "external destroy race did not enter destroy thread");
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        const bool returned_early = destroy_returned.load(std::memory_order_acquire);
+        release_callback.store(true, std::memory_order_release);
+        account_change.join();
+        external_destroy.join();
+        if (returned_early || !destroy_returned.load(std::memory_order_acquire) || change_rc != 0) {
+            fail(agent, destroy_agent, "external destroy returned before the last lease released");
+        }
     }
     destroy_agent(agent);
     print_json(out);

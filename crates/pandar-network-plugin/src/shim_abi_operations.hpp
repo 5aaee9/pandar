@@ -10,7 +10,7 @@ PANDAR_ABI void bambu_network_enable_multi_machine(void* agent, bool) {
 }
 
 PANDAR_ABI int bambu_network_send_message(void* agent, std::string dev_id, std::string message, int, int) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     trace_plugin_event(a, "send_message", dev_id);
     if (dev_id.empty()) return BBL::BAMBU_NETWORK_ERR_CONNECT_FAILED;
@@ -18,22 +18,22 @@ PANDAR_ABI int bambu_network_send_message(void* agent, std::string dev_id, std::
 }
 
 PANDAR_ABI int bambu_network_connect_printer(void* agent, std::string dev_id, std::string, std::string, std::string, bool) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     if (dev_id.empty()) return BBL::BAMBU_NETWORK_ERR_CONNECT_FAILED;
     return dispatch_connect_printer_local(a, studio_dev_id(dev_id));
 }
 
 PANDAR_ABI int bambu_network_disconnect_printer(void* agent) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
-    return pandar_plugin_studio_disconnect_local(a->printer_refresh_session) == 0
+    return pandar_plugin_studio_disconnect_local(a->connection_session()) == 0
         ? BBL::BAMBU_NETWORK_SUCCESS
         : BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
 }
 
 PANDAR_ABI int bambu_network_send_message_to_printer(void* agent, std::string dev_id, std::string message, int, int) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     trace_plugin_event(a, "send_message_to_printer", dev_id);
     const auto local_generation = current_local_printer_generation(a, studio_dev_id(dev_id));
@@ -69,11 +69,11 @@ PANDAR_ABI int bambu_network_get_user_info(void* agent, int* identifier) {
 }
 
 PANDAR_ABI int bambu_network_set_user_selected_machine(void* agent, std::string dev_id) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     trace_plugin_event(a, std::string("set_user_selected_machine dev_id=") + dev_id);
     return pandar_plugin_studio_set_selected(
-        a->printer_refresh_session,
+        a->connection_session(),
         reinterpret_cast<const uint8_t*>(dev_id.data()), dev_id.size()
     ) == 0 ? BBL::BAMBU_NETWORK_SUCCESS : BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
 }
@@ -121,14 +121,14 @@ PANDAR_ABI int bambu_network_report_consent(void* agent, std::string) {
 }
 
 PANDAR_ABI int bambu_network_start_print(void* agent, BBL::PrintParams params, BBL::OnUpdateStatusFn update_fn, BBL::WasCancelledFn cancel_fn, BBL::OnWaitFn wait_fn) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     refresh_local_webserver_config(a);
     return start_studio_print(a, params, update_fn, cancel_fn, wait_fn);
 }
 
 PANDAR_ABI int bambu_network_start_local_print_with_record(void* agent, BBL::PrintParams params, BBL::OnUpdateStatusFn update_fn, BBL::WasCancelledFn cancel_fn, BBL::OnWaitFn wait_fn) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     std::string body;
     const auto status = studio_disposition(a, StudioDisposition::LocalPrintWithRecord, &body);
@@ -145,7 +145,7 @@ int unsupported_direct_print(
     BBL::OnUpdateStatusFn update_fn,
     StudioDisposition operation
 ) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     std::string body;
     const auto status = studio_disposition(a, operation, &body);
@@ -162,7 +162,7 @@ PANDAR_ABI int bambu_network_start_send_gcode_to_sdcard(void* agent, BBL::PrintP
 }
 
 PANDAR_ABI int bambu_network_start_local_print(void* agent, BBL::PrintParams params, BBL::OnUpdateStatusFn update_fn, BBL::WasCancelledFn cancel_fn) {
-    if (auto* a = as_agent(agent)) trace_plugin_event(a, "start_local_print", params.dev_id);
+    if (auto a = as_agent(agent)) trace_plugin_event(a, "start_local_print", params.dev_id);
     (void)cancel_fn;
     return unsupported_direct_print(
         agent, std::move(params), std::move(update_fn), StudioDisposition::LocalPrint
@@ -178,7 +178,7 @@ PANDAR_ABI int bambu_network_start_sdcard_print(void* agent, BBL::PrintParams pa
 
 PANDAR_ABI int bambu_network_get_user_presets(void* agent, std::map<std::string, std::map<std::string, std::string>>* user_presets) {
     if (user_presets) user_presets->clear();
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     auto account_copy = personal_preset_account(a);
     auto account = account_copy.view();
@@ -188,7 +188,7 @@ PANDAR_ABI int bambu_network_get_user_presets(void* agent, std::map<std::string,
 }
 
 PANDAR_ABI int bambu_network_put_setting(void* agent, std::string id, std::string name, std::map<std::string, std::string>* values, unsigned int* http_code) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) {
         if (http_code) *http_code = 0;
         return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
@@ -207,8 +207,10 @@ PANDAR_ABI int bambu_network_put_setting(void* agent, std::string id, std::strin
 }
 
 PANDAR_ABI int bambu_network_get_setting_list(void* agent, std::string version, BBL::ProgressFn progress, BBL::WasCancelledFn cancel) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    AgentCallLease lease(a);
+    if (!lease) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     auto account_copy = personal_preset_account(a);
     auto account = account_copy.view();
     PresetListAdapter adapter{a, account.account_epoch, account.config_epoch, {}, std::move(progress), std::move(cancel)};
@@ -218,8 +220,10 @@ PANDAR_ABI int bambu_network_get_setting_list(void* agent, std::string version, 
 }
 
 PANDAR_ABI int bambu_network_get_setting_list2(void* agent, std::string version, BBL::CheckFn check, BBL::ProgressFn progress, BBL::WasCancelledFn cancel) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    AgentCallLease lease(a);
+    if (!lease) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     auto account_copy = personal_preset_account(a);
     auto account = account_copy.view();
     PresetListAdapter adapter{a, account.account_epoch, account.config_epoch, std::move(check), std::move(progress), std::move(cancel)};
@@ -229,7 +233,7 @@ PANDAR_ABI int bambu_network_get_setting_list2(void* agent, std::string version,
 }
 
 PANDAR_ABI int bambu_network_delete_setting(void* agent, std::string id) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     auto response = preset_mutate(a, 3, id, {}, nullptr);
     take_preset_id(response);

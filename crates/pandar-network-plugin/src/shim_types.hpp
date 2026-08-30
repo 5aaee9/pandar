@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "shim_ams_types.hpp"
+#include "shim_lifetime_state.hpp"
 #include "shim_model_task_types.hpp"
 
 #if defined(_WIN32)
@@ -199,6 +200,21 @@ struct PluginFirmwareCallbackResult {
     int32_t tunnel;
 };
 
+struct PluginCoreFirmwareObservation {
+    uint64_t generation;
+    uint64_t sequence;
+};
+
+void* pandar_plugin_core_create(
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t
+);
+void pandar_plugin_core_destroy(void*);
+void* pandar_plugin_core_connection_session(void*);
+void* pandar_plugin_core_firmware_session(void*);
+uint64_t pandar_plugin_core_account_identity(void*);
+PluginCoreFirmwareObservation pandar_plugin_core_reserve_firmware_observation(void*);
+
 const char* pandar_plugin_network_agent_version();
 #if defined(PANDAR_STUDIO_AMS_SYNC)
 PluginHttpResult pandar_plugin_sync_ams_filaments(bool);
@@ -210,10 +226,6 @@ PluginHttpResult pandar_plugin_local_connect_json(
 );
 
 PluginHttpResult pandar_plugin_exchange_ticket(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
-void* pandar_plugin_firmware_session_create(
-    const uint8_t*, std::size_t,
-    const uint8_t*, std::size_t
-);
 uint64_t pandar_plugin_firmware_session_sync_account(
     void*,
     const uint8_t*, std::size_t,
@@ -258,7 +270,6 @@ PluginHttpResult pandar_plugin_firmware_next_status_override(
 PluginFirmwareCallbackResult pandar_plugin_firmware_next_callback(void*, uint64_t);
 void pandar_plugin_firmware_cancel_generation(void*, uint64_t);
 void pandar_plugin_firmware_stop(void*);
-void pandar_plugin_firmware_session_destroy(void*);
 PluginHttpResult pandar_plugin_submit_print(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t,
@@ -324,11 +335,17 @@ struct Agent {
     std::string tenant_id;
     std::string hub_url = "http://127.0.0.1:8080";
     std::string frontend_url = "http://localhost:3000";
-    std::uint64_t account_identity = 0;
-    void* account_session = nullptr;
-    void* printer_refresh_session = nullptr;
-    void* firmware_session = nullptr;
-    std::atomic<std::uint64_t> firmware_observation_sequence = 0;
+    void* plugin_core = nullptr;
+    void* connection_session() const { return pandar_plugin_core_connection_session(plugin_core); }
+    void* firmware_session() const { return pandar_plugin_core_firmware_session(plugin_core); }
+    std::uint64_t account_identity() const { return pandar_plugin_core_account_identity(plugin_core); }
+    bool on_worker_thread() const {
+        const auto current = std::this_thread::get_id();
+        return (status_thread.joinable() && status_thread.get_id() == current) ||
+            (firmware_thread.joinable() && firmware_thread.get_id() == current) ||
+            (model_task_thread.joinable() && model_task_thread.get_id() == current);
+    }
+    AgentLifetime lifetime;
     mutable std::mutex trace_mutex;
     mutable std::mutex status_mutex;
     mutable std::mutex printer_refresh_request_mutex;

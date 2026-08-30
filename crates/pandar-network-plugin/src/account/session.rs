@@ -5,7 +5,7 @@ use super::lifecycle::{
     transaction::{AccountView, PluginAccountBytes, PluginAccountMutation},
 };
 
-mod callbacks;
+pub(crate) mod callbacks;
 mod mutation;
 #[cfg(test)]
 mod tests;
@@ -69,7 +69,7 @@ struct ExpectedAccount {
 }
 
 impl AccountLifecycleSession {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             callbacks: Mutex::new(CallbackQueue::default()),
         }

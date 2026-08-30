@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shim_agent_lifetime.hpp"
 #include "shim_print_types.hpp"
 #include "shim_request_snapshot.hpp"
 
@@ -132,6 +133,8 @@ inline int start_studio_print(
     const BBL::WasCancelledFn& cancelled,
     const BBL::OnWaitFn& wait
 ) {
+    AgentCallLease lease(agent);
+    if (!lease) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     const auto snapshot = printer_request_snapshot(agent, params.dev_id);
     const auto print_params = studio_print_params(snapshot, params);
     StudioPrintCallbackContext context{

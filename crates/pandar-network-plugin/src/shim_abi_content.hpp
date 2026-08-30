@@ -6,13 +6,15 @@ using namespace pandar::network_plugin;
 
 
 PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http_code, std::string* http_body) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    AgentCallLease lease(a);
+    if (!lease) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     refresh_local_webserver_config(a);
     std::unique_lock<std::mutex> request(a->printer_refresh_request_mutex);
     PrinterRefreshAdapterState adapter_state{a, {}, {}};
     auto lifecycle = pandar_plugin_printer_refresh_with_session(
-        a->printer_refresh_session,
+        a->connection_session(),
         kPrinterRefreshStudioPrintInfo,
         a,
         with_current_account,
@@ -33,7 +35,7 @@ PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http
 }
 
 PANDAR_ABI int bambu_network_get_printer_firmware(void* agent, std::string dev_id, unsigned* http_code, std::string* http_body) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     refresh_local_webserver_config(a);
     const auto normalized_dev_id = studio_dev_id(dev_id);
@@ -51,7 +53,7 @@ PANDAR_ABI int bambu_network_get_printer_firmware(void* agent, std::string dev_i
     body_from_result(admission);
     auto upstream = firmware_catalog_from_snapshot(
         pandar_plugin_firmware_catalog,
-        a->firmware_session,
+        a->firmware_session(),
         normalized_dev_id,
         snapshot
     );
@@ -71,9 +73,9 @@ PANDAR_ABI int bambu_network_get_printer_firmware(void* agent, std::string dev_i
 }
 
 PANDAR_ABI int bambu_network_get_camera_url(void* agent, std::string dev_id, std::function<void(std::string)> callback) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     auto result = pandar_plugin_camera_url(
-        a ? a->printer_refresh_session : nullptr,
+        a ? a->connection_session() : nullptr,
         reinterpret_cast<const uint8_t*>(dev_id.data()), dev_id.size()
     );
     auto url = body_from_result(result);
@@ -82,9 +84,9 @@ PANDAR_ABI int bambu_network_get_camera_url(void* agent, std::string dev_id, std
 }
 
 PANDAR_ABI int bambu_network_get_camera_url_for_golive(void* agent, std::string dev_id, std::string, std::function<void(std::string)> callback) {
-    auto* a = as_agent(agent);
+    auto a = as_agent(agent);
     auto result = pandar_plugin_camera_url(
-        a ? a->printer_refresh_session : nullptr,
+        a ? a->connection_session() : nullptr,
         reinterpret_cast<const uint8_t*>(dev_id.data()), dev_id.size()
     );
     auto url = body_from_result(result);
@@ -117,7 +119,7 @@ PANDAR_ABI int bambu_network_get_subtask(
     Slic3r::BBLModelTask* task,
     std::function<void(Slic3r::BBLModelTask*)> callback
 ) {
-    auto* current = as_agent(agent);
+    auto current = as_agent(agent);
     if (!current) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     return enqueue_model_task(current, task, std::move(callback))
         ? BBL::BAMBU_NETWORK_SUCCESS

@@ -2,7 +2,7 @@ pub(crate) mod lifecycle;
 mod persistence;
 mod revocation;
 mod runtime;
-mod session;
+pub(crate) mod session;
 mod types;
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shim_agent_lifetime.hpp"
 #include "shim_connection.hpp"
 
 void refresh_local_webserver_config(void*);
@@ -69,7 +70,7 @@ void pandar_plugin_dispatch_refresh_drain(
 int32_t shim_dispatch_firmware_generation_current(void* context, uint64_t expected) {
     auto* agent = static_cast<Agent*>(context);
     return pandar_plugin_firmware_session_generation_current(
-        agent->firmware_session, expected
+        agent->firmware_session(), expected
     );
 }
 
@@ -124,13 +125,15 @@ int32_t shim_dispatch_logged_out(void* context) {
 
 int32_t shim_dispatch_sync_firmware(void* context, void*) {
     auto* agent = static_cast<Agent*>(context);
-    if (!agent->firmware_session) return 0;
+    if (!agent->firmware_session()) return 0;
     std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
+    const auto observation =
+        pandar_plugin_core_reserve_firmware_observation(agent->plugin_core);
     pandar_plugin_connection_sync_firmware(
-        agent->printer_refresh_session,
-        agent->firmware_session,
-        pandar_plugin_firmware_session_generation(agent->firmware_session),
-        agent->firmware_observation_sequence.fetch_add(1, std::memory_order_relaxed) + 1
+        agent->connection_session(),
+        agent->firmware_session(),
+        observation.generation,
+        observation.sequence
     );
     return 0;
 }
@@ -178,7 +181,7 @@ const PluginDispatchBridge kDispatchBridge = {
 };
 
 std::uint64_t current_firmware_generation(Agent* agent) {
-    return pandar_plugin_firmware_session_generation(agent->firmware_session);
+    return pandar_plugin_firmware_session_generation(agent->firmware_session());
 }
 
 int dispatch_studio_message(
@@ -188,9 +191,11 @@ int dispatch_studio_message(
     MessageTunnel tunnel,
     std::uint64_t local_generation
 ) {
+    AgentCallLease lease(agent);
+    if (!lease) return -1;
     PluginDispatchMessageRequest request{
-        agent->printer_refresh_session,
-        agent->firmware_session,
+        agent->connection_session(),
+        agent->firmware_session(),
         current_firmware_generation(agent),
         tunnel == MessageTunnel::Cloud ? 0 : 1,
         local_generation,
@@ -201,29 +206,35 @@ int dispatch_studio_message(
 }
 
 int dispatch_connect_printer_local(Agent* agent, const std::string& dev_id) {
+    AgentCallLease lease(agent);
+    if (!lease) return -1;
     return pandar_plugin_dispatch_connect_local(
         &kDispatchBridge,
         agent,
-        agent->printer_refresh_session,
+        agent->connection_session(),
         reinterpret_cast<const uint8_t*>(dev_id.data()), dev_id.size()
     );
 }
 
 int dispatch_firmware_callback(Agent* agent) {
+    AgentCallLease lease(agent);
+    if (!lease) return 1;
     return pandar_plugin_dispatch_firmware_callback(
         &kDispatchBridge,
         agent,
-        agent->printer_refresh_session,
-        agent->firmware_session
+        agent->connection_session(),
+        agent->firmware_session()
     );
 }
 
 PluginPendingOutcome dispatch_pending(Agent* agent, bool no_auth_retry_due) {
+    AgentCallLease lease(agent);
+    if (!lease) return {0, 1};
     return pandar_plugin_dispatch_pending(
         &kDispatchBridge,
         agent,
-        agent->printer_refresh_session,
-        agent->firmware_session,
+        agent->connection_session(),
+        agent->firmware_session(),
         no_auth_retry_due ? 1 : 0
     );
 }
@@ -242,6 +253,8 @@ void dispatch_refresh_deliveries(
     const std::vector<IssuedOfflineDelivery>& offline
 ) {
     if (!agent) return;
+    AgentCallLease lease(agent);
+    if (!lease) return;
     std::vector<std::uint64_t> tickets;
     tickets.reserve(offline.size());
     for (const auto& issued : offline) {
@@ -250,7 +263,7 @@ void dispatch_refresh_deliveries(
     pandar_plugin_dispatch_refresh_drain(
         &kDispatchBridge,
         agent,
-        agent->printer_refresh_session,
+        agent->connection_session(),
         transition,
         tickets.data(),
         tickets.size()
@@ -260,7 +273,7 @@ void dispatch_refresh_deliveries(
 std::uint64_t current_local_printer_generation(const Agent* agent, const std::string& dev_id) {
     if (!agent) return 0;
     return pandar_plugin_studio_local_generation(
-        agent->printer_refresh_session,
+        agent->connection_session(),
         reinterpret_cast<const uint8_t*>(dev_id.data()), dev_id.size()
     );
 }

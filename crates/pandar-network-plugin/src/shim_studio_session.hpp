@@ -48,7 +48,7 @@ inline PluginStudioRequestState studio_session_state(const Agent* agent) {
     static const uint8_t empty[1] = {0};
     if (!agent) return {-1, 0, 0, 0, 0};
     return pandar_plugin_studio_request_snapshot(
-        agent->printer_refresh_session, empty, 0, nullptr, nullptr
+        agent->connection_session(), empty, 0, nullptr, nullptr
     );
 }
 

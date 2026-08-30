@@ -13,6 +13,7 @@ mod http;
 pub mod installer;
 mod local_webserver;
 mod personal_presets;
+mod plugin_core;
 mod plugin_session;
 mod runtime;
 mod studio_abi;
@@ -58,6 +59,13 @@ pub use personal_presets::{
     PresetBytes, PresetCallbacks, PresetEntry, PresetResult, pandar_plugin_personal_preset_drain,
     pandar_plugin_personal_preset_list, pandar_plugin_personal_preset_mutate,
     pandar_plugin_personal_preset_reset,
+};
+pub use plugin_core::{
+    PluginCoreFirmwareObservation, pandar_plugin_core_account_apply,
+    pandar_plugin_core_account_apply_lifecycle_result, pandar_plugin_core_account_drain,
+    pandar_plugin_core_account_identity, pandar_plugin_core_connection_session,
+    pandar_plugin_core_create, pandar_plugin_core_destroy, pandar_plugin_core_firmware_session,
+    pandar_plugin_core_reserve_firmware_observation,
 };
 pub use plugin_session::{
     pandar_plugin_create_no_auth_session, pandar_plugin_delete_session,

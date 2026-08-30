@@ -15,10 +15,9 @@ std::string string_from_firmware_allocation(uint8_t* ptr, std::size_t len, std::
 
 FirmwareObservationTicket begin_firmware_observation(Agent* agent) {
     if (!agent) return {};
-    return {
-        pandar_plugin_firmware_session_generation(agent->firmware_session),
-        agent->firmware_observation_sequence.fetch_add(1, std::memory_order_relaxed) + 1,
-    };
+    const auto observation =
+        pandar_plugin_core_reserve_firmware_observation(agent->plugin_core);
+    return {observation.generation, observation.sequence};
 }
 
 void start_firmware_dispatcher(Agent* agent) {
@@ -39,7 +38,7 @@ void start_firmware_dispatcher(Agent* agent) {
 void stop_firmware_dispatcher(Agent* agent) {
     if (!agent) return;
     agent->firmware_thread_stop = true;
-    pandar_plugin_firmware_stop(agent->firmware_session);
+    pandar_plugin_firmware_stop(agent->firmware_session());
     if (agent->firmware_thread.joinable()) agent->firmware_thread.join();
 }
 

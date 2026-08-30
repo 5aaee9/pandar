@@ -357,7 +357,7 @@ impl ConnectionSession {
         }
     }
 
-    pub(super) fn stop_worker(&self) {
+    pub(crate) fn stop_worker(&self) {
         if let Some(worker) = self.worker.lock().expect("stream worker handle").take() {
             worker.cancel_and_join();
         }

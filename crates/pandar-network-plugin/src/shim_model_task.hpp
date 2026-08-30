@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shim_agent_lifetime.hpp"
 #include "shim_tasks.hpp"
 
 namespace pandar::network_plugin {
@@ -66,7 +67,7 @@ inline void run_model_task_request(
     const auto account = studio_account(initial_snapshot, account_context);
     ModelTaskAdapterState adapter;
     auto result = pandar_plugin_studio_get_model_task_with_session(
-        agent->printer_refresh_session,
+        agent->connection_session(),
         &account,
         initial_snapshot.account_config_epoch,
         initial_snapshot.session_kind,
@@ -83,6 +84,8 @@ inline void run_model_task_request(
     if (status != 0 || !adapter.filled) return;
     trace_plugin_event(agent, "model-task response accepted");
 
+    AgentCallLease lease(agent);
+    if (!lease) return;
     std::lock_guard<std::recursive_timed_mutex> callback_gate(agent->callback_mutex);
     std::lock_guard<std::recursive_mutex> account_gate(agent->account_mutex);
     if (model_task_worker_stopping(agent)) return;

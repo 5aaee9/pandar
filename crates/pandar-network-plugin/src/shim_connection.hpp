@@ -49,10 +49,6 @@ using PluginConnectionPrinterVisitor = void (*)(
 );
 using PluginConnectionDeviceVisitor = void (*)(void*, const uint8_t*, std::size_t, uint64_t);
 
-void* pandar_plugin_printer_refresh_session_create(
-    const uint8_t*, std::size_t,
-    const uint8_t*, std::size_t
-);
 int32_t pandar_plugin_printer_refresh_session_update(
     void*,
     const uint8_t*, std::size_t,
@@ -82,8 +78,6 @@ PluginHttpResult pandar_plugin_connection_take_stream_error(void*);
 int32_t pandar_plugin_printer_refresh_session_set_tenant(
     void*, const uint8_t*, std::size_t
 );
-void pandar_plugin_printer_refresh_session_destroy(void*);
-
 } // extern "C"
 
 void shim_wake_status_dispatcher(void* context) {
@@ -155,7 +149,7 @@ int32_t shim_invoke_firmware_status(
 ) {
     auto* agent = static_cast<Agent*>(context);
     auto result = pandar_plugin_firmware_next_status_override(
-        agent->firmware_session, dev_id, dev_id_len
+        agent->firmware_session(), dev_id, dev_id_len
     );
     auto body = body_from_result(result);
     if (result.status != 0) return 0;
@@ -199,7 +193,7 @@ bool connection_printer_eligible_under_refresh(
     const std::string& dev_id
 ) {
     return agent && pandar_plugin_connection_printer_eligible(
-        agent->printer_refresh_session,
+        agent->connection_session(),
         reinterpret_cast<const uint8_t*>(dev_id.data()),
         dev_id.size()
     ) != 0;

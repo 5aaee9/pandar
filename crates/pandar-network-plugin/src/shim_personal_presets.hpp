@@ -31,7 +31,7 @@ inline PersonalPresetAccountCopy personal_preset_account(Agent* agent) {
     return {agent->hub_url, agent->token, agent->user_id, state.account_epoch,
             agent->account_config_epoch.load(std::memory_order_acquire),
             agent->account_session_kind, static_cast<int32_t>(state.account_transition_pending),
-            agent->account_identity};
+            agent->account_identity()};
 }
 
 inline std::vector<PresetEntry> preset_entries(const std::map<std::string, std::string>& values) {

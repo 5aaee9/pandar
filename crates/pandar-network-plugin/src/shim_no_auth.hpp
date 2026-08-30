@@ -11,7 +11,7 @@ bool try_no_auth_session(Agent* agent, bool initial_attempt) {
     {
         std::lock_guard<std::mutex> request(agent->no_auth_refresh_mutex);
         auto lifecycle = pandar_plugin_account_no_auth_bootstrap(
-            agent->printer_refresh_session,
+            agent->connection_session(),
             initial_attempt,
             studio_now_ms(),
             agent,
@@ -19,8 +19,8 @@ bool try_no_auth_session(Agent* agent, bool initial_attempt) {
         );
         const auto status = lifecycle.http.status;
         const auto http_code = lifecycle.http.http_code;
-        pandar_plugin_account_session_apply_lifecycle_result(
-            agent->account_session, &lifecycle
+        pandar_plugin_core_account_apply_lifecycle_result(
+            agent->plugin_core, &lifecycle
         );
         body_from_result(lifecycle.http);
         trace_plugin_event(
