@@ -4,8 +4,9 @@ use std::{
 };
 
 use pandar_core::{
-    BambuNozzleSystem, CommandRecord, PrinterCoolingSystem, PrinterNozzleTemperature, TenantId,
-    compatibility::normalize_model,
+    BambuNozzleSystem, CommandRecord, DiagnosticCompatibility, PrinterCoolingSystem,
+    PrinterNozzleTemperature, TenantId,
+    compatibility::{compatibility_for_model, normalize_model},
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, broadcast, watch};
@@ -45,6 +46,8 @@ pub struct PrinterEventPrinter {
     pub serial_number: String,
     pub name: String,
     pub model: Option<String>,
+    #[serde(default = "unknown_printer_compatibility")]
+    pub compatibility: DiagnosticCompatibility,
     pub status: String,
     pub last_seen_at: String,
     pub created_at: String,
@@ -134,6 +137,10 @@ pub async fn fence_printer_nozzle_system(
     printer
 }
 
+fn unknown_printer_compatibility() -> DiagnosticCompatibility {
+    compatibility_for_model(None)
+}
+
 pub fn printer_event_printer(
     printer: PrinterWithLiveStatus,
     materials: Option<MaterialSnapshot>,
@@ -141,6 +148,7 @@ pub fn printer_event_printer(
     let state_revision = printer.state_revision;
     let live_status = printer.live_status;
     let printer = printer.printer;
+    let compatibility = compatibility_for_model(printer.model.as_deref());
     PrinterEventPrinter {
         id: printer.id,
         tenant_id: printer.tenant_id.to_string(),
@@ -148,6 +156,7 @@ pub fn printer_event_printer(
         serial_number: printer.serial_number,
         name: printer.name,
         model: printer.model,
+        compatibility,
         status: printer.status,
         last_seen_at: printer.last_seen_at,
         created_at: printer.created_at,

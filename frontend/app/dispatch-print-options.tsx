@@ -5,6 +5,7 @@ import { useId, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { HelpTip } from './dashboard-ui'
+import type { PrinterCompatibility } from './printer-compatibility'
 import {
   type CalibrationMode,
   dispatchPrintOptionCapabilities,
@@ -15,11 +16,15 @@ type Option = {
   value: '0' | '1' | '2' | 'true' | 'false'
 }
 
-export function DispatchPrintOptions({ model }: { model: string | null }) {
+export function DispatchPrintOptions({
+  compatibility,
+}: {
+  compatibility: PrinterCompatibility | null | undefined
+}) {
   const t = useTranslations('dispatch')
   const titleId = useId()
-  const capabilities = dispatchPrintOptionCapabilities(model)
-  const modelKey = model ?? 'unknown'
+  const capabilities = dispatchPrintOptionCapabilities(compatibility)
+  const modelKey = compatibility?.normalized_model ?? 'unknown'
   const onOff: Option[] = [
     { label: t('modeOn'), value: 'true' },
     { label: t('modeOff'), value: 'false' },

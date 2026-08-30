@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
 import { DispatchForm } from "./dispatch-form";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 import type { Job } from "./dashboard-types";
 
 function createTestQueryClient() {
@@ -37,7 +38,7 @@ describe("DispatchForm", () => {
     const user = userEvent.setup();
     const { container } = renderDispatchForm({
       selectedTenant: { id: "tenant-1" },
-      printers: [{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null }],
+      printers: [{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", compatibility: printerCompatibility("x2d"), materials: null }],
     });
 
     expect(screen.getByRole("region", { name: "Print options" })).toBeVisible();
@@ -91,7 +92,7 @@ describe("DispatchForm", () => {
           id: "x2d",
           name: "X2D",
           serial_number: "SN-X2D",
-          model: "N6",
+          model: "N6", compatibility: printerCompatibility("x2d"),
           materials: null,
         },
         {
@@ -99,6 +100,7 @@ describe("DispatchForm", () => {
           name: "A1",
           serial_number: "SN-A1",
           model: "A1",
+          compatibility: printerCompatibility("a1"),
           materials: null,
         },
       ],
@@ -142,6 +144,7 @@ describe("DispatchForm", () => {
           name: "Unknown",
           serial_number: "SN-UNKNOWN",
           model: null,
+          compatibility: printerCompatibility("unknown"),
           materials: null,
         },
       ],
@@ -173,7 +176,7 @@ describe("DispatchForm", () => {
 
     const { container } = renderDispatchForm({
       selectedTenant: { id: "tenant-1" },
-      printers: [{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null }],
+      printers: [{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", compatibility: printerCompatibility("x2d"), materials: null }],
       onRedirect,
     });
     const fileInput = container.querySelector('input[type="file"]');
@@ -242,12 +245,12 @@ describe("DispatchForm", () => {
       onRedirect,
       sourceJob,
       printers: [
-        { id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null },
+        { id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", compatibility: printerCompatibility("x2d"), materials: null },
         {
           id: "printer-2",
           name: "Printer Two",
           serial_number: "SN2",
-          model: "N6",
+          model: "N6", compatibility: printerCompatibility("x2d"),
           materials: {
             filament_switch_installed: true,
             observed_at: "2026-07-18T00:00:00Z",
@@ -319,7 +322,7 @@ describe("DispatchForm", () => {
 
     const { container, getByText } = renderDispatchForm({
       selectedTenant: { id: "tenant-1" },
-      printers: [{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null }],
+      printers: [{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", compatibility: printerCompatibility("x2d"), materials: null }],
     });
 
     expect(container.querySelector('[name="plate_id"]')).toBeNull();
@@ -439,6 +442,7 @@ describe("DispatchForm", () => {
             name: "Printer One",
             serial_number: "SN1",
             model: "Bambu Lab X2D",
+            compatibility: printerCompatibility("x2d"),
             materials: {
               filament_switch_installed: false,
               observed_at: "2026-07-15T00:00:00Z",
@@ -500,13 +504,13 @@ describe("DispatchForm", () => {
       new File(["3mf"], "benchy.3mf", { type: "model/3mf" }),
     );
 
-    const mainMapping = await findByRole("button", { name: "Map PLA (1)" });
-    const auxiliaryMapping = getByRole("button", { name: "Map PLA (2)" });
+    const auxiliaryMapping = await findByRole("button", { name: "Map PLA (1)" });
+    const mainMapping = getByRole("button", { name: "Map PLA (2)" });
     expect(getByText("Main nozzle")).toBeInTheDocument();
     expect(getByText("Auxiliary nozzle")).toBeInTheDocument();
-    expect(mainMapping).toHaveTextContent("B1");
-    expect(auxiliaryMapping).toHaveTextContent("A1");
-    expect(mainMapping.querySelector('[style*="background-color"]'))
+    expect(auxiliaryMapping).toHaveTextContent("B1");
+    expect(mainMapping).toHaveTextContent("A1");
+    expect(auxiliaryMapping.querySelector('[style*="background-color"]'))
       .toHaveStyle({ backgroundColor: "#000000" });
     expect(container.querySelector('input[name="ams_mapping"]')).toHaveValue("[4,0]");
     expect(container.querySelector('input[name="ams_mapping2"]')).toHaveValue(
@@ -516,9 +520,9 @@ describe("DispatchForm", () => {
       '[{"ams":4,"filamentType":"PLA","filamentId":"GFA00","nozzleId":1,"sourceColor":"#000000FF","targetColor":"#000000FF"},{"ams":0,"filamentType":"PLA","filamentId":"GFA01","nozzleId":0,"sourceColor":"#FF0000FF","targetColor":"#FF0000FF"}]',
     );
 
-    await user.click(auxiliaryMapping);
+    await user.click(mainMapping);
     expect(await findByRole("heading", {
-      name: "Select the filament installed on the Auxiliary nozzle.",
+      name: "Select the filament installed on the Main nozzle.",
     })).toBeInTheDocument();
     expect(getByText("Left AMS")).toBeInTheDocument();
     expect(getByText("Right AMS")).toBeInTheDocument();
@@ -546,9 +550,9 @@ describe("DispatchForm", () => {
     expect(getByText(
       "Select a compatible filament source for every required material before dispatch.",
     )).toBeInTheDocument();
-    await user.click(auxiliaryMapping);
+    await user.click(mainMapping);
     await user.click(getByRole("button", { name: "Ext-R, ABS" }));
-    expect(auxiliaryMapping).toHaveTextContent("Ext-R");
+    expect(mainMapping).toHaveTextContent("Ext-R");
     expect(container.querySelector('input[name="ams_mapping"]')).toHaveValue("[4,-1]");
     expect(container.querySelector('input[name="ams_mapping2"]')).toHaveValue(
       '[{"ams_id":1,"slot_id":0},{"ams_id":255,"slot_id":0}]',

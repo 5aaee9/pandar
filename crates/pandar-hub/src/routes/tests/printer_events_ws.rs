@@ -46,6 +46,7 @@ struct EventPrinter {
     tenant_id: String,
     agent_id: String,
     serial_number: String,
+    compatibility: pandar_core::DiagnosticCompatibility,
     chamber_target_temperature_celsius: Option<String>,
     state_revision: u64,
     print: EventPrint,

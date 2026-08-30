@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ArtifactMetadata, Printer } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 import {
   autoMapProjectFilaments,
   autoMapSlotSelections,
@@ -62,6 +63,23 @@ describe("dispatch material mapping", () => {
       trayId: "1",
       slotId: 0,
     });
+  });
+
+  it("rejects nozzle assignments when a legacy payload lacks routing capabilities", () => {
+    const printer = fixturePrinter();
+    delete printer.compatibility;
+    const slots = printerAmsSlots(printer);
+    const filament = projectFilamentsForPlate(fixtureMetadata(), 1)[0];
+
+    expect(
+      slots
+        .filter((candidate) => candidate.kind === "ams")
+        .every(
+          (candidate) =>
+            candidate.routingRequired && candidate.toolhead === null,
+        ),
+    ).toBe(true);
+    expect(autoMapSlotSelections([filament], slots)).toEqual(new Map());
   });
 
   it("applies Studio side, type, empty-slot, and external rules", () => {
@@ -363,6 +381,7 @@ function fixturePrinter(): Printer {
     serial_number: "SN1",
     name: "Printer One",
     model: "Bambu Lab X2D",
+    compatibility: printerCompatibility("x2d"),
     status: "idle",
     last_seen_at: "2026-07-15T00:00:00Z",
     created_at: "2026-07-15T00:00:00Z",

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Printer } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 import {
   materialMappingPayload,
   printerAmsSlots,
@@ -35,9 +36,9 @@ describe("A2L mixed AMS Lite material mapping", () => {
   });
 });
 
-function a2lPrinter(): Pick<Printer, "materials" | "model"> {
+function a2lPrinter(): Pick<Printer, "materials" | "compatibility"> {
   return {
-    model: "Bambu Lab A2L",
+    compatibility: printerCompatibility("a2l"),
     materials: {
       observed_at: "2026-08-01T00:00:00Z",
       active_tray: null,

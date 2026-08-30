@@ -64,6 +64,23 @@ async fn printer_events_websocket_receives_snapshot_from_grpc_stream() {
     assert_eq!(printer.agent_id, agent.id.to_string());
     assert_eq!(printer.serial_number, "SN-001");
     assert_eq!(
+        printer.compatibility.normalized_model.as_deref(),
+        Some("X1C")
+    );
+    assert_eq!(
+        printer.compatibility.features.dual_nozzle,
+        pandar_core::Capability::Unsupported
+    );
+    assert_eq!(
+        printer
+            .compatibility
+            .print_options
+            .flow_calibration
+            .as_ref()
+            .map(|option| option.default_mode),
+        Some(pandar_core::PrintCalibrationMode::On)
+    );
+    assert_eq!(
         printer.chamber_target_temperature_celsius.as_deref(),
         Some("45")
     );

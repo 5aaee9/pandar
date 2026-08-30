@@ -4,7 +4,7 @@ use std::{
 };
 
 use super::*;
-use pandar_core::{AgentId, TenantId};
+use pandar_core::{AgentId, DiagnosticCompatibility, TenantId};
 use requests::{
     link_printer_body, link_printer_value, link_printer_with_model_value,
     link_printer_with_serial_number_value, link_printer_with_unexpected_field_body,
@@ -48,6 +48,7 @@ struct PrinterResponse {
     tenant_id: String,
     agent_id: String,
     name: String,
+    compatibility: DiagnosticCompatibility,
     materials: Option<PrinterMaterialsResponse>,
     state_revision: u64,
     print: EnrichedPrint,

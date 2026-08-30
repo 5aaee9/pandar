@@ -109,7 +109,7 @@ fn matrix_covers_ftps_storage_and_unknown_defaults() {
     );
     assert_eq!(
         compatibility_for_model(Some("P2S")).features.dual_nozzle,
-        Capability::Unknown
+        Capability::Unsupported
     );
 
     let unknown = compatibility_for_model(Some("Mystery Model"));
@@ -130,8 +130,134 @@ fn absent_model_serializes_null_and_unknown_features() {
             external_storage: Capability::Unknown,
             ftps_tls_1_2_cap: false,
             features: CompatibilityFeatures::unknown(),
+            print_options: PrintOptionCapabilities::unknown(),
+            chamber_fan: Capability::Unknown,
+            nozzle_layout: NozzleLayout::Unknown,
         }
     );
+}
+
+#[test]
+fn projected_ui_capabilities_match_the_model_matrix() {
+    let x2d = compatibility_for_model(Some("N6"));
+    assert_eq!(x2d.normalized_model.as_deref(), Some("X2D"));
+    assert_eq!(x2d.features.dual_nozzle, Capability::Supported);
+    assert_eq!(x2d.nozzle_layout, NozzleLayout::MainAuxiliary);
+    assert_eq!(
+        x2d.print_options.nozzle_offset_calibration,
+        Some(CalibrationOption {
+            modes: vec![
+                PrintCalibrationMode::Auto,
+                PrintCalibrationMode::On,
+                PrintCalibrationMode::Off,
+            ],
+            default_mode: PrintCalibrationMode::Off,
+        })
+    );
+
+    for model in ["O1C2", "H2D", "O1E"] {
+        assert_eq!(
+            compatibility_for_model(Some(model)).features.dual_nozzle,
+            Capability::Supported,
+            "{model}"
+        );
+    }
+    for model in ["A1", "A1 Mini", "A2L", "P1P"] {
+        assert_eq!(
+            compatibility_for_model(Some(model)).chamber_fan,
+            Capability::Unsupported,
+            "{model}"
+        );
+    }
+}
+
+#[test]
+fn print_option_projection_covers_every_verified_model_family() {
+    let on_off = || CalibrationOption {
+        modes: vec![PrintCalibrationMode::On, PrintCalibrationMode::Off],
+        default_mode: PrintCalibrationMode::On,
+    };
+    let auto = |default_mode| CalibrationOption {
+        modes: vec![
+            PrintCalibrationMode::Auto,
+            PrintCalibrationMode::On,
+            PrintCalibrationMode::Off,
+        ],
+        default_mode,
+    };
+    let cases = [
+        (
+            &["N6", "X2D", "Bambu Lab X2D"][..],
+            PrintOptionCapabilities {
+                timelapse: true,
+                bed_leveling: Some(auto(PrintCalibrationMode::Auto)),
+                flow_calibration: Some(auto(PrintCalibrationMode::Auto)),
+                nozzle_offset_calibration: Some(auto(PrintCalibrationMode::Off)),
+            },
+        ),
+        (
+            &["N7", "P2S", "O1S", "H2S", "N9", "A2L"][..],
+            PrintOptionCapabilities {
+                timelapse: true,
+                bed_leveling: Some(auto(PrintCalibrationMode::Auto)),
+                flow_calibration: Some(auto(PrintCalibrationMode::Auto)),
+                nozzle_offset_calibration: None,
+            },
+        ),
+        (
+            &[
+                "N1", "A1 Mini", "N2S", "A1", "BL-P001", "X1C", "BL-P002", "X1", "C13", "X1E",
+            ][..],
+            PrintOptionCapabilities {
+                timelapse: true,
+                bed_leveling: Some(on_off()),
+                flow_calibration: Some(on_off()),
+                nozzle_offset_calibration: None,
+            },
+        ),
+        (
+            &["C11", "P1P", "C12", "P1S"][..],
+            PrintOptionCapabilities {
+                timelapse: true,
+                bed_leveling: Some(on_off()),
+                flow_calibration: None,
+                nozzle_offset_calibration: None,
+            },
+        ),
+        (
+            &["O1C", "O1C2", "H2C", "O1D", "H2D", "O1E", "H2D Pro"][..],
+            PrintOptionCapabilities {
+                timelapse: true,
+                bed_leveling: Some(auto(PrintCalibrationMode::Auto)),
+                flow_calibration: Some(auto(PrintCalibrationMode::Auto)),
+                nozzle_offset_calibration: Some(auto(PrintCalibrationMode::Auto)),
+            },
+        ),
+    ];
+
+    for (models, expected) in cases {
+        for model in models {
+            assert_eq!(
+                compatibility_for_model(Some(model)).print_options,
+                expected,
+                "{model}"
+            );
+        }
+    }
+}
+
+#[test]
+fn additive_ui_capabilities_default_for_legacy_payloads() {
+    let mut value = serde_json::to_value(compatibility_for_model(Some("A1"))).unwrap();
+    let object = value.as_object_mut().unwrap();
+    object.remove("print_options");
+    object.remove("chamber_fan");
+    object.remove("nozzle_layout");
+    let decoded: DiagnosticCompatibility = Deserialize::deserialize(value).unwrap();
+
+    assert_eq!(decoded.print_options, PrintOptionCapabilities::unknown());
+    assert_eq!(decoded.chamber_fan, Capability::Unknown);
+    assert_eq!(decoded.nozzle_layout, NozzleLayout::Unknown);
 }
 
 #[test]

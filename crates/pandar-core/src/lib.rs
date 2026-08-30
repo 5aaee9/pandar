@@ -21,6 +21,10 @@ pub mod tenant;
 pub use agent::{Agent, AgentStatus};
 pub use ams::AmsUnitKind;
 pub use command::{CommandRecord, CommandRecordParts, CommandStatus};
+pub use compatibility::{
+    CalibrationOption, Capability, CompatibilityFeatures, DiagnosticCompatibility, NozzleLayout,
+    PrintOptionCapabilities,
+};
 pub use cooling::{
     PrinterCoolingFan, PrinterCoolingFanKind, PrinterCoolingMode, PrinterCoolingSystem,
 };

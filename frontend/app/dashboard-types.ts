@@ -1,6 +1,7 @@
 import type { PrinterPrintState } from "./printer-live-types";
 import type { PrinterNozzleSystem } from "./dashboard-printer-rack-types";
 import type { PrinterCoolingSystem } from "./printer-cooling-types";
+import type { PrinterCompatibility } from "./printer-compatibility";
 
 export type { PrinterNozzleSystem } from "./dashboard-printer-rack-types";
 
@@ -25,6 +26,7 @@ export type Printer = {
   serial_number: string;
   name: string;
   model: string | null;
+  compatibility?: PrinterCompatibility;
   status: string;
   last_seen_at: string;
   created_at: string;

@@ -24,7 +24,6 @@ import { PrinterControlFields, usePrinterControl } from './printer-controls'
 type CoolingFan = NonNullable<Printer['cooling_system']>['fans'][number]
 type CoolingMode = NonNullable<Printer['cooling_system']>['mode']
 
-const openFrameModels = new Set(['A1', 'A1 MINI', 'A2L', 'P1P'])
 const fanOrder: CoolingFan['kind'][] = [
   'part_cooling',
   'auxiliary',
@@ -44,7 +43,10 @@ export function PrinterCoolingSystem({ printer }: { printer: Printer }) {
   }
 
   const fans = cooling.fans
-    .filter((fan) => fan.kind !== 'chamber' || hasChamberFan(printer.model))
+    .filter(
+      (fan) =>
+        fan.kind !== 'chamber' || printer.compatibility?.chamber_fan === 'supported',
+    )
     .sort((left, right) => fanOrder.indexOf(left.kind) - fanOrder.indexOf(right.kind))
   if (fans.length === 0 && !cooling.mode) {
     return null
@@ -243,12 +245,4 @@ function fanIcon(kind: CoolingFan['kind'], className: string) {
     case 'controller':
       return <CpuIcon className={className} />
   }
-}
-
-function hasChamberFan(model: string | null) {
-  if (!model) {
-    return true
-  }
-  const normalized = model.toUpperCase().replace(/^BAMBU LAB\s+/, '')
-  return !openFrameModels.has(normalized)
 }

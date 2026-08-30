@@ -40,7 +40,7 @@ describe("DispatchMaterialSlotMenu", () => {
         <DispatchMaterialSlotMenu
           filament={filament()}
           materialName="PLA (1)"
-          model="Bambu Lab X2D"
+          nozzleLayout="main_auxiliary"
           onSelect={vi.fn()}
           selectedKey="ams:1:0"
           slots={slots}

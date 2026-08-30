@@ -7,9 +7,14 @@ async fn printer_list_returns_tenant_printers() {
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
     let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
-    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
-        .await
-        .unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        state.database(),
+        tenant_id,
+        agent_id,
+        Some("N6"),
+    )
+    .await
+    .unwrap();
 
     let (status, body) = request_as(
         app,
@@ -26,6 +31,27 @@ async fn printer_list_returns_tenant_printers() {
     assert_eq!(printer.id, printer_id);
     assert_eq!(printer.tenant_id, tenant_id.to_string());
     assert_eq!(printer.agent_id, agent_id.to_string());
+    assert_eq!(
+        printer.compatibility.normalized_model.as_deref(),
+        Some("X2D")
+    );
+    assert_eq!(
+        printer.compatibility.features.dual_nozzle,
+        pandar_core::Capability::Supported
+    );
+    assert_eq!(
+        printer.compatibility.nozzle_layout,
+        pandar_core::NozzleLayout::MainAuxiliary
+    );
+    assert_eq!(
+        printer
+            .compatibility
+            .print_options
+            .nozzle_offset_calibration
+            .as_ref()
+            .map(|option| option.default_mode),
+        Some(pandar_core::PrintCalibrationMode::Off)
+    );
     assert_eq!(printer.materials, None);
 }
 

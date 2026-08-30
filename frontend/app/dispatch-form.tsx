@@ -25,7 +25,10 @@ import { useDispatchArtifact } from './use-dispatch-artifact'
 
 type DispatchTenant = { id: string }
 
-type DispatchPrinter = Pick<Printer, 'id' | 'name' | 'serial_number' | 'model' | 'materials'>
+type DispatchPrinter = Pick<
+  Printer,
+  'id' | 'name' | 'serial_number' | 'model' | 'compatibility' | 'materials'
+>
 
 export function DispatchForm({
   selectedTenant,
@@ -247,8 +250,10 @@ export function DispatchForm({
         </span>
       </div>
       <DispatchPrintOptions
-        key={selectedPrinter ? selectedPrinter.id + ':' + (selectedPrinter.model ?? 'unknown') : 'unknown'}
-        model={selectedPrinter?.model ?? null}
+        key={selectedPrinter
+          ? selectedPrinter.id + ':' + (selectedPrinter.compatibility?.normalized_model ?? 'unknown')
+          : 'unknown'}
+        compatibility={selectedPrinter?.compatibility}
       />
       {submitFailed ? (
         <div

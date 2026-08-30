@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import en from "../messages/en.json";
 import { PrinterCoolingSystem } from "./dashboard-printer-cooling";
 import type { Printer } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 const printer: Printer = {
   id: "printer-1",
@@ -16,6 +17,7 @@ const printer: Printer = {
   serial_number: "SERIAL123",
   name: "Office X2D",
   model: "X2D",
+  compatibility: printerCompatibility("x2d"),
   status: "RUNNING",
   last_seen_at: "2026-08-08T00:00:00Z",
   created_at: "2026-08-08T00:00:00Z",
@@ -79,10 +81,15 @@ describe("PrinterCoolingSystem", () => {
     expect(screen.getByRole("button", { name: "100%" })).toBeEnabled();
   });
 
-  it("does not invent a chamber fan for an open-frame printer", () => {
+  it.each([
+    ["absent", undefined],
+    ["unknown", printerCompatibility("unknown")],
+    ["unsupported", printerCompatibility("a1")],
+  ])("does not expose a chamber fan when support is %s", (_state, compatibility) => {
     renderCooling({
       ...printer,
       model: "A1",
+      compatibility,
       cooling_system: {
         mode: null,
         fans: [{ kind: "chamber", speed_percent: 0 }],

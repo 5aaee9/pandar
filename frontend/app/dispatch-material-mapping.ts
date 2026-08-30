@@ -1,5 +1,4 @@
 import type { ArtifactMetadata, Printer } from "./dashboard-types";
-import { isDualNozzleModel } from "./dispatch-print-options-model";
 import { mixedAmsLiteGlobalTrayId } from "./material-tray-routing";
 
 export type ProjectFilament = {
@@ -95,14 +94,15 @@ export function projectFilamentsForPlate(
 }
 
 export function printerAmsSlots(
-  printer: Pick<Printer, "materials" | "model">,
+  printer: Pick<Printer, "materials" | "compatibility">,
 ): PrinterAmsSlot[] {
-  const routingRequired = isDualNozzleModel(printer.model);
+  const dualNozzle = printer.compatibility?.features.dual_nozzle ?? "unknown";
+  const routingRequired = dualNozzle !== "unsupported";
   const materials = printer.materials;
   if (!materials) return [];
   const filamentSwitchInstalled = materials.filament_switch_installed ?? null;
   const inferConventionalRoutes =
-    routingRequired &&
+    dualNozzle === "supported" &&
     filamentSwitchInstalled !== true &&
     materials.ams_units.filter(
       (unit) => unit.unit_id === "0" || unit.unit_id === "1",

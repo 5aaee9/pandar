@@ -12,6 +12,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import type { NozzleLayout } from "./printer-compatibility";
 
 import {
   slotIneligibility,
@@ -26,7 +27,7 @@ export function DispatchMaterialSlotMenu({
   filament,
   invalid = false,
   materialName,
-  model,
+  nozzleLayout,
   onSelect,
   selectedKey,
   slots,
@@ -36,7 +37,7 @@ export function DispatchMaterialSlotMenu({
   filament: ProjectFilament;
   invalid?: boolean;
   materialName: string;
-  model: string | null;
+  nozzleLayout: NozzleLayout;
   onSelect: (slotKey: string) => void;
   selectedKey: string;
   slots: PrinterAmsSlot[];
@@ -45,7 +46,7 @@ export function DispatchMaterialSlotMenu({
   const t = useTranslations("dispatch");
   const [open, setOpen] = useState(false);
   const selected = slots.find((slot) => slot.key === selectedKey) ?? null;
-  const nozzle = nozzleName(t, model, filament.nozzleId);
+  const nozzle = nozzleName(t, nozzleLayout, filament.nozzleId);
   const sections = useMemo(() => materialSections(slots), [slots]);
 
   const select = (slotKey: string) => {
@@ -364,13 +365,12 @@ function sectionTitle(
 
 function nozzleName(
   t: ReturnType<typeof useTranslations>,
-  model: string | null,
+  nozzleLayout: NozzleLayout,
   nozzleId: 0 | 1 | null,
 ) {
-  const normalized = model?.trim().toUpperCase().replace(/^BAMBU LAB /, "");
-  if (normalized === "N6" || normalized === "X2D") {
-    if (nozzleId === 1) return t("mainNozzle");
-    if (nozzleId === 0) return t("auxiliaryNozzle");
+  if (nozzleLayout === "main_auxiliary") {
+    if (nozzleId === 0) return t("mainNozzle");
+    if (nozzleId === 1) return t("auxiliaryNozzle");
   }
   if (nozzleId === 1) return t("leftNozzle");
   if (nozzleId === 0) return t("rightNozzle");

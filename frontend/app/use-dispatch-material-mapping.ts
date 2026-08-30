@@ -20,7 +20,7 @@ type SelectionState = {
 export function useDispatchMaterialMapping(
   metadata: ArtifactMetadata | null,
   plateId: number | null,
-  printer: Pick<Printer, "id" | "model" | "materials"> | null,
+  printer: Pick<Printer, "id" | "compatibility" | "materials"> | null,
   useAms: boolean,
 ) {
   const config = useMemo(() => {
@@ -31,7 +31,7 @@ export function useDispatchMaterialMapping(
     const slots = printerAmsSlots(printer);
     const key = [
       printer.id,
-      printer.model,
+      printer.compatibility?.normalized_model,
       plateId,
       useAms,
       ...filaments.map((filament) =>
@@ -98,7 +98,7 @@ export function useDispatchMaterialMapping(
         ? {
             editorKey: config.key,
             filaments: config.filaments,
-            model: printer?.model ?? null,
+            nozzleLayout: printer?.compatibility?.nozzle_layout ?? "unknown",
             onSelectSlot: selectSlot,
             payload,
             plateId: config.plateId,
