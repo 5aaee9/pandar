@@ -214,12 +214,6 @@ in
           description = "Tenant ID passed through PANDAR_TENANT_ID.";
         };
 
-        artifactRoot = lib.mkOption {
-          type = lib.types.path;
-          default = "/var/lib/pandar-agent/artifacts";
-          description = "Artifact root passed through PANDAR_ARTIFACT_ROOT.";
-        };
-
         environmentFile = lib.mkOption {
           type = lib.types.nullOr lib.types.path;
           default = null;
@@ -508,8 +502,6 @@ in
         environment = {
           PANDAR_HUB_GRPC_URL = cfg.agent.hubGrpcUrl;
           PANDAR_AGENT_NAME = cfg.agent.name;
-
-          PANDAR_ARTIFACT_ROOT = toString cfg.agent.artifactRoot;
         }
         // lib.optionalAttrs (cfg.agent.agentId != null) {
           PANDAR_AGENT_ID = cfg.agent.agentId;

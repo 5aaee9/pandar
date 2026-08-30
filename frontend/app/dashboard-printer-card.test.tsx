@@ -9,6 +9,7 @@ import en from "../messages/en.json";
 import type { Printer } from "./dashboard-types";
 import { PrinterCard } from "./dashboard-printer-card";
 import { DashboardCameraProvider } from "./dashboard-printer-camera-control";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 const actionMocks = vi.hoisted(() => ({
   controlPrinter: vi.fn(async () => ({ ok: true as const })),
@@ -34,6 +35,7 @@ const printer: Printer = {
   serial_number: "SN1",
   name: "Printer One",
   model: "X1C",
+  compatibility: printerCompatibility("unknown"),
   status: "idle",
   last_seen_at: "2026-07-17T00:00:00Z",
   created_at: "2026-07-01T00:00:00Z",

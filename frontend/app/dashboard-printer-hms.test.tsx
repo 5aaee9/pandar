@@ -6,6 +6,7 @@ import en from "../messages/en.json";
 import zh from "../messages/zh.json";
 import { PrinterHmsPanel } from "./dashboard-printer-hms";
 import type { Printer } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 const printer: Printer = {
   id: "printer-1",
@@ -14,6 +15,7 @@ const printer: Printer = {
   serial_number: "20P123456",
   name: "Office printer",
   model: "A1",
+  compatibility: printerCompatibility("a1"),
   status: "RUNNING",
   last_seen_at: "2026-08-09T00:00:00Z",
   created_at: "2026-08-09T00:00:00Z",

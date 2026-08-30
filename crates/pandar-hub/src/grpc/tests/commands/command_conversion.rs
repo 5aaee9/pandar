@@ -61,7 +61,7 @@ async fn grpc_hub_command_from_record_rejects_invalid_printer_operation_payload(
 }
 
 #[tokio::test]
-async fn grpc_hub_command_from_record_requires_artifact_download_path_when_configured() {
+async fn grpc_hub_command_from_record_requires_artifact_download_path() {
     let state = fixture_state().await;
     let (tenant_id, agent_id) = tenant_agent(&state).await;
     let printer_id = crate::repositories::test_helpers::insert_printer_fixture(
@@ -104,15 +104,19 @@ async fn grpc_hub_command_from_record_requires_artifact_download_path_when_confi
         .await
         .unwrap();
 
-    hub_command_from_record(command.clone()).unwrap();
-    let err = hub_command_from_record_with_options(
-        command,
-        CommandConversionOptions {
-            require_artifact_download_path: true,
-        },
-    )
-    .unwrap_err();
+    let err = hub_command_from_record(command.clone()).unwrap_err();
 
     assert_eq!(err.code(), Code::Internal);
     assert_eq!(err.message(), "missing artifact download path");
+
+    let mut payload: serde_json::Value = serde_json::from_str(&command.payload_json).unwrap();
+    payload
+        .as_object_mut()
+        .unwrap()
+        .remove("artifact_download_path");
+    let mut missing_field = command;
+    missing_field.payload_json = serde_json::to_string(&payload).unwrap();
+    let err = hub_command_from_record(missing_field).unwrap_err();
+    assert_eq!(err.code(), Code::Internal);
+    assert_eq!(err.message(), "invalid print command payload");
 }

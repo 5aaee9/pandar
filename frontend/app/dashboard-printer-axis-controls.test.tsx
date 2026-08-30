@@ -9,6 +9,7 @@ import en from "../messages/en.json";
 import zh from "../messages/zh.json";
 import { PrinterAxisControls } from "./dashboard-printer-axis-controls";
 import type { Printer } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 const controlPrinterMock = vi.hoisted(() =>
   vi.fn(async (_prev: unknown, _formData: FormData) => ({ ok: true as const })),
@@ -43,6 +44,7 @@ const printer: Printer = {
   serial_number: "SERIAL123",
   name: "Office A1",
   model: "A1",
+  compatibility: printerCompatibility("a1"),
   status: "idle",
   last_seen_at: "2026-07-02T00:00:00Z",
   created_at: "2026-07-02T00:00:00Z",

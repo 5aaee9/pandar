@@ -55,7 +55,6 @@ fn print_report_empty_hms_preserves_snapshot_presence_in_event() {
         agent_credential: "pandar_ac_test".to_owned(),
         agent_version: "9.8.7".to_owned(),
         printers: "[]".to_owned(),
-        artifact_root: ".".into(),
     };
 
     let progress = print_report_from_json(&endpoint(), &report);

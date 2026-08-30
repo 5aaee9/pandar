@@ -2234,6 +2234,7 @@
           "serial_number",
           "name",
           "model",
+          "compatibility",
           "status",
           "last_seen_at",
           "created_at",

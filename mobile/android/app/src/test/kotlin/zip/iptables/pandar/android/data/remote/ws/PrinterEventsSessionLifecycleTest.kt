@@ -29,6 +29,7 @@ import zip.iptables.pandar.android.data.remote.ApiModule
 import zip.iptables.pandar.android.data.remote.HubSession
 import zip.iptables.pandar.android.data.remote.HubSessionContext
 import zip.iptables.pandar.android.data.remote.dto.PrinterEventDto
+import zip.iptables.pandar.android.data.remote.dto.UNKNOWN_PRINTER_COMPATIBILITY_JSON
 
 class PrinterEventsSessionLifecycleTest {
     private var nextSessionEpoch = 0L
@@ -327,7 +328,7 @@ class PrinterEventsSessionLifecycleTest {
         private val PRINTER_EVENT = """
             {"type":"printer_snapshot","printer":{
               "id":"p1","tenant_id":"t1","agent_id":"a1","serial_number":"SN001",
-              "name":"A","model":null,"status":"idle","last_seen_at":"x",
+              "name":"A","model":null,"compatibility":$UNKNOWN_PRINTER_COMPATIBILITY_JSON,"status":"idle","last_seen_at":"x",
               "created_at":"y","materials":null}}
         """.trimIndent()
     }

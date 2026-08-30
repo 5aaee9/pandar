@@ -45,7 +45,7 @@ export function PrinterCoolingSystem({ printer }: { printer: Printer }) {
   const fans = cooling.fans
     .filter(
       (fan) =>
-        fan.kind !== 'chamber' || printer.compatibility?.chamber_fan === 'supported',
+        fan.kind !== 'chamber' || printer.compatibility.chamber_fan === 'supported',
     )
     .sort((left, right) => fanOrder.indexOf(left.kind) - fanOrder.indexOf(right.kind))
   if (fans.length === 0 && !cooling.mode) {

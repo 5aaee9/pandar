@@ -47,15 +47,6 @@ pub enum ArtifactStorageBackend {
     S3,
 }
 
-impl ArtifactStorageBackend {
-    pub fn requires_hub_fetch(self) -> bool {
-        match self {
-            Self::Filesystem => false,
-            Self::S3 => true,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredArtifact {
     pub filename: String,
@@ -355,7 +346,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(config.backend(), ArtifactStorageBackend::Filesystem);
-        assert!(!config.backend().requires_hub_fetch());
         assert_eq!(config.max_artifact_bytes(), DEFAULT_MAX_ARTIFACT_BYTES);
         assert_eq!(
             config.spool_dir().unwrap(),

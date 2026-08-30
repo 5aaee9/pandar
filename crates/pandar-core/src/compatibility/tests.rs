@@ -247,17 +247,13 @@ fn print_option_projection_covers_every_verified_model_family() {
 }
 
 #[test]
-fn additive_ui_capabilities_default_for_legacy_payloads() {
-    let mut value = serde_json::to_value(compatibility_for_model(Some("A1"))).unwrap();
-    let object = value.as_object_mut().unwrap();
-    object.remove("print_options");
-    object.remove("chamber_fan");
-    object.remove("nozzle_layout");
-    let decoded: DiagnosticCompatibility = Deserialize::deserialize(value).unwrap();
-
-    assert_eq!(decoded.print_options, PrintOptionCapabilities::unknown());
-    assert_eq!(decoded.chamber_fan, Capability::Unknown);
-    assert_eq!(decoded.nozzle_layout, NozzleLayout::Unknown);
+fn compatibility_requires_all_current_capabilities() {
+    let current = serde_json::to_value(compatibility_for_model(Some("A1"))).unwrap();
+    for field in ["print_options", "chamber_fan", "nozzle_layout"] {
+        let mut missing = current.clone();
+        missing.as_object_mut().unwrap().remove(field);
+        assert!(serde_json::from_value::<DiagnosticCompatibility>(missing).is_err());
+    }
 }
 
 #[test]

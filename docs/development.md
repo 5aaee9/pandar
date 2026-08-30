@@ -114,7 +114,7 @@ Tenant-scoped print dispatch:
 
 Artifact storage is selected with `PANDAR_ARTIFACT_STORAGE`, defaulting to `filesystem`. The filesystem backend writes uploaded artifacts under `PANDAR_SPOOL_DIR`, defaulting to `pandar-spool`, and is intended for SQLite or single-Hub deployments. All backends reject artifacts larger than `PANDAR_MAX_ARTIFACT_BYTES`, defaulting to `10485760`. The S3-compatible backend uses `PANDAR_ARTIFACT_STORAGE=s3` plus `PANDAR_ARTIFACT_S3_BUCKET`, `PANDAR_ARTIFACT_S3_REGION`, `PANDAR_ARTIFACT_S3_ENDPOINT`, `PANDAR_ARTIFACT_S3_ACCESS_KEY_ID`, `PANDAR_ARTIFACT_S3_SECRET_ACCESS_KEY`, and optional `PANDAR_ARTIFACT_S3_FORCE_PATH_STYLE=true|false`.
 
-Agents receive a Hub artifact download path in `PrintProjectFile` and fetch bytes from Hub HTTP with their agent credential. Set `PANDAR_HUB_API_URL` for agents when `PANDAR_HUB_GRPC_URL` is not an HTTP(S) URL. `PANDAR_ARTIFACT_ROOT` remains a local fallback for older commands that do not contain a Hub download path.
+Agents require a Hub artifact download path in every `PrintProjectFile` command and fetch bytes from Hub HTTP with their agent credential. Set `PANDAR_HUB_API_URL` for agents when `PANDAR_HUB_GRPC_URL` is not an HTTP(S) URL.
 
 Print job dispatch success means the agent accepted the command path and completed upload/MQTT dispatch work. Physical progress and terminal printer outcome are tracked separately from MQTT reports.
 

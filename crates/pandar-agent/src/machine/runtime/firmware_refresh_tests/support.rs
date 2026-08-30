@@ -105,7 +105,6 @@ fn test_config() -> AgentConfig {
         agent_credential: "credential".into(),
         agent_version: "test".into(),
         printers: "[]".into(),
-        artifact_root: ".".into(),
     }
 }
 

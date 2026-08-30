@@ -9,6 +9,7 @@ import zh from "../messages/zh.json";
 import { DevicesView, JobsView } from "./dashboard-view-content";
 import { SettingsDashboard } from "./settings-dashboard";
 import type { AuthMetadata, Printer, Tenant, TenantToken } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -58,6 +59,7 @@ const printer: Printer = {
   serial_number: "SN1",
   name: "Office A1",
   model: "X1C",
+  compatibility: printerCompatibility("unknown"),
   status: "idle",
   last_seen_at: "2026-07-02T00:00:00Z",
   created_at: "2026-07-02T00:00:00Z",

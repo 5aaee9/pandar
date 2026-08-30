@@ -13,11 +13,7 @@ mod print_project;
 mod refresh;
 mod reload_connection;
 mod responses;
-#[cfg(test)]
-pub(crate) use artifacts::resolve_artifact_path;
-pub use artifacts::{
-    ArtifactReader, FilesystemArtifactReader, HubArtifactReader, artifact_download_url,
-};
+pub use artifacts::{ArtifactReader, HubArtifactReader, artifact_download_url};
 pub use config::parse_printer_config;
 pub(crate) use firmware::{handle_firmware_command, is_firmware_command};
 use link::emit_link_printer_events;
@@ -81,7 +77,7 @@ where
             handle_command_with_reader(
                 config,
                 gateway,
-                &FilesystemArtifactReader::new(config.artifact_root.clone()),
+                &HubArtifactReader::new(config),
                 sender,
                 pandar_protocol::agent::v1::HubCommand {
                     command_id,

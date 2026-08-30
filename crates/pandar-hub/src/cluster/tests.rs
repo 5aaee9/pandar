@@ -260,9 +260,9 @@ async fn nats_control_plane_subscribe_reports_decode_errors_and_continues() {
 }
 
 #[test]
-fn mixed_replica_control_plane_decodes_legacy_and_enriched_printer_snapshots() {
+fn mixed_replica_control_plane_requires_compatibility_and_decodes_enrichment() {
     let tenant_id = TenantId::new();
-    let mut legacy = serde_json::json!({
+    let mut current = serde_json::json!({
         "type": "printer_event",
         "tenant_id": tenant_id.to_string(),
         "event": {
@@ -287,8 +287,11 @@ fn mixed_replica_control_plane_decodes_legacy_and_enriched_printer_snapshots() {
             }
         }
     });
-    let decoded_legacy: HubControlMessage = serde_json::from_value(legacy.clone()).unwrap();
-    let HubControlMessage::PrinterEvent { event, .. } = decoded_legacy else {
+    assert!(serde_json::from_value::<HubControlMessage>(current.clone()).is_err());
+    current["event"]["printer"]["compatibility"] =
+        serde_json::to_value(pandar_core::compatibility::compatibility_for_model(None)).unwrap();
+    let decoded_current: HubControlMessage = serde_json::from_value(current.clone()).unwrap();
+    let HubControlMessage::PrinterEvent { event, .. } = decoded_current else {
         panic!("expected printer event")
     };
     let PrinterEvent::PrinterSnapshot { printer } = event else {
@@ -297,7 +300,7 @@ fn mixed_replica_control_plane_decodes_legacy_and_enriched_printer_snapshots() {
     assert_eq!(printer.state_revision, None);
     assert_eq!(printer.print, None);
 
-    let printer = legacy["event"]["printer"].as_object_mut().unwrap();
+    let printer = current["event"]["printer"].as_object_mut().unwrap();
     printer.insert("state_revision".to_owned(), serde_json::json!(12));
     printer.insert(
         "print".to_owned(),
@@ -319,7 +322,7 @@ fn mixed_replica_control_plane_decodes_legacy_and_enriched_printer_snapshots() {
             "hms": [{"attr": 83887616, "code": 131184}]
         }),
     );
-    let decoded_enriched: HubControlMessage = serde_json::from_value(legacy.clone()).unwrap();
+    let decoded_enriched: HubControlMessage = serde_json::from_value(current.clone()).unwrap();
     let HubControlMessage::PrinterEvent { event, .. } = decoded_enriched else {
         panic!("expected printer event")
     };
@@ -329,7 +332,7 @@ fn mixed_replica_control_plane_decodes_legacy_and_enriched_printer_snapshots() {
     assert_eq!(printer.state_revision, Some(12));
     assert_eq!(printer.print.as_ref().unwrap().job_state, Some(0));
 
-    let old: OldShapeControlMessage = serde_json::from_value(legacy).unwrap();
+    let old: OldShapeControlMessage = serde_json::from_value(current).unwrap();
     let OldShapeControlMessage::PrinterEvent {
         tenant_id: old_tenant,
         event,

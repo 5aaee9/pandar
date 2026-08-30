@@ -10,8 +10,7 @@ use crate::{
 use pandar_protocol::agent::v1::{AgentEvent, PrintProjectFile};
 
 use super::{
-    ArtifactReader,
-    artifacts::{CommandArtifactReader, LegacyCommandArtifactReader, PrintCommandArtifactReader},
+    ArtifactReader, HubArtifactReader,
     responses::{
         ack_event, failure_event, failure_event_with_result, rejected_ack_event,
         success_event_with_result,
@@ -28,8 +27,8 @@ pub(super) async fn emit_print_project_file_events<G>(
 where
     G: BambuMachineGateway,
 {
-    let artifact_reader = CommandArtifactReader::new(config);
-    emit_print_project_file_events_with_command_reader(
+    let artifact_reader = HubArtifactReader::new(config);
+    emit_print_project_file_events_with_reader(
         config,
         gateway,
         &artifact_reader,
@@ -51,29 +50,6 @@ pub(super) async fn emit_print_project_file_events_with_reader<G, R>(
 where
     G: BambuMachineGateway,
     R: ArtifactReader,
-{
-    emit_print_project_file_events_with_command_reader(
-        config,
-        gateway,
-        &LegacyCommandArtifactReader { artifact_reader },
-        sender,
-        command_id,
-        command,
-    )
-    .await
-}
-
-pub(super) async fn emit_print_project_file_events_with_command_reader<G, R>(
-    config: &AgentConfig,
-    gateway: &G,
-    artifact_reader: &R,
-    sender: &mpsc::Sender<AgentEvent>,
-    command_id: &str,
-    command: PrintProjectFile,
-) -> anyhow::Result<()>
-where
-    G: BambuMachineGateway,
-    R: PrintCommandArtifactReader,
 {
     if let Err(err) =
         validate_print_project_file_command(&command).context("validate print-project-file command")
@@ -102,9 +78,9 @@ where
 
     let result = async {
         let artifact = artifact_reader
-            .read_print_artifact(&command)
+            .read_artifact(&command.artifact_download_path)
             .await
-            .with_context(|| read_print_artifact_context(&command))?;
+            .context("read print artifact from hub")?;
         gateway
             .print_project_file(&command.serial_number, &command, artifact)
             .await
@@ -175,12 +151,4 @@ struct PrintProjectMqttResult<'a> {
     topic: &'a str,
     qos: u8,
     payload: &'a MachineJsonPayload,
-}
-
-fn read_print_artifact_context(command: &PrintProjectFile) -> String {
-    if command.artifact_download_path.trim().is_empty() {
-        format!("read print artifact {}", command.storage_path)
-    } else {
-        "read print artifact from hub".to_string()
-    }
 }

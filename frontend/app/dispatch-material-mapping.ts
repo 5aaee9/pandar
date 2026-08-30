@@ -96,7 +96,7 @@ export function projectFilamentsForPlate(
 export function printerAmsSlots(
   printer: Pick<Printer, "materials" | "compatibility">,
 ): PrinterAmsSlot[] {
-  const dualNozzle = printer.compatibility?.features.dual_nozzle ?? "unknown";
+  const dualNozzle = printer.compatibility.features.dual_nozzle;
   const routingRequired = dualNozzle !== "unsupported";
   const materials = printer.materials;
   if (!materials) return [];

@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import { PrinterMaterialsPanel } from "./dashboard-printer-materials";
 import type { Printer } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 vi.mock("./actions", () => ({ controlPrinter: vi.fn() }));
 
@@ -39,6 +40,7 @@ function a2lPrinter(): Printer {
     serial_number: "A2L001",
     name: "Office A2L",
     model: "Bambu Lab A2L",
+    compatibility: printerCompatibility("a2l"),
     status: "idle",
     last_seen_at: "2026-08-01T00:00:00Z",
     created_at: "2026-08-01T00:00:00Z",

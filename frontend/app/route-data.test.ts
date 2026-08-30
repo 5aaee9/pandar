@@ -10,6 +10,7 @@ import type {
   TenantToken,
 } from "./dashboard-types";
 import { invalidateTenantResources } from "./mutation-invalidation";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 const parseCommandResultMock = vi.hoisted(() =>
   vi.fn(() => ({ parsed: true }) as never),
@@ -63,6 +64,7 @@ const printer = (id: string): Printer => ({
   serial_number: `serial-${id}`,
   name: id,
   model: null,
+  compatibility: printerCompatibility("unknown"),
   status: "idle",
   last_seen_at: "seen",
   created_at: "created",

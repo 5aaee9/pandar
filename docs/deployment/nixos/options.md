@@ -60,19 +60,6 @@ _Default:_
 null
 ```
 
-## services\.pandar\.agent\.artifactRoot
-
-Artifact root passed through PANDAR_ARTIFACT_ROOT\.
-
-_Type:_
-absolute path
-
-_Default:_
-
-```nix
-"/var/lib/pandar-agent/artifacts"
-```
-
 ## services\.pandar\.agent\.environmentFile
 
 Root-owned runtime systemd EnvironmentFile outside the Nix store containing PANDAR_AGENT_CREDENTIAL and optional PANDAR_PRINTERS configuration\.

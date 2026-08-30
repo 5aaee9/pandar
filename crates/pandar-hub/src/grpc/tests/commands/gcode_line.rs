@@ -6,8 +6,8 @@ use tokio::sync::{Mutex, mpsc};
 use super::*;
 use crate::{
     grpc::commands::{
-        CommandConversionOptions, SessionQueuedDispatch, dispatch_next_queued_for_session,
-        hub_command_from_record, required_feature_dispatch_pause,
+        SessionQueuedDispatch, dispatch_next_queued_for_session, hub_command_from_record,
+        required_feature_dispatch_pause,
     },
     repositories::{AuditActor, PrinterOperationKind},
     sessions::{AgentSession, SessionToken, empty_pending_live_commands},
@@ -338,16 +338,9 @@ impl GcodeDispatchFixture {
         token: SessionToken,
         sender: &mpsc::Sender<Result<HubCommand, tonic::Status>>,
     ) -> SessionQueuedDispatch {
-        dispatch_next_queued_for_session(
-            &self.state,
-            self.tenant_id,
-            self.agent_id,
-            token,
-            sender,
-            conversion_options(),
-        )
-        .await
-        .unwrap()
+        dispatch_next_queued_for_session(&self.state, self.tenant_id, self.agent_id, token, sender)
+            .await
+            .unwrap()
     }
 
     async fn assert_failed(&self, command: CommandRecord, expected_error: &str) {
@@ -370,12 +363,6 @@ impl GcodeDispatchFixture {
             .unwrap();
         assert_eq!(persisted.status, status);
         assert_eq!(persisted.error.as_deref(), error);
-    }
-}
-
-fn conversion_options() -> CommandConversionOptions {
-    CommandConversionOptions {
-        require_artifact_download_path: false,
     }
 }
 

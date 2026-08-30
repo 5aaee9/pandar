@@ -203,8 +203,6 @@ pub struct AgentConfig {
     pub agent_version: String,
     #[arg(long, env = "PANDAR_PRINTERS", default_value = "[]")]
     pub printers: String,
-    #[arg(long, env = "PANDAR_ARTIFACT_ROOT", default_value = ".")]
-    pub artifact_root: std::path::PathBuf,
 }
 
 pub fn startup_summary(config: &AgentConfig) -> String {

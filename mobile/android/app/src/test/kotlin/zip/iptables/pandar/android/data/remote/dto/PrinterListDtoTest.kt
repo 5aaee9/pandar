@@ -3,16 +3,32 @@ package zip.iptables.pandar.android.data.remote.dto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import zip.iptables.pandar.android.data.remote.appJson
 
 class PrinterListDtoTest {
 
+    @Test fun rejects_printer_without_compatibility() {
+        val json = """
+        {"printers":[{
+          "id":"p2","tenant_id":"t1","agent_id":"a1","serial_number":"SN002",
+          "name":"Bare","model":null,"status":"offline",
+          "last_seen_at":"2026-07-05T10:00:00Z","created_at":"2026-01-01T00:00:00Z",
+          "materials":null
+        }]}
+        """.trimIndent()
+
+        assertThrows(kotlinx.serialization.MissingFieldException::class.java) {
+            appJson.decodeFromString<PrinterListDto>(json)
+        }
+    }
+
     @Test fun parses_full_printer_with_materials() {
         val json = """
         {"printers":[{
           "id":"p1","tenant_id":"t1","agent_id":"a1","serial_number":"SN001",
-          "name":"Garage A2L","model":"A2L","status":"running",
+          "name":"Garage A2L","model":"A2L","compatibility":$UNKNOWN_PRINTER_COMPATIBILITY_JSON,"status":"running",
           "last_seen_at":"2026-07-05T10:00:00Z","created_at":"2026-01-01T00:00:00Z",
           "nozzle_temperatures":[
             {"label":"0","current_celsius":"220","target_celsius":"220"},
@@ -63,7 +79,7 @@ class PrinterListDtoTest {
         val json = """
         {"printers":[{
           "id":"p2","tenant_id":"t1","agent_id":"a1","serial_number":"SN002",
-          "name":"Bare","model":null,"status":"offline",
+          "name":"Bare","model":null,"compatibility":$UNKNOWN_PRINTER_COMPATIBILITY_JSON,"status":"offline",
           "last_seen_at":"2026-07-05T10:00:00Z","created_at":"2026-01-01T00:00:00Z",
           "materials":null
         }]}

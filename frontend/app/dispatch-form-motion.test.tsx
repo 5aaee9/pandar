@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
 import { DispatchForm } from "./dispatch-form";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 function createTestQueryClient() {
   return new QueryClient({
@@ -40,6 +41,7 @@ const printers = [
     name: "Printer One",
     serial_number: "SN1",
     model: "N6",
+    compatibility: printerCompatibility("x2d"),
     materials: null,
   },
   {
@@ -47,6 +49,7 @@ const printers = [
     name: "Printer Two",
     serial_number: "SN2",
     model: "A1",
+    compatibility: printerCompatibility("a1"),
     materials: null,
   },
 ];

@@ -91,11 +91,13 @@ async fn execute_firmware_control_missing_command_is_a_protocol_rejection() {
 #[tokio::test]
 async fn hub_command_without_payload_is_a_protocol_rejection() {
     let (sender, mut receiver) = mpsc::channel(4);
+    let config = test_config();
+    let artifact_reader = crate::commands::HubArtifactReader::new(&config);
 
     handle_command_with_reader(
-        &test_config(),
+        &config,
         &NoopMachineGateway,
-        &crate::commands::FilesystemArtifactReader::new(std::path::PathBuf::new()),
+        &artifact_reader,
         &sender,
         HubCommand {
             command_id: "empty".into(),

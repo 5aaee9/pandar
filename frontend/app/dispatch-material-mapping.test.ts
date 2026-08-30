@@ -65,23 +65,6 @@ describe("dispatch material mapping", () => {
     });
   });
 
-  it("rejects nozzle assignments when a legacy payload lacks routing capabilities", () => {
-    const printer = fixturePrinter();
-    delete printer.compatibility;
-    const slots = printerAmsSlots(printer);
-    const filament = projectFilamentsForPlate(fixtureMetadata(), 1)[0];
-
-    expect(
-      slots
-        .filter((candidate) => candidate.kind === "ams")
-        .every(
-          (candidate) =>
-            candidate.routingRequired && candidate.toolhead === null,
-        ),
-    ).toBe(true);
-    expect(autoMapSlotSelections([filament], slots)).toEqual(new Map());
-  });
-
   it("applies Studio side, type, empty-slot, and external rules", () => {
     const filament = projectFilamentsForPlate(fixtureMetadata(), 1)[0];
     const slots = printerAmsSlots(fixturePrinter());

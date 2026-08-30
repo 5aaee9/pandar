@@ -1,11 +1,9 @@
-use std::path::PathBuf;
-
 use serde::Deserialize;
 use tokio::sync::mpsc;
 
 use super::{assert_failure_contains, test_config};
 use crate::commands::{
-    FilesystemArtifactReader, ack_event, handle_command_with_reader,
+    ack_event, handle_command_with_reader,
     handle_non_firmware_command_with_gateway as handle_command_with_gateway,
 };
 use pandar_protocol::agent::v1::{
@@ -53,8 +51,7 @@ async fn print_project_file_reads_artifact_reader_and_emits_ack_success() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
     let gateway = FakePrintGateway::ok(["SERIAL1"]);
-    let reader =
-        FakeArtifactReader::with_artifacts([("tenant/artifact/plate.3mf", b"abc".to_vec())]);
+    let reader = FakeArtifactReader::with_artifacts([(ARTIFACT_DOWNLOAD_PATH, b"abc".to_vec())]);
     let (sender, mut receiver) = mpsc::channel(2);
 
     handle_command_with_reader(
@@ -84,40 +81,12 @@ async fn print_project_file_reads_artifact_reader_and_emits_ack_success() {
     );
     assert_eq!(
         reader.reads.lock().await.as_slice(),
-        &["tenant/artifact/plate.3mf".to_string()]
+        &[ARTIFACT_DOWNLOAD_PATH.to_string()]
     );
 }
 
 #[tokio::test]
-async fn print_project_file_rejects_unsafe_artifact_path_before_gateway() {
-    let config = test_config();
-    let command_id = uuid::Uuid::new_v4().to_string();
-    let gateway = FakePrintGateway::ok(["SERIAL1"]);
-    let reader = FakeArtifactReader::default();
-    let (sender, mut receiver) = mpsc::channel(2);
-
-    handle_command_with_reader(
-        &config,
-        &gateway,
-        &reader,
-        &sender,
-        print_command(command_id.clone(), "SERIAL1", "../plate.3mf"),
-    )
-    .await
-    .unwrap();
-    drop(sender);
-
-    assert_eq!(
-        receiver.recv().await.unwrap(),
-        ack_event(&config, &command_id)
-    );
-    assert_failure_contains(receiver.recv().await.unwrap(), &command_id, "storage path");
-    assert!(gateway.prints.lock().await.is_empty());
-    assert_eq!(reader.reads.lock().await.as_slice(), &["../plate.3mf"]);
-}
-
-#[tokio::test]
-async fn print_project_file_missing_artifact_fails_with_storage_path_context() {
+async fn print_project_file_missing_artifact_has_hub_context() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
     let gateway = FakePrintGateway::ok(["SERIAL1"]);
@@ -142,12 +111,12 @@ async fn print_project_file_missing_artifact_fails_with_storage_path_context() {
     assert_failure_contains(
         receiver.recv().await.unwrap(),
         &command_id,
-        "tenant/artifact/missing.3mf",
+        "read print artifact from hub",
     );
     assert!(gateway.prints.lock().await.is_empty());
     assert_eq!(
         reader.reads.lock().await.as_slice(),
-        &["tenant/artifact/missing.3mf".to_string()]
+        &[ARTIFACT_DOWNLOAD_PATH.to_string()]
     );
 }
 
@@ -227,46 +196,6 @@ async fn print_project_file_unknown_serial_rejects_before_artifact_read() {
     assert!(reader.reads.lock().await.is_empty());
 }
 
-#[tokio::test]
-async fn filesystem_artifact_reader_reads_relative_path_under_configured_root() {
-    let temp_dir = temp_artifact_root();
-    std::fs::create_dir_all(temp_dir.join("tenant/artifact")).unwrap();
-    std::fs::write(temp_dir.join("tenant/artifact/plate.3mf"), b"abc").unwrap();
-    let config = crate::AgentConfig {
-        artifact_root: temp_dir,
-        ..test_config()
-    };
-    let command_id = uuid::Uuid::new_v4().to_string();
-    let gateway = FakePrintGateway::ok(["SERIAL1"]);
-    let reader = FilesystemArtifactReader::new(config.artifact_root.clone());
-    let (sender, mut receiver) = mpsc::channel(2);
-
-    handle_command_with_reader(
-        &config,
-        &gateway,
-        &reader,
-        &sender,
-        print_command(command_id.clone(), "SERIAL1", "tenant/artifact/plate.3mf"),
-    )
-    .await
-    .unwrap();
-    drop(sender);
-
-    assert_eq!(
-        receiver.recv().await.unwrap(),
-        ack_event(&config, &command_id)
-    );
-    assert_print_success(receiver.recv().await.unwrap(), &command_id);
-    assert_eq!(
-        gateway.prints.lock().await.as_slice(),
-        &[RecordedPrint {
-            serial_number: "SERIAL1".to_string(),
-            job_id: "job-1".to_string(),
-            artifact: b"abc".to_vec(),
-        }]
-    );
-}
-
 fn print_command(command_id: String, serial_number: &str, storage_path: &str) -> HubCommand {
     HubCommand {
         command_id,
@@ -277,7 +206,7 @@ fn print_command(command_id: String, serial_number: &str, storage_path: &str) ->
             serial_number: serial_number.to_string(),
             filename: "plate.3mf".to_string(),
             storage_path: storage_path.to_string(),
-            artifact_download_path: "/api/v1/agents/agent-1/artifacts/artifact-1".to_string(),
+            artifact_download_path: ARTIFACT_DOWNLOAD_PATH.to_string(),
             size_bytes: 3,
             plate_id: 1,
             studio_submission_id: 38_191,
@@ -378,14 +307,4 @@ fn assert_failure_excludes(event: AgentEvent, command_id: &str, needles: &[&str]
         }
         other => panic!("expected command result, got {other:?}"),
     }
-}
-
-fn temp_artifact_root() -> PathBuf {
-    let path = std::env::temp_dir().join(format!(
-        "pandar-agent-test-{}-{}",
-        std::process::id(),
-        uuid::Uuid::new_v4()
-    ));
-    std::fs::create_dir_all(&path).unwrap();
-    path
 }

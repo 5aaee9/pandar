@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import { PrinterRackPanel } from "./dashboard-printer-rack";
 import type { Printer } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 vi.mock("./actions", () => ({
   controlPrinter: vi.fn(),
@@ -30,6 +31,7 @@ const printer: Printer = {
   serial_number: "H2CSERIAL",
   name: "Lab H2C",
   model: "H2C",
+  compatibility: printerCompatibility("unknown"),
   status: "idle",
   last_seen_at: "2026-08-04T00:00:00Z",
   created_at: "2026-08-04T00:00:00Z",

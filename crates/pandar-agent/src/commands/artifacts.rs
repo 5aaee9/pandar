@@ -1,98 +1,14 @@
-use std::path::{Component, Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::{Context, bail};
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use std::time::Duration;
 
 use crate::AgentConfig;
-use pandar_protocol::agent::v1::PrintProjectFile;
 
 #[async_trait]
 pub trait ArtifactReader: Send + Sync {
-    async fn read_artifact(&self, storage_path: &str) -> anyhow::Result<Vec<u8>>;
-}
-
-pub struct FilesystemArtifactReader {
-    root: PathBuf,
-}
-
-impl FilesystemArtifactReader {
-    pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
-    }
-}
-
-#[async_trait]
-impl ArtifactReader for FilesystemArtifactReader {
-    async fn read_artifact(&self, storage_path: &str) -> anyhow::Result<Vec<u8>> {
-        resolve_artifact_path(&self.root, storage_path)?;
-        let root = self.root.clone();
-        let relative_path = storage_path.to_owned();
-        tokio::task::spawn_blocking(move || {
-            let directory = cap_std::fs::Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
-            directory.read(relative_path)
-        })
-        .await
-        .context("join print artifact read task")?
-        .with_context(|| format!("read print artifact {storage_path}"))
-    }
-}
-
-pub struct CommandArtifactReader {
-    local: FilesystemArtifactReader,
-    hub: HubArtifactReader,
-}
-
-impl CommandArtifactReader {
-    pub fn new(config: &AgentConfig) -> Self {
-        Self {
-            local: FilesystemArtifactReader::new(config.artifact_root.clone()),
-            hub: HubArtifactReader::new(config),
-        }
-    }
-
-    pub async fn read_print_artifact(
-        &self,
-        command: &pandar_protocol::agent::v1::PrintProjectFile,
-    ) -> anyhow::Result<Vec<u8>> {
-        if command.artifact_download_path.trim().is_empty() {
-            return self.local.read_artifact(&command.storage_path).await;
-        }
-
-        self.hub
-            .read_artifact(&command.artifact_download_path)
-            .await
-            .context("download print artifact from hub")
-    }
-}
-
-#[async_trait]
-pub trait PrintCommandArtifactReader: Send + Sync {
-    async fn read_print_artifact(&self, command: &PrintProjectFile) -> anyhow::Result<Vec<u8>>;
-}
-
-#[async_trait]
-impl PrintCommandArtifactReader for CommandArtifactReader {
-    async fn read_print_artifact(&self, command: &PrintProjectFile) -> anyhow::Result<Vec<u8>> {
-        self.read_print_artifact(command).await
-    }
-}
-
-pub struct LegacyCommandArtifactReader<'a, R> {
-    pub artifact_reader: &'a R,
-}
-
-#[async_trait]
-impl<R> PrintCommandArtifactReader for LegacyCommandArtifactReader<'_, R>
-where
-    R: ArtifactReader,
-{
-    async fn read_print_artifact(&self, command: &PrintProjectFile) -> anyhow::Result<Vec<u8>> {
-        self.artifact_reader
-            .read_artifact(&command.storage_path)
-            .await
-    }
+    async fn read_artifact(&self, artifact_download_path: &str) -> anyhow::Result<Vec<u8>>;
 }
 
 pub struct HubArtifactReader {
@@ -183,36 +99,4 @@ pub fn artifact_download_url(
         base.trim_end_matches('/'),
         artifact_download_path.trim_start_matches('/')
     ))
-}
-
-pub fn resolve_artifact_path(root: &Path, storage_path: &str) -> anyhow::Result<PathBuf> {
-    let storage_path = Path::new(storage_path);
-    if storage_path.is_absolute() {
-        bail!("artifact storage path must be relative");
-    }
-    if storage_path
-        .components()
-        .any(|component| !matches!(component, Component::Normal(_)))
-    {
-        bail!("artifact storage path must not contain parent or prefix components");
-    }
-
-    Ok(root.join(storage_path))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{ArtifactReader, FilesystemArtifactReader};
-
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn filesystem_reader_rejects_symlink_escape() {
-        let root = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
-        std::fs::write(outside.path().join("secret.3mf"), b"secret").unwrap();
-        std::os::unix::fs::symlink(outside.path(), root.path().join("escape")).unwrap();
-        let reader = FilesystemArtifactReader::new(root.path());
-
-        assert!(reader.read_artifact("escape/secret.3mf").await.is_err());
-    }
 }

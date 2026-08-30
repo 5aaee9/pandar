@@ -71,6 +71,9 @@ pub(crate) struct ValidatedPrintProjectFile<'a> {
 pub(crate) fn validate_print_project_file_command(
     command: &PrintProjectFile,
 ) -> anyhow::Result<ValidatedPrintProjectFile<'_>> {
+    if command.artifact_download_path.trim().is_empty() {
+        bail!("missing artifact_download_path");
+    }
     if command.plate_id == 0 || command.plate_id > i32::MAX as u32 {
         bail!("invalid plate_id; expected 1..={}", i32::MAX);
     }

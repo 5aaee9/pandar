@@ -247,7 +247,6 @@ async fn assert_refresh_child_drops_before_session_cleanup(stop: Stop, serial: &
         agent_credential: "credential".into(),
         agent_version: "test".into(),
         printers: "[]".into(),
-        artifact_root: std::path::PathBuf::from("."),
     };
     let transport = BlockingRefreshTransport::new();
     let gateway = Arc::new(RefreshLifecycleGateway::new(

@@ -41,6 +41,7 @@ import zip.iptables.pandar.android.data.remote.dto.MobileTicketExchangeResponse
 import zip.iptables.pandar.android.data.remote.dto.PrinterControlRequest
 import zip.iptables.pandar.android.data.remote.dto.PrinterDto
 import zip.iptables.pandar.android.data.remote.dto.PrinterListDto
+import zip.iptables.pandar.android.data.remote.dto.UNKNOWN_PRINTER_COMPATIBILITY_JSON
 import zip.iptables.pandar.android.data.remote.dto.RecoveryReasonRequestDto
 import zip.iptables.pandar.android.data.remote.dto.ReprintJobRequestDto
 import zip.iptables.pandar.android.data.remote.ws.PrinterEventsRepository
@@ -291,7 +292,7 @@ class PandarRepositorySessionTest {
     companion object {
         private const val PRINTERS = """
             {"printers":[{"id":"printer-1","tenant_id":"tenant-1","agent_id":"agent-1",
-            "serial_number":"SN001","name":"Printer","model":null,"status":"idle",
+            "serial_number":"SN001","name":"Printer","model":null,"compatibility":$UNKNOWN_PRINTER_COMPATIBILITY_JSON,"status":"idle",
             "last_seen_at":"seen","created_at":"created","materials":null}]}
         """
         private const val EMPTY_PRINTERS = """{"printers":[]}"""

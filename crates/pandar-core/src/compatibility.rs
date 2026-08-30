@@ -75,11 +75,8 @@ pub struct DiagnosticCompatibility {
     pub external_storage: Capability,
     pub ftps_tls_1_2_cap: bool,
     pub features: CompatibilityFeatures,
-    #[serde(default = "PrintOptionCapabilities::unknown")]
     pub print_options: PrintOptionCapabilities,
-    #[serde(default = "unknown_capability")]
     pub chamber_fan: Capability,
-    #[serde(default = "unknown_nozzle_layout")]
     pub nozzle_layout: NozzleLayout,
 }
 
@@ -274,14 +271,6 @@ fn nozzle_layout(model: Option<&str>) -> NozzleLayout {
         }
         _ => NozzleLayout::Unknown,
     }
-}
-
-const fn unknown_capability() -> Capability {
-    Capability::Unknown
-}
-
-const fn unknown_nozzle_layout() -> NozzleLayout {
-    NozzleLayout::Unknown
 }
 
 pub fn normalize_model(model: &str) -> Option<String> {

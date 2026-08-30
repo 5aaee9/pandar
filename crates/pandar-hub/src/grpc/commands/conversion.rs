@@ -18,11 +18,6 @@ use pandar_protocol::agent::v1::{
     StudioTaskMetadata, hub_command,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CommandConversionOptions {
-    pub require_artifact_download_path: bool,
-}
-
 pub(super) fn persisted_printer_operation_payload(
     command: &CommandRecord,
 ) -> Result<Option<PrinterOperationPayload>, serde_json::Error> {
@@ -45,18 +40,6 @@ fn invalid_printer_operation_payload_status(
 }
 
 pub fn hub_command_from_record(command: CommandRecord) -> Result<HubCommand, Status> {
-    hub_command_from_record_with_options(
-        command,
-        CommandConversionOptions {
-            require_artifact_download_path: false,
-        },
-    )
-}
-
-pub fn hub_command_from_record_with_options(
-    command: CommandRecord,
-    options: CommandConversionOptions,
-) -> Result<HubCommand, Status> {
     let command_id = command.id.to_string();
     let command = match command.kind.as_str() {
         "refresh_printers" => hub_command::Command::RefreshPrinters(RefreshPrinters {}),
@@ -179,9 +162,7 @@ pub fn hub_command_from_record_with_options(
                     );
                     Status::internal("invalid print command payload")
                 })?;
-            if options.require_artifact_download_path
-                && payload.artifact_download_path.trim().is_empty()
-            {
+            if payload.artifact_download_path.trim().is_empty() {
                 return Err(Status::internal("missing artifact download path"));
             }
             let (print_options, task_metadata, submission_source) =

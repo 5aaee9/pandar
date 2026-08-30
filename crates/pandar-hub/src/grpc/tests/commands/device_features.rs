@@ -6,8 +6,7 @@ use tokio::sync::{Mutex, mpsc};
 use super::*;
 use crate::{
     grpc::commands::{
-        CommandConversionOptions, SessionQueuedDispatch, dispatch_next_queued_for_session,
-        required_feature_dispatch_pause,
+        SessionQueuedDispatch, dispatch_next_queued_for_session, required_feature_dispatch_pause,
     },
     repositories::{AuditActor, PrinterOperationKind},
     sessions::{AgentSession, SessionToken, empty_pending_live_commands},
@@ -34,7 +33,6 @@ async fn required_device_features_dispatch_only_to_matching_capable_current_sess
         fixture.agent_id,
         token,
         &sender,
-        conversion_options(),
     )
     .await
     .unwrap();
@@ -365,7 +363,6 @@ async fn assert_replacement_waits_at(phase: required_feature_dispatch_pause::Pha
             command.agent_id,
             token,
             &dispatch_sender,
-            conversion_options(),
         )
         .await
         .unwrap()
@@ -526,16 +523,9 @@ impl DispatchFixture {
         token: SessionToken,
         sender: &mpsc::Sender<Result<HubCommand, tonic::Status>>,
     ) -> SessionQueuedDispatch {
-        dispatch_next_queued_for_session(
-            &self.state,
-            self.tenant_id,
-            self.agent_id,
-            token,
-            sender,
-            conversion_options(),
-        )
-        .await
-        .unwrap()
+        dispatch_next_queued_for_session(&self.state, self.tenant_id, self.agent_id, token, sender)
+            .await
+            .unwrap()
     }
 
     async fn assert_failed(&self, command: CommandRecord, expected_context: &str) {
@@ -567,12 +557,6 @@ impl DispatchFixture {
             .unwrap();
         assert_eq!(persisted.status, status);
         assert_eq!(persisted.error.as_deref(), error);
-    }
-}
-
-fn conversion_options() -> CommandConversionOptions {
-    CommandConversionOptions {
-        require_artifact_download_path: false,
     }
 }
 

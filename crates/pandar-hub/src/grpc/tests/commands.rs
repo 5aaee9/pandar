@@ -11,10 +11,7 @@ use tracing_subscriber::fmt::MakeWriter;
 
 use super::*;
 use crate::{
-    grpc::commands::{
-        CommandConversionOptions, handle_result_and_job, hub_command_from_record,
-        hub_command_from_record_with_options,
-    },
+    grpc::commands::{handle_result_and_job, hub_command_from_record},
     repositories::{
         CreatePrintJob, DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload,
         PrintProjectFilePayload, PrinterAxis, PrinterOperationKind, PrinterOperationPayload,

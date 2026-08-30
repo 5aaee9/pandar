@@ -4,10 +4,7 @@ use tonic::Status;
 mod agent_capabilities;
 mod conversion;
 mod device_features;
-pub use conversion::{
-    CommandConversionOptions, hub_command_from_record, hub_command_from_record_with_options,
-    live_printer_operation_hub_command,
-};
+pub use conversion::{hub_command_from_record, live_printer_operation_hub_command};
 #[cfg(test)]
 pub(crate) use device_features::pause as required_feature_dispatch_pause;
 pub(super) use device_features::{

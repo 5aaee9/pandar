@@ -300,6 +300,7 @@ fn snapshot_control_event(tenant_id: pandar_core::TenantId, enriched: bool) -> H
                 "serial_number": "SN-1",
                 "name": "Printer",
                 "model": null,
+                "compatibility": pandar_core::compatibility::compatibility_for_model(None),
                 "status": "RUNNING",
                 "last_seen_at": "2026-07-10T00:00:00Z",
                 "created_at": "2026-07-10T00:00:00Z",

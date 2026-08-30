@@ -16,8 +16,7 @@ async fn print_transfer_failure_emits_redacted_phase_and_complete_cause() {
         ),
         ACCESS_CODE,
     );
-    let reader =
-        FakeArtifactReader::with_artifacts([("tenant/artifact/plate.3mf", b"abc".to_vec())]);
+    let reader = FakeArtifactReader::with_artifacts([(ARTIFACT_DOWNLOAD_PATH, b"abc".to_vec())]);
     let (sender, mut receiver) = mpsc::channel(2);
 
     handle_command_with_reader(

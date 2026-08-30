@@ -10,7 +10,7 @@ class PrinterEventsDecoderTest {
         val json = """
         {"type":"printer_snapshot","printer":{
           "id":"p1","tenant_id":"t1","agent_id":"a1","serial_number":"SN001","name":"A",
-          "model":null,"status":"idle","last_seen_at":"x","created_at":"y","materials":null}}
+          "model":null,"compatibility":$UNKNOWN_PRINTER_COMPATIBILITY_JSON,"status":"idle","last_seen_at":"x","created_at":"y","materials":null}}
         """.trimIndent()
 
         val event = appJson.decodeFromString<PrinterEventDto>(json)
@@ -23,7 +23,7 @@ class PrinterEventsDecoderTest {
         val json = """
         {"type":"printer_snapshot","printer":{
           "id":"p1","tenant_id":"t1","agent_id":"a1","serial_number":"20P001","name":"A",
-          "model":"A1","status":"running","last_seen_at":"x","created_at":"y",
+          "model":"A1","compatibility":$UNKNOWN_PRINTER_COMPATIBILITY_JSON,"status":"running","last_seen_at":"x","created_at":"y",
           "materials":{"ams_units":[],"external_spools":[],"active_tray":null,"observed_at":"m"},
           "state_revision":42,
           "print":{

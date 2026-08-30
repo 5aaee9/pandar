@@ -59,7 +59,6 @@ fn parses_agent_cli_config() {
         config.printers,
         r#"[{"host":"192.0.2.10","serial":"SERIAL","access_code":"12345678"}]"#
     );
-    assert_eq!(config.artifact_root, std::path::PathBuf::from("."));
 }
 
 #[tokio::test]
@@ -86,7 +85,6 @@ fn startup_summary_names_hub_and_agent() {
         agent_credential: "pandar_ac_test".to_owned(),
         agent_version: env!("CARGO_PKG_VERSION").to_owned(),
         printers: "[]".to_owned(),
-        artifact_root: ".".into(),
     };
 
     assert_eq!(
@@ -273,7 +271,6 @@ fn test_config() -> AgentConfig {
         agent_credential: "pandar_ac_test".to_owned(),
         agent_version: "9.8.7".to_owned(),
         printers: "[]".to_owned(),
-        artifact_root: ".".into(),
     }
 }
 

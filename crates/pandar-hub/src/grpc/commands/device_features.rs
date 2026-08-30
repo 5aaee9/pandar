@@ -3,8 +3,8 @@ use tokio::sync::mpsc;
 use tonic::Status;
 
 use super::{
-    CommandConversionOptions, agent_capabilities, conversion::persisted_printer_operation_payload,
-    hub_command_from_record_with_options, mark_sent_and_job, repository_status,
+    agent_capabilities, conversion::persisted_printer_operation_payload, hub_command_from_record,
+    mark_sent_and_job, repository_status,
 };
 use crate::{AppState, repositories::PrinterOperationPayload, sessions::SessionToken};
 use pandar_protocol::agent::v1::{AgentCapability, DeviceFeature, HubCommand};
@@ -101,7 +101,6 @@ pub(crate) async fn dispatch_next_queued_for_session(
     agent_id: AgentId,
     token: SessionToken,
     command_sender: &mpsc::Sender<Result<HubCommand, Status>>,
-    options: CommandConversionOptions,
 ) -> Result<SessionQueuedDispatch, Status> {
     let _lease = state
         .sessions()
@@ -198,7 +197,7 @@ pub(crate) async fn dispatch_next_queued_for_session(
         return Ok(SessionQueuedDispatch::SessionEnded);
     }
 
-    let hub_command = hub_command_from_record_with_options(command.clone(), options)?;
+    let hub_command = hub_command_from_record(command.clone())?;
     if let Err(status) =
         mark_sent_and_job(state, command.clone(), tenant_id, agent_id, &session_id).await
     {

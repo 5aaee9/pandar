@@ -12,6 +12,7 @@ import {
   DashboardCameraProvider,
 } from "./dashboard-printer-camera-control";
 import type { Agent, Printer, Tenant } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 vi.mock("./actions", () => ({
   controlPrinter: vi.fn(),
@@ -53,6 +54,7 @@ export const printer: Printer = {
   serial_number: "SERIAL123",
   name: "Office A1",
   model: "A1",
+  compatibility: printerCompatibility("a1"),
   status: "idle",
   last_seen_at: "2026-07-02T00:00:00Z",
   created_at: "2026-07-02T00:00:00Z",

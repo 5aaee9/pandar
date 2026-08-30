@@ -13,6 +13,7 @@ import type {
   Printer,
   Tenant,
 } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 vi.mock("./actions", () => ({
   linkPrinter: vi.fn(),
@@ -86,6 +87,7 @@ const linkedPrinter: Printer = {
   serial_number: "SN-LINKED",
   name: "Office A1",
   model: "A1",
+  compatibility: printerCompatibility("a1"),
   status: "idle",
   last_seen_at: "2026-07-02T00:00:00Z",
   created_at: "2026-07-02T00:00:00Z",

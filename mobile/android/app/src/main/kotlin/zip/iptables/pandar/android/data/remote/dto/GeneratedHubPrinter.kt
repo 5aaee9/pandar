@@ -325,7 +325,7 @@ data class PrinterDto(
     val serialNumber: String,
     val name: String,
     val model: String? = null,
-    val compatibility: PrinterCompatibilityDto? = null,
+    val compatibility: PrinterCompatibilityDto,
     val status: String,
     @SerialName("last_seen_at")
     val lastSeenAt: String,

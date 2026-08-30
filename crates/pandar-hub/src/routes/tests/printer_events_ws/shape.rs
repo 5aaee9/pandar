@@ -1,8 +1,8 @@
 use super::*;
 
 #[test]
-fn printer_event_rolling_decode_accepts_legacy_and_old_shape_ignores_enrichment() {
-    let legacy = serde_json::json!({
+fn printer_event_decode_requires_compatibility_and_old_shape_ignores_enrichment() {
+    let mut current = serde_json::json!({
         "type": "printer_snapshot",
         "printer": {
             "id": "printer-1",
@@ -23,8 +23,13 @@ fn printer_event_rolling_decode_accepts_legacy_and_old_shape_ignores_enrichment(
             "materials": null
         }
     });
+    assert!(
+        serde_json::from_value::<crate::printer_events::PrinterEvent>(current.clone()).is_err()
+    );
+    current["printer"]["compatibility"] =
+        serde_json::to_value(pandar_core::compatibility::compatibility_for_model(None)).unwrap();
     let decoded: crate::printer_events::PrinterEvent =
-        serde_json::from_value(legacy).expect("legacy snapshot should decode");
+        serde_json::from_value(current).expect("current snapshot should decode");
     let crate::printer_events::PrinterEvent::PrinterSnapshot { printer } = decoded else {
         panic!("expected legacy printer snapshot")
     };

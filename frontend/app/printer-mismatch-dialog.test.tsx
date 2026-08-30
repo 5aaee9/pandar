@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import zh from "../messages/zh.json";
 import type { Printer } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 import {
   PrinterMismatchCoordinator,
   PrinterMismatchWarning,
@@ -22,6 +23,10 @@ function mismatchPrinter(
   name: string,
   overrides: Partial<Printer> = {},
 ): Printer {
+  const {
+    compatibility = printerCompatibility("a1"),
+    ...otherOverrides
+  } = overrides;
   return {
     id,
     tenant_id: "tenant-1",
@@ -29,6 +34,7 @@ function mismatchPrinter(
     serial_number: "20P123",
     name,
     model: "A1",
+    compatibility,
     status: "running",
     last_seen_at: "2026-07-10T00:00:00Z",
     created_at: "2026-07-10T00:00:00Z",
@@ -51,7 +57,7 @@ function mismatchPrinter(
       print_error: 83_918_929,
       printer_job_id: "native-job",
     },
-    ...overrides,
+    ...otherOverrides,
   };
 }
 

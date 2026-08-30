@@ -46,7 +46,6 @@ pub struct PrinterEventPrinter {
     pub serial_number: String,
     pub name: String,
     pub model: Option<String>,
-    #[serde(default = "unknown_printer_compatibility")]
     pub compatibility: DiagnosticCompatibility,
     pub status: String,
     pub last_seen_at: String,
@@ -135,10 +134,6 @@ pub async fn fence_printer_nozzle_system(
         printer.printer.bambu_nozzle_system = None;
     }
     printer
-}
-
-fn unknown_printer_compatibility() -> DiagnosticCompatibility {
-    compatibility_for_model(None)
 }
 
 pub fn printer_event_printer(

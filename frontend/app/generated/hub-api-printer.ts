@@ -193,7 +193,7 @@ export type Printer = {
   serial_number: string;
   name: string;
   model: string | null;
-  compatibility?: PrinterCompatibility;
+  compatibility: PrinterCompatibility;
   status: string;
   last_seen_at: string;
   created_at: string;

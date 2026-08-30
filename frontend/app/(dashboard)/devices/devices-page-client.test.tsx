@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../../../messages/en.json";
 import type { Printer, Tenant } from "../../dashboard-types";
+import { printerCompatibility } from "../../printer-compatibility.test-utils";
 import { DevicesPageClient } from "./devices-page-client";
 
 const tenant: Tenant = {
@@ -21,6 +22,7 @@ const printer: Printer = {
   serial_number: "SERIAL-1",
   name: "Office X2D",
   model: "X2D",
+  compatibility: printerCompatibility("x2d"),
   status: "FAILED",
   last_seen_at: "2026-07-28T18:33:46.063265169Z",
   created_at: "2026-07-28T00:00:00Z",

@@ -31,7 +31,6 @@ fn test_config() -> AgentConfig {
         agent_credential: "pandar_ac_test".to_owned(),
         agent_version: "9.8.7".to_owned(),
         printers: "[]".to_owned(),
-        artifact_root: ".".into(),
     }
 }
 

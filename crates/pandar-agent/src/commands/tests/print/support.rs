@@ -15,6 +15,8 @@ use crate::{
 };
 use pandar_protocol::agent::v1::PrintProjectFile;
 
+pub(super) const ARTIFACT_DOWNLOAD_PATH: &str = "/api/v1/agents/agent-1/artifacts/artifact-1";
+
 #[derive(Debug, Clone, Default)]
 pub(super) struct FakeArtifactReader {
     artifacts: Arc<HashMap<String, Vec<u8>>>,
@@ -39,13 +41,15 @@ impl FakeArtifactReader {
 
 #[async_trait]
 impl ArtifactReader for FakeArtifactReader {
-    async fn read_artifact(&self, storage_path: &str) -> anyhow::Result<Vec<u8>> {
-        self.reads.lock().await.push(storage_path.to_string());
-        crate::commands::resolve_artifact_path(std::path::Path::new("."), storage_path)?;
+    async fn read_artifact(&self, artifact_download_path: &str) -> anyhow::Result<Vec<u8>> {
+        self.reads
+            .lock()
+            .await
+            .push(artifact_download_path.to_string());
         self.artifacts
-            .get(storage_path)
+            .get(artifact_download_path)
             .cloned()
-            .ok_or_else(|| anyhow::anyhow!("fake artifact missing at {storage_path}"))
+            .ok_or_else(|| anyhow::anyhow!("fake artifact missing"))
     }
 }
 

@@ -31,7 +31,7 @@ export function useDispatchMaterialMapping(
     const slots = printerAmsSlots(printer);
     const key = [
       printer.id,
-      printer.compatibility?.normalized_model,
+      printer.compatibility.normalized_model,
       plateId,
       useAms,
       ...filaments.map((filament) =>
@@ -59,6 +59,7 @@ export function useDispatchMaterialMapping(
       plateId,
       slots,
       initialSelections: autoMapSlotSelections(filaments, slots, useAms),
+      nozzleLayout: printer.compatibility.nozzle_layout,
     };
   }, [metadata, plateId, printer, useAms]);
   const [selectionState, setSelectionState] = useState<SelectionState | null>(
@@ -98,7 +99,7 @@ export function useDispatchMaterialMapping(
         ? {
             editorKey: config.key,
             filaments: config.filaments,
-            nozzleLayout: printer?.compatibility?.nozzle_layout ?? "unknown",
+            nozzleLayout: config.nozzleLayout,
             onSelectSlot: selectSlot,
             payload,
             plateId: config.plateId,

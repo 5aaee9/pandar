@@ -426,10 +426,8 @@ Phase 4 carries refreshed printer snapshots into hub inventory. `RefreshPrinters
 
 Phase 5 adds the `PrintProjectFile` command executor:
 
-- `PrintProjectFile` carries `artifact_download_path`; agents download artifact bytes from Hub HTTP with their agent credential. `PANDAR_HUB_API_URL` configures that HTTP base URL when the gRPC URL is not HTTP(S).
-- `PANDAR_ARTIFACT_ROOT` controls the legacy local artifact reader for commands that do not include `artifact_download_path` and defaults to the current directory.
-- The agent validates the requested Bambu serial against configured printers before resolving or reading artifact paths.
-- Artifact storage paths must be relative paths below `PANDAR_ARTIFACT_ROOT`; absolute paths, `..`, and prefix escapes are rejected.
+- Every `PrintProjectFile` carries `artifact_download_path`; agents download artifact bytes from the authenticated Hub route and reject commands without it. `PANDAR_HUB_API_URL` configures that HTTP base URL when the gRPC URL is not HTTP(S).
+- The agent validates the requested Bambu serial against configured printers before requesting artifact bytes.
 - The configured machine gateway composes machine file upload and MQTT `project_file` publish in order. It uploads the artifact filename through the file-transfer boundary, then publishes to `device/{serial}/request` with QoS `1`, `ftp://{filename}`, `Metadata/plate_{plate_id}.gcode`, job/subtask ids, and print flags.
 - Unit tests use fake file-transfer and MQTT transports to prove upload-before-publish behavior and no-publish-on-upload-failure behavior without opening real Bambu sockets.
 - Configured runtime agents use the Bambu FTPS adapter for machine file upload. The adapter uses implicit FTPS on port `990`, the Bambu LAN TLS policy for printer-local/self-signed certificates, protected data mode only, and server-side size verification before MQTT `project_file` publish. Tests use fake transfer transports and do not open live Bambu sockets.

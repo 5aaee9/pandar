@@ -7,6 +7,7 @@ import {
   plateRecoveryIssue,
 } from "./plate-mismatch-actions";
 import type { PrinterPrintState } from "./printer-live-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 const print: PrinterPrintState = {
   task_generation: 1,
@@ -34,6 +35,7 @@ const printer: Printer = {
   serial_number: "20P123",
   name: "Office A1",
   model: "A1",
+  compatibility: printerCompatibility("a1"),
   status: "running",
   last_seen_at: "2026-07-10T00:00:00Z",
   created_at: "2026-07-10T00:00:00Z",

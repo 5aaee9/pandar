@@ -4,9 +4,7 @@ use tonic::Status;
 
 use crate::{
     AppState,
-    grpc::commands::{
-        CommandConversionOptions, SessionQueuedDispatch, dispatch_next_queued_for_session,
-    },
+    grpc::commands::{SessionQueuedDispatch, dispatch_next_queued_for_session},
     sessions::SessionToken,
 };
 use pandar_protocol::agent::v1::HubCommand;
@@ -109,7 +107,6 @@ async fn drain_commands(
                 agent_id,
                 token,
                 command_sender,
-                conversion_options(state),
             ) => dispatch,
         } {
             Ok(dispatch) => {
@@ -157,12 +154,6 @@ async fn finalize_closing_session(
             error = %status,
             "failed to finalize queued command for closing agent session"
         );
-    }
-}
-
-fn conversion_options(state: &AppState) -> CommandConversionOptions {
-    CommandConversionOptions {
-        require_artifact_download_path: state.artifact_storage().backend().requires_hub_fetch(),
     }
 }
 
@@ -225,18 +216,10 @@ mod tests {
 
         let token = crate::grpc::register_test_session(&state, tenant.id, agent.id).await;
         let (command_sender, _command_receiver) = mpsc::channel(1);
-        let err = dispatch_next_queued_for_session(
-            &state,
-            tenant.id,
-            agent.id,
-            token,
-            &command_sender,
-            CommandConversionOptions {
-                require_artifact_download_path: true,
-            },
-        )
-        .await
-        .unwrap_err();
+        let err =
+            dispatch_next_queued_for_session(&state, tenant.id, agent.id, token, &command_sender)
+                .await
+                .unwrap_err();
 
         assert_eq!(err.message(), "missing artifact download path");
         assert_eq!(

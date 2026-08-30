@@ -77,7 +77,6 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
         agent_credential: "pandar_ac_test".to_owned(),
         agent_version: "9.8.7".to_owned(),
         printers: "[]".to_owned(),
-        artifact_root: ".".into(),
     };
     let progress = PrintReportProgress {
         serial: "01S00EXAMPLE".to_owned(),
@@ -183,7 +182,6 @@ async fn forward_print_reports_uses_transport_without_live_socket() {
         agent_credential: "pandar_ac_test".to_owned(),
         agent_version: "9.8.7".to_owned(),
         printers: "[]".to_owned(),
-        artifact_root: ".".into(),
     };
     let endpoint = endpoint();
     let forwarder = tokio::spawn({
@@ -237,7 +235,6 @@ async fn forward_print_reports_emits_printer_snapshot_with_temperatures() {
         agent_credential: "pandar_ac_test".to_owned(),
         agent_version: "9.8.7".to_owned(),
         printers: "[]".to_owned(),
-        artifact_root: ".".into(),
     };
     let endpoint = endpoint();
     let task = tokio::spawn({
@@ -294,7 +291,6 @@ async fn forward_print_reports_emits_printer_snapshot_for_chamber_target_only() 
         agent_credential: "pandar_ac_test".to_owned(),
         agent_version: "9.8.7".to_owned(),
         printers: "[]".to_owned(),
-        artifact_root: ".".into(),
     };
     let endpoint = endpoint();
     let task = tokio::spawn({
@@ -343,7 +339,6 @@ async fn forward_print_reports_emits_material_snapshot_for_unsolicited_ams_repor
         agent_credential: "pandar_ac_test".to_owned(),
         agent_version: "9.8.7".to_owned(),
         printers: "[]".to_owned(),
-        artifact_root: ".".into(),
     };
     let transport = FakeMqttTransport::with_reports([ams_print_report("IDLE", "PLA", None, None)]);
     let (sender, mut receiver) = mpsc::channel(2);

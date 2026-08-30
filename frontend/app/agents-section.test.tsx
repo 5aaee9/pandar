@@ -7,6 +7,7 @@ import en from "../messages/en.json";
 import { AgentsSection } from "./agents-section";
 import { QueryClientTestProvider } from "./query-client.test-utils";
 import type { Agent, Printer, Tenant } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 vi.mock("./actions", () => ({
   deleteAgent: vi.fn(),
@@ -66,6 +67,7 @@ const printer: Printer = {
   serial_number: "SN1",
   name: "Office A1",
   model: "X1C",
+  compatibility: printerCompatibility("unknown"),
   status: "idle",
   last_seen_at: "2026-07-02T00:00:00Z",
   created_at: "2026-07-02T00:00:00Z",

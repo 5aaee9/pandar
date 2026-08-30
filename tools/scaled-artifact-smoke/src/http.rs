@@ -17,7 +17,7 @@ use serde_json::Value;
 use tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest};
 use tower::ServiceExt;
 
-use crate::fixture::{ARTIFACT_BYTES, SmokeFixture, SmokeWorld};
+use crate::fixture::{ARTIFACT_BYTES, SmokeFixture};
 
 pub async fn create_print_through_multipart_route(
     state: &AppState,
@@ -145,7 +145,6 @@ pub async fn download_artifact_route(
 
 pub async fn download_artifact(
     state: &AppState,
-    world: &SmokeWorld,
     fixture: &SmokeFixture,
     path: &str,
 ) -> anyhow::Result<()> {
@@ -159,7 +158,6 @@ pub async fn download_artifact(
         agent_credential: fixture.agent_credential.clone(),
         agent_version: "scaled-smoke".to_owned(),
         printers: "[]".to_owned(),
-        artifact_root: world.temp.path().join("agent-artifacts"),
     };
     let downloaded = HubArtifactReader::new(&agent_config)
         .read_artifact(path)

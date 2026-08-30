@@ -79,13 +79,7 @@ pub async fn artifact_dispatch_download(
         "command was not marked sent"
     );
 
-    download_artifact(
-        &world.hub_b,
-        &world,
-        &fixture,
-        &print.artifact_download_path,
-    )
-    .await?;
+    download_artifact(&world.hub_b, &fixture, &print.artifact_download_path).await?;
     concurrent_plugin_pressure(iteration, config).await?;
     Ok(())
 }
@@ -292,11 +286,11 @@ async fn concurrent_plugin_pressure(
     );
     if let Some(first) = prints.first() {
         let fixture = fixtures.first().context("expected first fixture")?;
-        download_artifact(&world.hub_b, &world, fixture, &first.artifact_download_path).await?;
+        download_artifact(&world.hub_b, fixture, &first.artifact_download_path).await?;
     }
     if let Some(last) = prints.last() {
         let fixture = fixtures.last().context("expected last fixture")?;
-        download_artifact(&world.hub_b, &world, fixture, &last.artifact_download_path).await?;
+        download_artifact(&world.hub_b, fixture, &last.artifact_download_path).await?;
     }
     Ok(())
 }

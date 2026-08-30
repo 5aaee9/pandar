@@ -82,7 +82,6 @@ describe("PrinterCoolingSystem", () => {
   });
 
   it.each([
-    ["absent", undefined],
     ["unknown", printerCompatibility("unknown")],
     ["unsupported", printerCompatibility("a1")],
   ])("does not expose a chamber fan when support is %s", (_state, compatibility) => {

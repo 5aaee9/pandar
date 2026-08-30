@@ -251,7 +251,7 @@ export function DispatchForm({
       </div>
       <DispatchPrintOptions
         key={selectedPrinter
-          ? selectedPrinter.id + ':' + (selectedPrinter.compatibility?.normalized_model ?? 'unknown')
+          ? selectedPrinter.id + ':' + (selectedPrinter.compatibility.normalized_model ?? 'unknown')
           : 'unknown'}
         compatibility={selectedPrinter?.compatibility}
       />

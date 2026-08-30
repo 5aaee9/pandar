@@ -44,9 +44,6 @@ async fn cancellation_winning_dispatch_cas_skips_command_and_keeps_session_usabl
             agent_id,
             token,
             &dispatch_sender,
-            CommandConversionOptions {
-                require_artifact_download_path: false,
-            },
         )
         .await
     });
@@ -70,18 +67,9 @@ async fn cancellation_winning_dispatch_cas_skips_command_and_keeps_session_usabl
         .await
         .unwrap();
     assert_eq!(
-        dispatch_next_queued_for_session(
-            &state,
-            tenant_id,
-            agent_id,
-            token,
-            &sender,
-            CommandConversionOptions {
-                require_artifact_download_path: false,
-            },
-        )
-        .await
-        .unwrap(),
+        dispatch_next_queued_for_session(&state, tenant_id, agent_id, token, &sender,)
+            .await
+            .unwrap(),
         SessionQueuedDispatch::Sent
     );
     let sent = receiver.recv().await.unwrap().unwrap();

@@ -9,7 +9,6 @@ pub struct PrintProjectFilePayload {
     pub serial_number: String,
     pub filename: String,
     pub storage_path: String,
-    #[serde(default)]
     pub artifact_download_path: String,
     pub size_bytes: u64,
     pub plate_id: u32,

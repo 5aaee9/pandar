@@ -10,6 +10,7 @@ import en from "../messages/en.json";
 import { DashboardCameraProvider } from "./dashboard-printer-camera-control";
 import { PrinterControlsPanel } from "./dashboard-printer-temperature-controls";
 import type { Printer } from "./dashboard-types";
+import { printerCompatibility } from "./printer-compatibility.test-utils";
 
 const controlPrinterMock = vi.hoisted(() => vi.fn());
 
@@ -42,6 +43,7 @@ const runningPrinter: Printer = {
   serial_number: "SERIAL123",
   name: "Office A1",
   model: "A1",
+  compatibility: printerCompatibility("a1"),
   status: "RUNNING",
   last_seen_at: "2026-07-02T00:00:00Z",
   created_at: "2026-07-02T00:00:00Z",

@@ -80,6 +80,7 @@ message PrintProjectFile {
   string storage_path = 6;
   uint64 size_bytes = 7;
   uint32 plate_id = 8;
+  // Required authenticated Hub API path for artifact bytes.
   string artifact_download_path = 14;
   reserved 9 to 13, 15 to 19;
   reserved "use_ams", "flow_cali", "timelapse", "ams_mapping_json", "ams_mapping2_json";

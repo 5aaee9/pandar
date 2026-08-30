@@ -160,4 +160,21 @@ describe("decodeHubResponse", () => {
       "Invalid Hub payload at $.printers: expected present field",
     );
   });
+
+  it("requires the canonical printer compatibility projection", () => {
+    expect(() =>
+      decodeHubPayload("Printer", {
+        id: "printer-1",
+        tenant_id: "tenant-1",
+        agent_id: "agent-1",
+        serial_number: "SERIAL1",
+        name: "Printer",
+        model: null,
+        status: "online",
+        last_seen_at: "now",
+        created_at: "then",
+        materials: null,
+      }),
+    ).toThrow("Invalid Hub payload at $.compatibility: expected present field");
+  });
 });
