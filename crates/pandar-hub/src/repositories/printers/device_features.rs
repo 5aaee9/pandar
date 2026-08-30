@@ -5,11 +5,12 @@ use sea_orm::{
 };
 
 use super::{
-    PrinterRepository, PrinterSnapshotUpsert, SnapshotSessionState, upsert_snapshot_in_transaction,
+    PrinterRepository, PrinterSnapshotUpsert, SnapshotSessionState, printer_from_model,
+    upsert_snapshot_in_transaction,
 };
 use crate::db::ConnectionDialectExt;
 use crate::{
-    entities::printers,
+    entities::{printer_material_snapshots, printers},
     repositories::{RepositoryError, RepositoryResult, begin_current_agent_transaction},
 };
 
@@ -21,6 +22,71 @@ pub enum DeviceFeatureUpdateOutcome {
 }
 
 impl PrinterRepository {
+    pub async fn apply_snapshot_if_current(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        session_id: &str,
+        snapshot: PrinterSnapshotUpsert,
+        features: Option<BambuDeviceFeatures>,
+        secondary_features: Option<BambuDeviceFeatures>,
+    ) -> RepositoryResult<Printer> {
+        let clear_materials = snapshot.connection_authoritative;
+        let transaction =
+            begin_current_agent_transaction(&self.database, tenant_id, agent_id, session_id)
+                .await?;
+        let feature_session_id = features.map(|_| session_id);
+        let nozzle_system_session_id = snapshot.nozzle_system.as_ref().map(|_| session_id);
+        let presence_session_id = snapshot.telemetry_authoritative.then_some(session_id);
+        let printer = upsert_snapshot_in_transaction(
+            &transaction,
+            tenant_id,
+            agent_id,
+            snapshot,
+            SnapshotSessionState {
+                device_features: features,
+                device_features_session_id: feature_session_id,
+                nozzle_system_session_id,
+                mqtt_presence_session_id: presence_session_id,
+            },
+            &self.access_code_cipher,
+        )
+        .await?;
+        if let Some(features) = secondary_features {
+            printers::Entity::update_many()
+                .set(printers::ActiveModel {
+                    bambu_fun2_bits: Set(Some(features.to_hex())),
+                    bambu_fun2_session_id: Set(Some(session_id.to_owned())),
+                    ..Default::default()
+                })
+                .filter(printers::Column::Id.eq(&printer.id))
+                .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
+                .filter(printers::Column::AgentId.eq(agent_id.to_string()))
+                .exec(&transaction)
+                .await
+                .context("failed to update secondary Bambu device features in printer snapshot")?;
+        }
+        if clear_materials {
+            printer_material_snapshots::Entity::delete_many()
+                .filter(printer_material_snapshots::Column::TenantId.eq(tenant_id.to_string()))
+                .filter(printer_material_snapshots::Column::PrinterId.eq(&printer.id))
+                .exec(&transaction)
+                .await
+                .context("failed to clear materials in authoritative printer snapshot")?;
+        }
+        let printer = printers::Entity::find_by_id(&printer.id)
+            .one(&transaction)
+            .await
+            .context("failed to reload applied printer snapshot")?
+            .ok_or(RepositoryError::MissingPrinter)
+            .and_then(|model| printer_from_model(model, &self.access_code_cipher))?;
+        transaction
+            .commit()
+            .await
+            .context("failed to commit aggregate current-session printer snapshot")?;
+        Ok(printer)
+    }
+
     pub async fn upsert_snapshot_with_device_features_if_current(
         &self,
         tenant_id: TenantId,

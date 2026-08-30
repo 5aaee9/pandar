@@ -396,5 +396,5 @@ pub(super) async fn exercise_printer_device_features(database: Database) {
     );
 }
 
-mod support;
+pub(in crate::repositories::tests) mod support;
 use support::*;

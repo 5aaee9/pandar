@@ -112,27 +112,6 @@ impl MaterialRepository {
             .collect()
     }
 
-    pub(crate) async fn clear_for_printer_if_current(
-        &self,
-        session_id: &str,
-        tenant_id: TenantId,
-        agent_id: AgentId,
-        printer_id: &str,
-    ) -> RepositoryResult<()> {
-        let tx = begin_current_agent_transaction(&self.database, tenant_id, agent_id, session_id)
-            .await?;
-        printer_material_snapshots::Entity::delete_many()
-            .filter(printer_material_snapshots::Column::TenantId.eq(tenant_id.to_string()))
-            .filter(printer_material_snapshots::Column::PrinterId.eq(printer_id))
-            .exec(&tx)
-            .await
-            .context("failed to clear material snapshot for authoritative printer connection")?;
-        tx.commit()
-            .await
-            .context("failed to commit authoritative material snapshot clear")?;
-        Ok(())
-    }
-
     #[cfg(test)]
     pub(crate) async fn upsert_from_patch(
         &self,

@@ -20,7 +20,6 @@ pub async fn handle_snapshot(
     token: SessionToken,
     snapshot: PrinterSnapshot,
 ) -> Result<(), Status> {
-    let connection_authoritative = snapshot.connection_authoritative;
     let serial_number = required(&snapshot.serial, "serial must not be blank")?;
     let name = required(&snapshot.name, "name must not be blank")?;
     let status = trim_optional(snapshot.state);
@@ -81,12 +80,13 @@ pub async fn handle_snapshot(
     }
     let printer = match state
         .printers()
-        .upsert_snapshot_with_device_features_if_current(
+        .apply_snapshot_if_current(
             tenant_id,
             agent_id,
             &token.persisted_id(),
             snapshot,
             device_features,
+            device_features2,
         )
         .await
     {
@@ -94,30 +94,6 @@ pub async fn handle_snapshot(
         Err(RepositoryError::AgentSessionNotCurrent) => return Ok(()),
         Err(err) => return Err(repository_status(err)),
     };
-    if let Some(features) = device_features2 {
-        state
-            .printers()
-            .update_secondary_device_features_if_current(
-                tenant_id,
-                agent_id,
-                &token.persisted_id(),
-                &printer.serial_number,
-                Some(features),
-            )
-            .await
-            .map_err(repository_status)?;
-    }
-    if connection_authoritative {
-        match state
-            .materials()
-            .clear_for_printer_if_current(&token.persisted_id(), tenant_id, agent_id, &printer.id)
-            .await
-        {
-            Ok(()) => {}
-            Err(RepositoryError::AgentSessionNotCurrent) => return Ok(()),
-            Err(err) => return Err(repository_status(err)),
-        }
-    }
     let printer_id = printer.id;
     let printer = state
         .printers()

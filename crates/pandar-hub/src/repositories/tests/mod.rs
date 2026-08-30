@@ -19,6 +19,7 @@ mod printer_device_features;
 mod printer_event_tickets;
 mod printer_firmware;
 mod printer_live_status;
+mod printer_snapshot_atomic;
 mod printer_snapshot_presence;
 mod printers;
 mod studio_model_task;

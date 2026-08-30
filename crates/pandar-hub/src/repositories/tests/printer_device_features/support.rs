@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) async fn claim_session(
+pub(in crate::repositories::tests) async fn claim_session(
     agents: &AgentRepository,
     tenant_id: TenantId,
     agent_id: pandar_core::AgentId,
@@ -18,7 +18,10 @@ pub(super) async fn claim_session(
         .unwrap();
 }
 
-pub(super) fn rich_snapshot(serial_number: &str, status: &str) -> PrinterSnapshotUpsert {
+pub(in crate::repositories::tests) fn rich_snapshot(
+    serial_number: &str,
+    status: &str,
+) -> PrinterSnapshotUpsert {
     PrinterSnapshotUpsert {
         serial_number: serial_number.to_owned(),
         host: Some("192.0.2.55".to_owned()),
