@@ -1,16 +1,11 @@
 use anyhow::Context;
 use async_trait::async_trait;
-use pandar_core::compatibility::brtc_emmc_upload_supported;
 
 use crate::machine::{
     BambuPrinterEndpoint,
     brtc::BrtcMachineFileTransfer,
     file_transfer::{FileUploadResult, MachineFileTransfer, PrintUploadPolicy},
     ftps::FtpsMachineFileTransfer,
-};
-
-const GENERIC_UPLOAD_POLICY: PrintUploadPolicy = PrintUploadPolicy {
-    try_emmc_print: true,
 };
 
 #[derive(Debug, Clone)]
@@ -29,23 +24,23 @@ impl BambuMachineFileTransfer {
         }
     }
 
-    fn should_try_brtc_upload(&self, path: &str, policy: PrintUploadPolicy) -> bool {
-        if !policy.try_emmc_print || !path.ends_with(".gcode.3mf") {
-            return false;
-        }
-        brtc_emmc_upload_supported(self.endpoint.model.as_deref())
-    }
-
-    async fn upload_with_policy(
+    /// Printable model uploads go to the machine's eMMC over BRTC first. There
+    /// is deliberately no model allowlist: the transport probe is self-selecting
+    /// because machines without the tunnel fail fast, and any BRTC failure
+    /// degrades to protected FTPS while keeping the BRTC cause visible.
+    async fn upload_with_brtc_preference(
         &self,
         path: &str,
         bytes: &[u8],
-        policy: PrintUploadPolicy,
     ) -> anyhow::Result<FileUploadResult> {
-        if self.should_try_brtc_upload(path, policy) {
+        if path.ends_with(".gcode.3mf") {
             match self.brtc.upload_emmc(path, bytes).await {
                 Ok(_) => return Ok(FileUploadResult::brtc_emmc(path)),
                 Err(brtc_error) => {
+                    tracing::warn!(
+                        host = %self.endpoint.host,
+                        "BRTC eMMC upload failed, falling back to FTPS: {brtc_error:#}"
+                    );
                     return self.ftps.upload(path, bytes).await.with_context(|| {
                         format!("BRTC upload failed before FTPS fallback: {brtc_error:#}")
                     });
@@ -67,17 +62,16 @@ impl MachineFileTransfer for BambuMachineFileTransfer {
     }
 
     async fn upload(&self, path: &str, bytes: &[u8]) -> anyhow::Result<FileUploadResult> {
-        self.upload_with_policy(path, bytes, GENERIC_UPLOAD_POLICY)
-            .await
+        self.upload_with_brtc_preference(path, bytes).await
     }
 
     async fn upload_print(
         &self,
         path: &str,
         bytes: &[u8],
-        policy: PrintUploadPolicy,
+        _policy: PrintUploadPolicy,
     ) -> anyhow::Result<FileUploadResult> {
-        self.upload_with_policy(path, bytes, policy).await
+        self.upload_with_brtc_preference(path, bytes).await
     }
 
     async fn delete(&self, path: &str) -> anyhow::Result<()> {

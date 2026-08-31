@@ -346,13 +346,6 @@ pub fn ftps_tls_1_2_cap(model: Option<&str>) -> bool {
     compatibility_for_model(model).ftps_tls_1_2_cap
 }
 
-pub fn brtc_emmc_upload_supported(model: Option<&str>) -> bool {
-    matches!(
-        model.and_then(normalize_model).as_deref(),
-        Some("P2S" | "X2D" | "X1" | "X1C" | "X1E")
-    )
-}
-
 pub fn studio_local_camera_supported(model: Option<&str>) -> bool {
     matches!(
         model.and_then(normalize_model).as_deref(),

@@ -155,6 +155,49 @@ async fn configured_print_project_file_uploads_and_publishes_project_file() {
     );
 }
 
+#[tokio::test]
+async fn h2d_emmc_print_publishes_brtc_emmc_project_url() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::with_brtc_print_upload();
+    let mut endpoint = endpoint("SERIAL1");
+    endpoint.model = Some("H2D".to_owned());
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint, mqtt.clone(), transfer.clone())],
+        Duration::from_secs(1),
+    );
+    let mut command = print_project_file();
+    command.options.as_mut().unwrap().try_emmc_print = true;
+
+    gateway
+        .print_project_file("SERIAL1", &command, b"abc".to_vec())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        transfer.recorded_requests(),
+        vec![FileTransferRequest::print_upload(
+            "plate.gcode.3mf",
+            3,
+            PrintUploadPolicy {
+                try_emmc_print: true,
+            },
+        )]
+    );
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
+    let submission_id = dynamic_project_file_submission_id(&published[0].payload);
+    let mut expected = expected_project_file_payload(&sequence_id, &submission_id);
+    expected["print"]["url"] = serde_json::json!("brtc://emmc/plate.gcode.3mf");
+    assert_eq!(
+        published,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: expected,
+            qos: crate::machine::mqtt::BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
 #[test]
 fn print_project_remote_name_matches_studio_suffix_policy() {
     assert_eq!(pick_remote_name("Cube"), "Cube.gcode.3mf");

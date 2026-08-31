@@ -80,11 +80,6 @@ fn bed_and_nozzle_calibration_matrix_matches_studio_resources() {
 fn matrix_covers_ftps_storage_and_unknown_defaults() {
     assert!(ftps_tls_1_2_cap(Some("N7")));
     assert!(ftps_tls_1_2_cap(Some("X2D")));
-    assert!(brtc_emmc_upload_supported(Some("N6")));
-    assert!(brtc_emmc_upload_supported(Some("P2S")));
-    assert!(brtc_emmc_upload_supported(Some("X1 Carbon")));
-    assert!(brtc_emmc_upload_supported(Some("X1E")));
-    assert!(!brtc_emmc_upload_supported(Some("A1 Mini")));
     assert_eq!(
         compatibility_for_model(Some("A1 Mini")).external_storage,
         Capability::Unsupported

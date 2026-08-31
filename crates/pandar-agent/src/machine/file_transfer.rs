@@ -117,6 +117,7 @@ pub struct FakeMachineFileTransfer {
 struct FakeMachineFileTransferState {
     recorded: Vec<FileTransferRequest>,
     fail: bool,
+    brtc_print_upload: bool,
 }
 
 #[cfg(test)]
@@ -124,6 +125,18 @@ impl FakeMachineFileTransfer {
     pub fn with_failure() -> Self {
         let state = FakeMachineFileTransferState {
             fail: true,
+            ..Default::default()
+        };
+        Self {
+            state: std::sync::Arc::new(std::sync::Mutex::new(state)),
+        }
+    }
+
+    /// Emulates a Bambu machine that accepted the BRTC eMMC upload: print
+    /// uploads report the `brtc://emmc/` result instead of an FTP location.
+    pub fn with_brtc_print_upload() -> Self {
+        let state = FakeMachineFileTransferState {
+            brtc_print_upload: true,
             ..Default::default()
         };
         Self {
@@ -175,6 +188,9 @@ impl MachineFileTransfer for FakeMachineFileTransfer {
             bytes.len() as u64,
             policy,
         ))?;
+        if self.state.lock().unwrap().brtc_print_upload {
+            return Ok(FileUploadResult::brtc_emmc(path));
+        }
         Ok(FileUploadResult::ftp(path))
     }
 
