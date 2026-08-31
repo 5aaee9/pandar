@@ -165,7 +165,9 @@ impl ConnectionSession {
 mod cancellation_tests;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_no_auth_rotation_claim(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_no_auth_rotation_claim(
     session_ptr: *mut c_void,
     account_epoch: u64,
     config_epoch: u64,
@@ -174,13 +176,14 @@ pub extern "C" fn pandar_plugin_no_auth_rotation_claim(
     token_ptr: *const u8,
     token_len: usize,
 ) -> i32 {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return 0;
     };
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len) else {
+    let Some(hub_url) = (unsafe { read_utf8(hub_url_ptr, hub_url_len) }) else {
         return 0;
     };
-    let Some(token) = read_utf8(token_ptr, token_len).filter(|token| !token.is_empty()) else {
+    let Some(token) = unsafe { read_utf8(token_ptr, token_len) }.filter(|token| !token.is_empty())
+    else {
         return 0;
     };
     session.claim_no_auth_rotation(NoAuthRotationKey::new(
@@ -222,13 +225,15 @@ mod tests {
     fn each_credential_key_can_claim_only_one_rotation() {
         let hub = b"http://127.0.0.1:1";
         let token = b"old-token";
-        let session = pandar_plugin_printer_refresh_session_create(
-            hub.as_ptr(),
-            hub.len(),
-            token.as_ptr(),
-            token.len(),
-        );
-        let claim = |token: &[u8], config_epoch| {
+        let session = unsafe {
+            pandar_plugin_printer_refresh_session_create(
+                hub.as_ptr(),
+                hub.len(),
+                token.as_ptr(),
+                token.len(),
+            )
+        };
+        let claim = |token: &[u8], config_epoch| unsafe {
             pandar_plugin_no_auth_rotation_claim(
                 session,
                 0,
@@ -246,17 +251,19 @@ mod tests {
 
         let replacement = b"replacement-token";
         assert_eq!(
-            pandar_plugin_printer_refresh_session_update(
-                session,
-                hub.as_ptr(),
-                hub.len(),
-                replacement.as_ptr(),
-                replacement.len(),
-            ),
+            unsafe {
+                pandar_plugin_printer_refresh_session_update(
+                    session,
+                    hub.as_ptr(),
+                    hub.len(),
+                    replacement.as_ptr(),
+                    replacement.len(),
+                )
+            },
             0
         );
         assert_eq!(claim(replacement, 8), 1);
-        pandar_plugin_printer_refresh_session_destroy(session);
+        unsafe { pandar_plugin_printer_refresh_session_destroy(session) };
     }
 
     #[test]

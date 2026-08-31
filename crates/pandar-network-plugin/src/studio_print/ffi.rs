@@ -23,7 +23,7 @@ impl PluginBytes {
         }
     }
 
-    pub(super) fn read(self, field: &'static str) -> Result<String, PrintFailure> {
+    pub(super) unsafe fn read(self, field: &'static str) -> Result<String, PrintFailure> {
         if self.len == 0 {
             return Ok(String::new());
         }
@@ -159,7 +159,7 @@ impl PluginStudioCallbacks {
             return true;
         };
         let mut snapshot = PluginStudioSnapshot::empty();
-        callback(self.context, &mut snapshot) != 0 && print.matches_snapshot(&snapshot)
+        callback(self.context, &mut snapshot) != 0 && unsafe { print.matches_snapshot(&snapshot) }
     }
 }
 
@@ -186,7 +186,11 @@ pub struct PluginStudioPlateResult {
 
 #[unsafe(no_mangle)]
 /// # Safety
-/// `params` and every byte view it contains must remain valid until this synchronous call returns.
+/// `params` and every nested byte view must remain valid until this synchronous call returns.
+/// Every callback in `callbacks` and its `context` must remain valid, reentrancy-safe, and callable
+/// for the full operation; callback consumers must copy borrowed byte views before returning. A
+/// successful snapshot callback must populate nested byte views that remain readable until this
+/// function returns.
 pub unsafe extern "C" fn pandar_plugin_studio_start_print(
     params: *const PluginStudioPrintParams,
     callbacks: PluginStudioCallbacks,
@@ -199,7 +203,7 @@ pub unsafe extern "C" fn pandar_plugin_studio_start_print(
         callbacks.error(&failure);
         return failure.code;
     };
-    let mut print = match admit(params) {
+    let mut print = match unsafe { admit(params) } {
         Ok(print) => print,
         Err(failure) => {
             callbacks.error(&failure);
@@ -216,6 +220,8 @@ pub unsafe extern "C" fn pandar_plugin_studio_start_print(
 #[unsafe(no_mangle)]
 /// # Safety
 /// `account`, `query`, and their byte views must remain valid until this synchronous call returns.
+/// `account.current_snapshot` and its context must remain callable for the full operation; every
+/// successful callback result must contain nested byte views readable until this function returns.
 pub unsafe extern "C" fn pandar_plugin_studio_get_tasks(
     account: *const PluginStudioAccount,
     query: *const PluginStudioTaskQuery,
@@ -223,11 +229,11 @@ pub unsafe extern "C" fn pandar_plugin_studio_get_tasks(
     let Some(query) = (unsafe { query.as_ref() }) else {
         return tasks::failure_result(400, "invalid_task_query");
     };
-    let account = match account_from_ptr(account) {
+    let account = match unsafe { account_from_ptr(account) } {
         Ok(account) => account,
         Err(result) => return result,
     };
-    let dev_id = match query.dev_id.read("dev_id") {
+    let dev_id = match unsafe { query.dev_id.read("dev_id") } {
         Ok(dev_id) => dev_id,
         Err(_) => return tasks::failure_result(400, "invalid_task_query"),
     };
@@ -235,11 +241,14 @@ pub unsafe extern "C" fn pandar_plugin_studio_get_tasks(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_get_plate(
+/// # Safety
+/// `account`, `task_id`, and nested byte views must remain valid for this call. The account snapshot
+/// callback/context must remain callable, and successful callback byte views readable, until return.
+pub unsafe extern "C" fn pandar_plugin_studio_get_plate(
     account: *const PluginStudioAccount,
     task_id: PluginBytes,
 ) -> PluginStudioPlateResult {
-    let account = match account_from_ptr(account) {
+    let account = match unsafe { account_from_ptr(account) } {
         Ok(account) => account,
         Err(http) => {
             return PluginStudioPlateResult {
@@ -248,7 +257,7 @@ pub extern "C" fn pandar_plugin_studio_get_plate(
             };
         }
     };
-    let task_id = match task_id.read("task_id") {
+    let task_id = match unsafe { task_id.read("task_id") } {
         Ok(task_id) => task_id,
         Err(_) => {
             return PluginStudioPlateResult {
@@ -261,15 +270,18 @@ pub extern "C" fn pandar_plugin_studio_get_plate(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_get_subtask(
+/// # Safety
+/// `account`, `task_id`, and nested byte views must remain valid for this call. The account snapshot
+/// callback/context must remain callable, and successful callback byte views readable, until return.
+pub unsafe extern "C" fn pandar_plugin_studio_get_subtask(
     account: *const PluginStudioAccount,
     task_id: PluginBytes,
 ) -> PluginHttpResult {
-    let account = match account_from_ptr(account) {
+    let account = match unsafe { account_from_ptr(account) } {
         Ok(account) => account,
         Err(result) => return result,
     };
-    let task_id = match task_id.read("task_id") {
+    let task_id = match unsafe { task_id.read("task_id") } {
         Ok(task_id) => task_id,
         Err(_) => return tasks::failure_result(400, "invalid_task_id"),
     };
@@ -292,32 +304,28 @@ pub unsafe extern "C" fn pandar_plugin_studio_request_snapshot_current(
     else {
         return 0;
     };
-    i32::from(freshness::request_snapshot_current(expected, current))
+    i32::from(unsafe { freshness::request_snapshot_current(expected, current) })
 }
 
-pub(super) fn account_from_ptr(
+pub(super) unsafe fn account_from_ptr(
     account: *const PluginStudioAccount,
 ) -> Result<StudioAccount, PluginHttpResult> {
     let Some(account) = (unsafe { account.as_ref() }) else {
         return Err(tasks::failure_result(400, "invalid_auth_token"));
     };
-    let freshness = AccountFreshness::from_snapshot(
-        &account.snapshot,
-        account.context,
-        account.current_snapshot,
-    )
+    let freshness = unsafe {
+        AccountFreshness::from_snapshot(
+            &account.snapshot,
+            account.context,
+            account.current_snapshot,
+        )
+    }
     .ok_or_else(|| tasks::failure_result(409, "stale_task_response"))?;
-    let hub_url = account
-        .snapshot
-        .hub_url
-        .read("hub_url")
+    let hub_url = unsafe { account.snapshot.hub_url.read("hub_url") }
         .ok()
         .and_then(crate::normalize_hub_url)
         .ok_or_else(|| tasks::failure_result(400, "invalid_hub_url"))?;
-    let token = account
-        .snapshot
-        .token
-        .read("token")
+    let token = unsafe { account.snapshot.token.read("token") }
         .map_err(|_| tasks::failure_result(401, "invalid_auth_token"))?;
     if token.trim().is_empty() {
         return Err(tasks::failure_result(401, "invalid_auth_token"));

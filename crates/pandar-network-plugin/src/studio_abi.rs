@@ -20,13 +20,15 @@ pub extern "C" fn pandar_plugin_sync_ams_filaments(agent_valid: bool) -> PluginH
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_local_connect_json(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_local_connect_json(
     dev_id_ptr: *const u8,
     dev_id_len: usize,
     model_ptr: *const u8,
     model_len: usize,
 ) -> PluginHttpResult {
-    let dev_id = read_utf8(dev_id_ptr, dev_id_len).unwrap_or_default();
-    let model = read_utf8(model_ptr, model_len).unwrap_or_default();
+    let dev_id = unsafe { read_utf8(dev_id_ptr, dev_id_len) }.unwrap_or_default();
+    let model = unsafe { read_utf8(model_ptr, model_len) }.unwrap_or_default();
     result(0, 200, studio_status::local_connect_json(&dev_id, &model))
 }

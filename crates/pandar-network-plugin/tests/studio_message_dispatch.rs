@@ -11,7 +11,7 @@ const OPERATION: i32 = 4;
 const H2C_AUTO_NOZZLE_MAPPING: i32 = 5;
 
 fn dispatch(message: &str) -> (i32, i32, i32, String) {
-    let result = pandar_plugin_dispatch_studio_message(message.as_ptr(), message.len());
+    let result = unsafe { pandar_plugin_dispatch_studio_message(message.as_ptr(), message.len()) };
     result_parts(result)
 }
 
@@ -24,7 +24,9 @@ fn result_parts(result: PluginStudioMessageResult) -> (i32, i32, i32, String) {
         )
         .unwrap()
     };
-    pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap);
+    unsafe {
+        pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap)
+    };
     (result.kind, result.outcome, result.abi_status, body)
 }
 

@@ -70,11 +70,14 @@ impl LoadedAccount {
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// `account_context` and `with_current` must remain valid for this call and every synchronous
+/// account transaction callback it invokes.
 pub unsafe extern "C" fn pandar_plugin_account_load_persisted(
     account_context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
 ) -> PluginLifecycleResult {
-    let current = match capture(account_context, with_current) {
+    let current = match unsafe { capture(account_context, with_current) } {
         Ok(current) => current,
         Err(error) => return lifecycle(diagnosed(error)),
     };
@@ -99,18 +102,23 @@ pub unsafe extern "C" fn pandar_plugin_account_load_persisted(
         loaded: &loaded,
         state: ApplyState::Pending,
     };
-    if let Err(error) = transact(
-        account_context,
-        with_current,
-        (&mut context as *mut LoadContext<'_>).cast(),
-        load_transaction,
-    ) {
+    if let Err(error) = unsafe {
+        transact(
+            account_context,
+            with_current,
+            (&mut context as *mut LoadContext<'_>).cast(),
+            load_transaction,
+        )
+    } {
         return lifecycle(diagnosed(error));
     }
     finish(context.state)
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// `account_context` and `with_current` must remain valid for this call and every synchronous
+/// account transaction callback it invokes.
 pub unsafe extern "C" fn pandar_plugin_account_refresh_runtime(
     account_context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
@@ -127,7 +135,7 @@ pub unsafe extern "C" fn pandar_plugin_account_refresh_runtime(
     if hub_url.is_empty() {
         return lifecycle(stable_failure("account_state_unavailable"));
     }
-    let current = match capture(account_context, with_current) {
+    let current = match unsafe { capture(account_context, with_current) } {
         Ok(current) => current,
         Err(error) => return lifecycle(diagnosed(error)),
     };
@@ -140,12 +148,14 @@ pub unsafe extern "C" fn pandar_plugin_account_refresh_runtime(
         hub_url: &hub_url,
         state: ApplyState::Pending,
     };
-    if let Err(error) = transact(
-        account_context,
-        with_current,
-        (&mut context as *mut RuntimeContext<'_>).cast(),
-        runtime_transaction,
-    ) {
+    if let Err(error) = unsafe {
+        transact(
+            account_context,
+            with_current,
+            (&mut context as *mut RuntimeContext<'_>).cast(),
+            runtime_transaction,
+        )
+    } {
         return lifecycle(diagnosed(error));
     }
     finish(context.state)
@@ -160,7 +170,7 @@ unsafe extern "C" fn load_transaction(
         return 1;
     };
     let work: anyhow::Result<()> = (|| {
-        let current = AccountView::read(view)?;
+        let current = unsafe { AccountView::read(view) }?;
         if !context.expected.matches(&current) || !current.token.is_empty() {
             context.state = ApplyState::Stale;
             return Ok(());
@@ -188,7 +198,7 @@ unsafe extern "C" fn runtime_transaction(
         return 1;
     };
     let work: anyhow::Result<()> = (|| {
-        let current = AccountView::read(view)?;
+        let current = unsafe { AccountView::read(view) }?;
         if !context.expected.matches(&current) {
             context.state = ApplyState::Stale;
             return Ok(());

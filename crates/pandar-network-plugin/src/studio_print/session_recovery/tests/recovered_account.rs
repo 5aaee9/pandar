@@ -156,7 +156,7 @@ fn recovered_model_task_does_not_publish_after_account_switch() {
     );
     let mut deliveries = 0_usize;
 
-    let result = retry.with_account(|account| {
+    let result = retry.with_account(|account| unsafe {
         pandar_plugin_studio_get_model_task(
             account,
             bytes("41"),

@@ -30,8 +30,11 @@ struct RecoveryContext {
 
 /// # Safety
 ///
-/// `account` and `query` must point to valid ABI values for the duration of this call. Any callback
-/// stored in `account` or supplied through `with_current` must honor its declared pointer contract.
+/// `session` must be live; `account`, `query`, and their nested byte views must remain valid for
+/// this call. Account snapshot and `with_current` callbacks plus their contexts must remain valid
+/// and callable from runtime worker threads until the call returns. Snapshot callback byte views
+/// must stay readable until this function returns; transaction-view bytes must remain valid until
+/// their transaction callback returns.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pandar_plugin_studio_get_tasks_with_session(
     session: *mut c_void,
@@ -43,24 +46,29 @@ pub unsafe extern "C" fn pandar_plugin_studio_get_tasks_with_session(
     query: *const PluginStudioTaskQuery,
 ) -> PluginHttpResult {
     let initial = unsafe { pandar_plugin_studio_get_tasks(account, query) };
-    recover_http(
-        initial,
-        RecoveryContext {
-            session,
-            config_epoch,
-            session_kind,
-            account_context,
-            with_current,
-        },
-        account,
-        |retry| unsafe { pandar_plugin_studio_get_tasks(retry, query) },
-    )
+    unsafe {
+        recover_http(
+            initial,
+            RecoveryContext {
+                session,
+                config_epoch,
+                session_kind,
+                account_context,
+                with_current,
+            },
+            account,
+            |retry| pandar_plugin_studio_get_tasks(retry, query),
+        )
+    }
 }
 
 /// # Safety
 ///
-/// `account` must point to a valid ABI value for the duration of this call. Any callback stored in
-/// it or supplied through `with_current` must honor its declared pointer contract.
+/// `session` must be live; `account`, `task_id`, and nested byte views must remain valid for this
+/// call. Account snapshot and `with_current` callbacks plus their contexts must remain valid and
+/// callable from runtime worker threads until the call returns. Snapshot callback byte views must
+/// stay readable until this function returns; transaction-view bytes must remain valid until their
+/// transaction callback returns.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pandar_plugin_studio_get_plate_with_session(
     session: *mut c_void,
@@ -71,20 +79,22 @@ pub unsafe extern "C" fn pandar_plugin_studio_get_plate_with_session(
     with_current: Option<PluginWithCurrentAccount>,
     task_id: PluginBytes,
 ) -> PluginStudioPlateResult {
-    let initial = pandar_plugin_studio_get_plate(account, task_id);
+    let initial = unsafe { pandar_plugin_studio_get_plate(account, task_id) };
     if !auth_rejected(&initial.http) {
         return initial;
     }
-    match recovery(
-        RecoveryContext {
-            session,
-            config_epoch,
-            session_kind,
-            account_context,
-            with_current,
-        },
-        account,
-    ) {
+    match unsafe {
+        recovery(
+            RecoveryContext {
+                session,
+                config_epoch,
+                session_kind,
+                account_context,
+                with_current,
+            },
+            account,
+        )
+    } {
         Recovery::Original => initial,
         Recovery::Failure(http) => {
             take_http(initial.http);
@@ -95,15 +105,19 @@ pub unsafe extern "C" fn pandar_plugin_studio_get_plate_with_session(
         }
         Recovery::Retry(retry) => {
             take_http(initial.http);
-            retry.with_account(|account| pandar_plugin_studio_get_plate(account, task_id))
+            retry
+                .with_account(|account| unsafe { pandar_plugin_studio_get_plate(account, task_id) })
         }
     }
 }
 
 /// # Safety
 ///
-/// `account` must point to a valid ABI value for the duration of this call. Any callback stored in
-/// it or supplied through `with_current` must honor its declared pointer contract.
+/// `session` must be live; `account`, `task_id`, and nested byte views must remain valid for this
+/// call. Account snapshot and `with_current` callbacks plus their contexts must remain valid and
+/// callable from runtime worker threads until the call returns. Snapshot callback byte views must
+/// stay readable until this function returns; transaction-view bytes must remain valid until their
+/// transaction callback returns.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pandar_plugin_studio_get_subtask_with_session(
     session: *mut c_void,
@@ -114,25 +128,31 @@ pub unsafe extern "C" fn pandar_plugin_studio_get_subtask_with_session(
     with_current: Option<PluginWithCurrentAccount>,
     task_id: PluginBytes,
 ) -> PluginHttpResult {
-    let initial = pandar_plugin_studio_get_subtask(account, task_id);
-    recover_http(
-        initial,
-        RecoveryContext {
-            session,
-            config_epoch,
-            session_kind,
-            account_context,
-            with_current,
-        },
-        account,
-        |retry| pandar_plugin_studio_get_subtask(retry, task_id),
-    )
+    let initial = unsafe { pandar_plugin_studio_get_subtask(account, task_id) };
+    unsafe {
+        recover_http(
+            initial,
+            RecoveryContext {
+                session,
+                config_epoch,
+                session_kind,
+                account_context,
+                with_current,
+            },
+            account,
+            |retry| pandar_plugin_studio_get_subtask(retry, task_id),
+        )
+    }
 }
 
 /// # Safety
 ///
-/// `account` and its byte views must remain valid for this call. `visitor` must honor the model-task
-/// pointer contract and copy any borrowed byte views before returning.
+/// `session` must identify a live connection session. `account`, `task_id`, and every nested byte
+/// view must remain valid for this synchronous call. `account_context`/`with_current`,
+/// `visitor_context`/`visitor`, and `cancellation_context`/`cancelled` must remain valid and safe to
+/// invoke from runtime worker threads until the call returns; visitors must copy borrowed byte
+/// views before returning. Snapshot callback byte views must stay readable until this function
+/// returns; transaction-view bytes must remain valid until their transaction callback returns.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pandar_plugin_studio_get_model_task_with_session(
     session: *mut c_void,
@@ -148,23 +168,26 @@ pub unsafe extern "C" fn pandar_plugin_studio_get_model_task_with_session(
     cancelled: Option<StudioModelTaskCancelled>,
 ) -> PluginHttpResult {
     let cancellation = ModelTaskCancellation::new(cancellation_context, cancelled);
-    let initial = get_model_task(account, task_id, visitor_context, visitor, cancellation);
-    recover_model_task_http(
-        initial,
-        RecoveryContext {
-            session,
-            config_epoch,
-            session_kind,
-            account_context,
-            with_current,
-        },
-        account,
-        cancellation,
-        |retry| get_model_task(retry, task_id, visitor_context, visitor, cancellation),
-    )
+    let initial =
+        unsafe { get_model_task(account, task_id, visitor_context, visitor, cancellation) };
+    unsafe {
+        recover_model_task_http(
+            initial,
+            RecoveryContext {
+                session,
+                config_epoch,
+                session_kind,
+                account_context,
+                with_current,
+            },
+            account,
+            cancellation,
+            |retry| get_model_task(retry, task_id, visitor_context, visitor, cancellation),
+        )
+    }
 }
 
-fn recover_model_task_http(
+unsafe fn recover_model_task_http(
     initial: PluginHttpResult,
     context: RecoveryContext,
     account: *const PluginStudioAccount,
@@ -173,18 +196,18 @@ fn recover_model_task_http(
 ) -> PluginHttpResult {
     recover_http_with(
         initial,
-        || recovery_with_cancellation(context, account, cancellation),
+        || unsafe { recovery_with_cancellation(context, account, cancellation) },
         retry,
     )
 }
 
-fn recover_http(
+unsafe fn recover_http(
     initial: PluginHttpResult,
     context: RecoveryContext,
     account: *const PluginStudioAccount,
     retry: impl FnOnce(&PluginStudioAccount) -> PluginHttpResult,
 ) -> PluginHttpResult {
-    recover_http_with(initial, || recovery(context, account), retry)
+    recover_http_with(initial, || unsafe { recovery(context, account) }, retry)
 }
 
 fn recover_http_with(
@@ -248,26 +271,25 @@ impl BoundRetryAccount {
     }
 }
 
-fn recovery(context: RecoveryContext, account: *const PluginStudioAccount) -> Recovery {
+unsafe fn recovery(context: RecoveryContext, account: *const PluginStudioAccount) -> Recovery {
     let Some(account) = (unsafe { account.as_ref() }) else {
         return Recovery::Original;
     };
-    let expected = match expected(account, context.config_epoch, context.session_kind) {
+    let expected = match unsafe { expected(account, context.config_epoch, context.session_kind) } {
         Some(expected) => expected,
         None => return Recovery::Original,
     };
-    finish_recovery(
-        account,
+    finish_recovery(account, unsafe {
         recover(
             context.session,
             expected,
             context.account_context,
             context.with_current,
-        ),
-    )
+        )
+    })
 }
 
-fn recovery_with_cancellation(
+unsafe fn recovery_with_cancellation(
     context: RecoveryContext,
     account: *const PluginStudioAccount,
     cancellation: ModelTaskCancellation,
@@ -275,20 +297,19 @@ fn recovery_with_cancellation(
     let Some(account) = (unsafe { account.as_ref() }) else {
         return Recovery::Original;
     };
-    let expected = match expected(account, context.config_epoch, context.session_kind) {
+    let expected = match unsafe { expected(account, context.config_epoch, context.session_kind) } {
         Some(expected) => expected,
         None => return Recovery::Original,
     };
-    finish_recovery(
-        account,
+    finish_recovery(account, unsafe {
         recover_account_with_cancellation(
             context.session,
             expected,
             context.account_context,
             context.with_current,
             cancellation,
-        ),
-    )
+        )
+    })
 }
 
 fn finish_recovery(account: &PluginStudioAccount, recovery: NoAuthRecovery) -> Recovery {
@@ -304,14 +325,14 @@ fn finish_recovery(account: &PluginStudioAccount, recovery: NoAuthRecovery) -> R
     }
 }
 
-fn expected(
+unsafe fn expected(
     account: &PluginStudioAccount,
     config_epoch: u64,
     session_kind: i32,
 ) -> Option<NoAuthExpected> {
     Some(NoAuthExpected {
-        hub_url: account.snapshot.hub_url.read("hub_url").ok()?,
-        token: account.snapshot.token.read("token").ok()?,
+        hub_url: unsafe { account.snapshot.hub_url.read("hub_url") }.ok()?,
+        token: unsafe { account.snapshot.token.read("token") }.ok()?,
         account_epoch: account.snapshot.account_epoch,
         config_epoch,
         session_kind,
@@ -330,69 +351,4 @@ fn auth_rejected(result: &PluginHttpResult) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::{
-        ffi::c_void,
-        io::{Read, Write},
-        net::TcpListener,
-        thread,
-    };
-
-    use super::*;
-
-    mod recovered_account;
-
-    struct SnapshotState {
-        hub_url: String,
-        token: String,
-        account_epoch: u64,
-    }
-
-    extern "C" fn switched_account_snapshot(
-        context: *mut c_void,
-        snapshot: *mut PluginStudioSnapshot,
-    ) -> i32 {
-        let state = unsafe { &*(context.cast::<SnapshotState>()) };
-        unsafe {
-            *snapshot = PluginStudioSnapshot {
-                hub_url: bytes(&state.hub_url),
-                token: bytes(&state.token),
-                printer_id: bytes(""),
-                printer_authorized: 0,
-                account_transition_pending: 0,
-                account_epoch: state.account_epoch,
-                cache_generation: 0,
-                firmware_generation: 0,
-            };
-        }
-        1
-    }
-
-    #[test]
-    fn stale_finished_follower_returns_the_task_stale_response() {
-        let hub_url = "http://hub";
-        let token = "old-a-token";
-        let account = PluginStudioAccount {
-            snapshot: PluginStudioSnapshot {
-                hub_url: bytes(hub_url),
-                token: bytes(token),
-                printer_id: bytes(""),
-                printer_authorized: 0,
-                account_transition_pending: 0,
-                account_epoch: 7,
-                cache_generation: 0,
-                firmware_generation: 0,
-            },
-            context: std::ptr::null_mut(),
-            current_snapshot: None,
-        };
-
-        let Recovery::Failure(result) = finish_recovery(&account, NoAuthRecovery::Stale) else {
-            panic!("stale follower did not fail the task request");
-        };
-        let outcome = take_http(result);
-        assert_eq!(outcome.status, 1);
-        assert_eq!(outcome.http_code, 409);
-        assert_eq!(outcome.body, r#"{"error":"stale_task_response"}"#);
-    }
-}
+mod tests;

@@ -11,7 +11,9 @@ use super::{
 };
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_stage_revoke(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_stage_revoke(
     config_dir_ptr: *const u8,
     config_dir_len: usize,
     hub_url_ptr: *const u8,
@@ -20,9 +22,9 @@ pub extern "C" fn pandar_plugin_account_stage_revoke(
     token_len: usize,
 ) -> PluginHttpResult {
     account_result((|| {
-        let config_dir = borrowed(config_dir_ptr, config_dir_len)?;
-        let hub_url = canonical_hub_identity(borrowed(hub_url_ptr, hub_url_len)?);
-        let token = borrowed(token_ptr, token_len)?;
+        let config_dir = unsafe { borrowed(config_dir_ptr, config_dir_len) }?;
+        let hub_url = canonical_hub_identity(unsafe { borrowed(hub_url_ptr, hub_url_len) }?);
+        let token = unsafe { borrowed(token_ptr, token_len) }?;
         ensure!(!hub_url.is_empty(), "pending revocation has no Hub URL");
         ensure!(!token.trim().is_empty(), "pending revocation has no token");
         persistence::enqueue_pending(
@@ -38,12 +40,14 @@ pub extern "C" fn pandar_plugin_account_stage_revoke(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_revoke_pending(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_revoke_pending(
     config_dir_ptr: *const u8,
     config_dir_len: usize,
 ) -> PluginHttpResult {
     let work = (|| {
-        let config_dir = borrowed(config_dir_ptr, config_dir_len)?;
+        let config_dir = unsafe { borrowed(config_dir_ptr, config_dir_len) }?;
         revoke_next(config_dir)
     })();
     revocation_result(work)
@@ -87,7 +91,9 @@ fn revoke_loaded(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_revoke_staged(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_revoke_staged(
     config_dir_ptr: *const u8,
     config_dir_len: usize,
     hub_url_ptr: *const u8,
@@ -96,10 +102,10 @@ pub extern "C" fn pandar_plugin_account_revoke_staged(
     token_len: usize,
 ) -> PluginHttpResult {
     let work = (|| {
-        let config_dir = borrowed(config_dir_ptr, config_dir_len)?;
+        let config_dir = unsafe { borrowed(config_dir_ptr, config_dir_len) }?;
         let revocation = PendingRevocation {
-            hub_url: canonical_hub_identity(borrowed(hub_url_ptr, hub_url_len)?),
-            token: borrowed(token_ptr, token_len)?.to_owned(),
+            hub_url: canonical_hub_identity(unsafe { borrowed(hub_url_ptr, hub_url_len) }?),
+            token: unsafe { borrowed(token_ptr, token_len) }?.to_owned(),
         };
         if !persistence::load_pending(config_dir)?.contains(&revocation) {
             return Ok(None);
@@ -134,11 +140,13 @@ fn revoke_with_cancellation(
         cancellation,
     );
     if response.status == 0 || matches!(response.http_code, 401 | 410) {
-        crate::pandar_plugin_free_with_capacity(
-            response.body_ptr.cast(),
-            response.body_len,
-            response.body_cap,
-        );
+        unsafe {
+            crate::pandar_plugin_free_with_capacity(
+                response.body_ptr.cast(),
+                response.body_len,
+                response.body_cap,
+            )
+        };
         persistence::complete_pending(config_dir, &revocation)
             .context("complete pending plugin revocation")?;
         Ok(None)
@@ -171,11 +179,13 @@ fn revoke_best_effort_orphan(
     let url = revocation_url(&revocation)?;
     let response = http::delete_session(&url, &revocation.token, RequestKind::PluginSession);
     if response.status == 0 || matches!(response.http_code, 401 | 410) {
-        crate::pandar_plugin_free_with_capacity(
-            response.body_ptr.cast(),
-            response.body_len,
-            response.body_cap,
-        );
+        unsafe {
+            crate::pandar_plugin_free_with_capacity(
+                response.body_ptr.cast(),
+                response.body_len,
+                response.body_cap,
+            )
+        };
         Ok(None)
     } else {
         Ok(Some(response))
@@ -195,11 +205,13 @@ fn revoke_direct(
         cancellation,
     );
     if response.status == 0 || matches!(response.http_code, 401 | 410) {
-        crate::pandar_plugin_free_with_capacity(
-            response.body_ptr.cast(),
-            response.body_len,
-            response.body_cap,
-        );
+        unsafe {
+            crate::pandar_plugin_free_with_capacity(
+                response.body_ptr.cast(),
+                response.body_len,
+                response.body_cap,
+            )
+        };
         persistence::complete_direct(config_dir, &revocation)
             .context("complete direct plugin revocation")?;
         Ok(None)

@@ -17,7 +17,7 @@ impl PluginAccountBytes {
         }
     }
 
-    pub(crate) fn read(self, field: &'static str) -> anyhow::Result<String> {
+    pub(crate) unsafe fn read(self, field: &'static str) -> anyhow::Result<String> {
         ensure!(
             !self.ptr.is_null() || self.len == 0,
             "{field} pointer is null"
@@ -92,16 +92,16 @@ pub(crate) struct AccountView {
 }
 
 impl AccountView {
-    pub(crate) fn read(view: *const PluginAccountView) -> anyhow::Result<Self> {
+    pub(crate) unsafe fn read(view: *const PluginAccountView) -> anyhow::Result<Self> {
         let view = unsafe { view.as_ref() }.context("account view is missing")?;
         Ok(Self {
-            config_dir: view.config_dir.read("account config directory")?,
-            hub_url: view.hub_url.read("account Hub URL")?,
-            token: view.token.read("account token")?,
-            user_id: view.user_id.read("account user id")?,
-            user_name: view.user_name.read("account user name")?,
-            avatar: view.avatar.read("account avatar")?,
-            profile_json: view.profile_json.read("account profile")?,
+            config_dir: unsafe { view.config_dir.read("account config directory") }?,
+            hub_url: unsafe { view.hub_url.read("account Hub URL") }?,
+            token: unsafe { view.token.read("account token") }?,
+            user_id: unsafe { view.user_id.read("account user id") }?,
+            user_name: unsafe { view.user_name.read("account user name") }?,
+            avatar: unsafe { view.avatar.read("account avatar") }?,
+            profile_json: unsafe { view.profile_json.read("account profile") }?,
             account_epoch: view.account_epoch,
             config_epoch: view.config_epoch,
             session_kind: view.session_kind,
@@ -123,7 +123,7 @@ unsafe extern "C" fn capture_transaction(
     let Some(context) = (unsafe { context.cast::<CaptureContext>().as_mut() }) else {
         return 1;
     };
-    match AccountView::read(view) {
+    match unsafe { AccountView::read(view) } {
         Ok(view) => {
             context.view = Some(view);
             0
@@ -135,7 +135,7 @@ unsafe extern "C" fn capture_transaction(
     }
 }
 
-pub(crate) fn capture(
+pub(crate) unsafe fn capture(
     context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
 ) -> anyhow::Result<AccountView> {
@@ -158,7 +158,7 @@ pub(crate) fn capture(
     capture.view.context("account transaction returned no view")
 }
 
-pub(super) fn transact(
+pub(super) unsafe fn transact(
     context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
     transaction_context: *mut c_void,

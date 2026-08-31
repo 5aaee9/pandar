@@ -30,6 +30,9 @@ impl Refcounted for FtJob {
 // retain/release protocol of the Studio ABI.
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// `out` must be null or writable for one job-handle pointer. On success it receives one owned
+/// reference that must eventually be consumed exactly once by `ft_job_release`.
 pub unsafe extern "C" fn ft_job_create(
     _config_json: *const c_char,
     out: *mut *mut FtJobHandle,
@@ -54,7 +57,10 @@ pub unsafe extern "C" fn ft_job_create(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ft_job_retain(handle: *mut FtJobHandle) {
+/// # Safety
+/// `handle` must own one live job reference. This adds another owned reference that must later be
+/// consumed by exactly one `ft_job_release` call.
+pub unsafe extern "C" fn ft_job_retain(handle: *mut FtJobHandle) {
     if !handle.is_null() {
         // SAFETY: see module-level note.
         unsafe { retain(handle as *const FtJob) };
@@ -62,13 +68,19 @@ pub extern "C" fn ft_job_retain(handle: *mut FtJobHandle) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ft_job_release(handle: *mut FtJobHandle) {
+/// # Safety
+/// `handle` must own one live job reference. This consumes that reference and may destroy the
+/// allocation; the caller must not use that reference after this call.
+pub unsafe extern "C" fn ft_job_release(handle: *mut FtJobHandle) {
     // SAFETY: see module-level note.
     unsafe { release(handle as *mut FtJob) };
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ft_job_set_result_cb(
+/// # Safety
+/// `handle` must identify a live job. When `cb` is present, it and `user` must remain valid and
+/// safe to invoke until replaced, cleared with `None`, or the final job reference is released.
+pub unsafe extern "C" fn ft_job_set_result_cb(
     handle: *mut FtJobHandle,
     cb: Option<FtJobResultCb>,
     user: *mut c_void,
@@ -86,6 +98,9 @@ pub extern "C" fn ft_job_set_result_cb(
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// `handle` must identify a live job reference for the full call and `out` must be writable for one
+/// `FtJobResult`. The handle must not be released concurrently while this call is waiting.
 pub unsafe extern "C" fn ft_job_get_result(
     handle: *mut FtJobHandle,
     timeout_ms: u32,
@@ -118,7 +133,12 @@ pub unsafe extern "C" fn ft_job_get_result(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ft_tunnel_start_job(tunnel: *mut FtTunnelHandle, job: *mut FtJobHandle) -> c_int {
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn ft_tunnel_start_job(
+    tunnel: *mut FtTunnelHandle,
+    job: *mut FtJobHandle,
+) -> c_int {
     if tunnel.is_null() || job.is_null() {
         return FT_EINVAL;
     }
@@ -143,7 +163,9 @@ pub extern "C" fn ft_tunnel_start_job(tunnel: *mut FtTunnelHandle, job: *mut FtJ
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ft_job_cancel(handle: *mut FtJobHandle) -> c_int {
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn ft_job_cancel(handle: *mut FtJobHandle) -> c_int {
     if handle.is_null() {
         return FT_EINVAL;
     }
@@ -155,7 +177,10 @@ pub extern "C" fn ft_job_cancel(handle: *mut FtJobHandle) -> c_int {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ft_job_set_msg_cb(
+/// # Safety
+/// `handle` must identify a live job. When `cb` is present, it and `user` must remain valid and
+/// safe to invoke until replaced, cleared with `None`, or the final job reference is released.
+pub unsafe extern "C" fn ft_job_set_msg_cb(
     handle: *mut FtJobHandle,
     cb: Option<FtJobMsgCb>,
     user: *mut c_void,
@@ -173,6 +198,9 @@ pub extern "C" fn ft_job_set_msg_cb(
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// Any non-null `handle` must identify a live job reference and any non-null `out` must be writable
+/// for one `FtJobMsg` for the duration of this call.
 pub unsafe extern "C" fn ft_job_try_get_msg(handle: *mut FtJobHandle, out: *mut FtJobMsg) -> c_int {
     if !out.is_null() {
         // SAFETY: out is non-null (checked above).
@@ -187,6 +215,9 @@ pub unsafe extern "C" fn ft_job_try_get_msg(handle: *mut FtJobHandle, out: *mut 
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// Any non-null `handle` must identify a live job reference and any non-null `out` must be writable
+/// for one `FtJobMsg` for the duration of this call.
 pub unsafe extern "C" fn ft_job_get_msg(
     handle: *mut FtJobHandle,
     _timeout_ms: u32,
@@ -239,7 +270,7 @@ mod tests {
             std::thread::spawn(move || {
                 std::thread::sleep(Duration::from_millis(100));
                 // Both handles stay alive until joined below.
-                ft_tunnel_start_job(tunnel.get(), job.get())
+                unsafe { ft_tunnel_start_job(tunnel.get(), job.get()) }
             })
         };
 

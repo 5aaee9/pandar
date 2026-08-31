@@ -76,6 +76,8 @@ struct ReportContext<'a> {
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// The session must be live, and the account context/callback must remain valid for this synchronous call.
 pub unsafe extern "C" fn pandar_plugin_account_logout(
     session_ptr: *mut c_void,
     identity: u64,
@@ -83,7 +85,7 @@ pub unsafe extern "C" fn pandar_plugin_account_logout(
     account_context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
 ) -> PluginLifecycleResult {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return failure_result(stable_outcome("invalid_refresh_session"));
     };
     let mut owner = match session.begin_account_logout(request) {
@@ -97,12 +99,14 @@ pub unsafe extern "C" fn pandar_plugin_account_logout(
         request,
         state: LogoutState::Pending,
     };
-    if let Err(error) = transact(
-        account_context,
-        with_current,
-        (&mut context as *mut LogoutContext).cast(),
-        logout_transaction,
-    ) {
+    if let Err(error) = unsafe {
+        transact(
+            account_context,
+            with_current,
+            (&mut context as *mut LogoutContext).cast(),
+            logout_transaction,
+        )
+    } {
         context.state = LogoutState::Failed(diagnosed_outcome(error));
     }
     let request = owner.seal_finalization();
@@ -112,12 +116,14 @@ pub unsafe extern "C" fn pandar_plugin_account_logout(
     {
         context.request = true;
         context.state = LogoutState::Pending;
-        if let Err(error) = transact(
-            account_context,
-            with_current,
-            (&mut context as *mut LogoutContext).cast(),
-            logout_transaction,
-        ) {
+        if let Err(error) = unsafe {
+            transact(
+                account_context,
+                with_current,
+                (&mut context as *mut LogoutContext).cast(),
+                logout_transaction,
+            )
+        } {
             context.state = LogoutState::Failed(diagnosed_outcome(error));
         }
     }
@@ -150,14 +156,16 @@ unsafe extern "C" fn logout_transaction(
         return 1;
     };
     let work: anyhow::Result<()> = (|| {
-        let current = AccountView::read(view)?;
-        let action = pandar_plugin_account_logout_action(
-            context.identity,
-            context.request,
-            current.account_epoch,
-            current.token.as_ptr(),
-            current.token.len(),
-        );
+        let current = unsafe { AccountView::read(view) }?;
+        let action = unsafe {
+            pandar_plugin_account_logout_action(
+                context.identity,
+                context.request,
+                current.account_epoch,
+                current.token.as_ptr(),
+                current.token.len(),
+            )
+        };
         match action {
             ACCOUNT_ACTION_FAILURE => {
                 context.state = LogoutState::Failed(stable_outcome("account_state_unavailable"));
@@ -280,11 +288,13 @@ pub(super) fn revoke_unstaged(revocation: PendingRevocation) -> NoAuthRotationOu
         RequestKind::PluginSession,
     );
     if response.status == 0 || matches!(response.http_code, 401 | 410) {
-        crate::pandar_plugin_free_with_capacity(
-            response.body_ptr.cast(),
-            response.body_len,
-            response.body_cap,
-        );
+        unsafe {
+            crate::pandar_plugin_free_with_capacity(
+                response.body_ptr.cast(),
+                response.body_len,
+                response.body_cap,
+            )
+        };
         success_outcome()
     } else {
         take_http(response)
@@ -292,10 +302,9 @@ pub(super) fn revoke_unstaged(revocation: PendingRevocation) -> NoAuthRotationOu
 }
 
 fn revoke_pending(config_dir: &str) -> NoAuthRotationOutcome {
-    take_http(revocation::pandar_plugin_account_revoke_pending(
-        config_dir.as_ptr(),
-        config_dir.len(),
-    ))
+    take_http(unsafe {
+        revocation::pandar_plugin_account_revoke_pending(config_dir.as_ptr(), config_dir.len())
+    })
 }
 
 pub(super) fn report_remote_failure(
@@ -305,12 +314,14 @@ pub(super) fn report_remote_failure(
     failure: &NoAuthRotationOutcome,
 ) {
     let mut report = ReportContext { expected, failure };
-    if let Err(error) = transact(
-        account_context,
-        with_current,
-        (&mut report as *mut ReportContext<'_>).cast(),
-        report_transaction,
-    ) {
+    if let Err(error) = unsafe {
+        transact(
+            account_context,
+            with_current,
+            (&mut report as *mut ReportContext<'_>).cast(),
+            report_transaction,
+        )
+    } {
         eprintln!("pandar account logout failure delivery failed: {error:#}");
     }
 }
@@ -324,7 +335,7 @@ unsafe extern "C" fn report_transaction(
         return 1;
     };
     let work: anyhow::Result<()> = (|| {
-        let current = AccountView::read(view)?;
+        let current = unsafe { AccountView::read(view) }?;
         if current.account_epoch == context.expected.account_epoch
             && current.config_epoch == context.expected.config_epoch
             && current.hub_url == context.expected.hub_url

@@ -25,7 +25,7 @@ pub unsafe extern "C" fn pandar_plugin_account_session_drain(
 ) {
     let (Some(session), Some(connection), Some(account_bridge)) = (
         unsafe { session_ptr.cast::<AccountLifecycleSession>().as_ref() },
-        connection_session(connection_ptr),
+        unsafe { connection_session(connection_ptr) },
         unsafe { account_bridge_ptr.as_ref() },
     ) else {
         return;
@@ -72,18 +72,22 @@ pub unsafe extern "C" fn pandar_plugin_account_session_drain(
                     .into_iter()
                     .map(|delivery| delivery.ticket)
                     .collect();
-                dispatch_transition_and_tickets(
-                    dispatch_bridge,
-                    agent,
-                    connection_ptr,
-                    connection,
-                    transition,
-                    &tickets,
-                );
-                pandar_plugin_studio_finish_account_transition(
-                    connection_ptr,
-                    callback.account_epoch,
-                );
+                unsafe {
+                    dispatch_transition_and_tickets(
+                        dispatch_bridge,
+                        agent,
+                        connection_ptr,
+                        connection,
+                        transition,
+                        &tickets,
+                    )
+                };
+                unsafe {
+                    pandar_plugin_studio_finish_account_transition(
+                        connection_ptr,
+                        callback.account_epoch,
+                    )
+                };
                 let current = callback
                     .expected
                     .as_ref()
@@ -112,7 +116,8 @@ impl ExpectedAccount {
         account_context: *mut c_void,
         with_current: Option<PluginWithCurrentAccount>,
     ) -> bool {
-        capture(account_context, with_current).is_ok_and(|current| self.matches_view(&current))
+        unsafe { capture(account_context, with_current) }
+            .is_ok_and(|current| self.matches_view(&current))
     }
 
     pub(super) fn matches_view(

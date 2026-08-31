@@ -96,15 +96,18 @@ fn expected() -> NoAuthExpected {
 fn finished_session() -> *mut c_void {
     let hub = b"http://127.0.0.1:1";
     let token = b"old-a-token";
-    let session_ptr = pandar_plugin_printer_refresh_session_create(
-        hub.as_ptr(),
-        hub.len(),
-        token.as_ptr(),
-        token.len(),
-    );
-    let session = crate::connection::ffi::session(session_ptr).expect("connection session");
+    let session_ptr = unsafe {
+        pandar_plugin_printer_refresh_session_create(
+            hub.as_ptr(),
+            hub.len(),
+            token.as_ptr(),
+            token.len(),
+        )
+    };
+    let session =
+        unsafe { crate::connection::ffi::session(session_ptr) }.expect("connection session");
     assert_eq!(
-        pandar_plugin_connection_set_account_epoch(session_ptr, 7),
+        unsafe { pandar_plugin_connection_set_account_epoch(session_ptr, 7) },
         0
     );
     let key = NoAuthRotationKey::new(
@@ -296,12 +299,14 @@ fn finished_rotation_follower_binds_only_to_the_original_account_chain() {
         initial: account("old-a-token", 7),
         after_finished: account("fresh-a-token", 7),
     };
-    match recover(
-        session,
-        expected(),
-        (&mut same_chain as *mut FollowerAccounts).cast(),
-        Some(follower_account),
-    ) {
+    match unsafe {
+        recover(
+            session,
+            expected(),
+            (&mut same_chain as *mut FollowerAccounts).cast(),
+            Some(follower_account),
+        )
+    } {
         NoAuthRecovery::Recovered(identity) => {
             assert_eq!(identity.token, "fresh-a-token");
             assert_eq!(identity.account_epoch, 7);
@@ -316,13 +321,15 @@ fn finished_rotation_follower_binds_only_to_the_original_account_chain() {
         after_finished: account("account-b-token", 8),
     };
     assert!(matches!(
-        recover(
-            session,
-            expected(),
-            (&mut switched as *mut FollowerAccounts).cast(),
-            Some(follower_account),
-        ),
+        unsafe {
+            recover(
+                session,
+                expected(),
+                (&mut switched as *mut FollowerAccounts).cast(),
+                Some(follower_account),
+            )
+        },
         NoAuthRecovery::Stale
     ));
-    pandar_plugin_printer_refresh_session_destroy(session);
+    unsafe { pandar_plugin_printer_refresh_session_destroy(session) };
 }

@@ -40,17 +40,20 @@ struct SendOutcomeBody {
 
 #[unsafe(no_mangle)]
 /// # Safety
-/// String pointers must be valid for their corresponding lengths.
+/// String pointers must be valid for their corresponding lengths. A non-null return is one
+/// caller-owned session that must be destroyed exactly once with
+/// `pandar_plugin_firmware_session_destroy` after all borrowers finish.
 pub unsafe extern "C" fn pandar_plugin_firmware_session_create(
     hub_url_ptr: *const u8,
     hub_url_len: usize,
     token_ptr: *const u8,
     token_len: usize,
 ) -> *mut c_void {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
+    let Some(hub_url) = unsafe { read_utf8(hub_url_ptr, hub_url_len) }.and_then(normalize_hub_url)
+    else {
         return std::ptr::null_mut();
     };
-    let Some(token) = read_utf8(token_ptr, token_len) else {
+    let Some(token) = (unsafe { read_utf8(token_ptr, token_len) }) else {
         return std::ptr::null_mut();
     };
     Box::into_raw(Box::new(FirmwarePluginSession::new(hub_url, token, 1))).cast()
@@ -69,10 +72,11 @@ pub unsafe extern "C" fn pandar_plugin_firmware_session_sync_account(
     let Some(session) = (unsafe { session_ref(session) }) else {
         return 0;
     };
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
+    let Some(hub_url) = unsafe { read_utf8(hub_url_ptr, hub_url_len) }.and_then(normalize_hub_url)
+    else {
         return 0;
     };
-    let Some(token) = read_utf8(token_ptr, token_len) else {
+    let Some(token) = (unsafe { read_utf8(token_ptr, token_len) }) else {
         return 0;
     };
     session.sync_account(hub_url, token)
@@ -91,10 +95,11 @@ pub unsafe extern "C" fn pandar_plugin_firmware_session_fence_account(
     let Some(session) = (unsafe { session_ref(session) }) else {
         return 0;
     };
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
+    let Some(hub_url) = unsafe { read_utf8(hub_url_ptr, hub_url_len) }.and_then(normalize_hub_url)
+    else {
         return 0;
     };
-    let Some(token) = read_utf8(token_ptr, token_len) else {
+    let Some(token) = (unsafe { read_utf8(token_ptr, token_len) }) else {
         return 0;
     };
     session.fence_account(hub_url, token)
@@ -173,7 +178,7 @@ pub unsafe extern "C" fn pandar_plugin_firmware_refresh_version(
     }) else {
         return invalid_input("invalid_firmware_request");
     };
-    let Some(sequence_id) = read_utf8(sequence_id_ptr, sequence_id_len) else {
+    let Some(sequence_id) = (unsafe { read_utf8(sequence_id_ptr, sequence_id_len) }) else {
         return invalid_input("invalid_firmware_request");
     };
     result(
@@ -213,7 +218,7 @@ pub unsafe extern "C" fn pandar_plugin_firmware_send(
     }) else {
         return invalid_input("invalid_firmware_request");
     };
-    let Some(message) = read_utf8(message_ptr, message_len) else {
+    let Some(message) = (unsafe { read_utf8(message_ptr, message_len) }) else {
         return invalid_input("invalid_firmware_request");
     };
     let Some(tunnel) = tunnel_from_ffi(tunnel) else {
@@ -271,7 +276,7 @@ pub unsafe extern "C" fn pandar_plugin_firmware_next_status_override(
     let Some(session) = (unsafe { session_ref(session) }) else {
         return invalid_input("invalid_firmware_session");
     };
-    let Some(dev_id) = read_utf8(studio_dev_id_ptr, studio_dev_id_len) else {
+    let Some(dev_id) = (unsafe { read_utf8(studio_dev_id_ptr, studio_dev_id_len) }) else {
         return invalid_input("invalid_firmware_request");
     };
     session.next_status_override(&dev_id).map_or_else(
@@ -284,7 +289,7 @@ pub unsafe extern "C" fn pandar_plugin_firmware_next_status_override(
 /// # Safety
 /// `session` must point to a live firmware session.
 /// On status `0`, the caller owns both `dev_id` and `message` allocations and must free each once
-/// with `pandar_plugin_free_with_capacity(ptr, len, cap)`. Other statuses return no allocations.
+/// with `unsafe { pandar_plugin_free_with_capacity(ptr, len, cap) }`. Other statuses return no allocations.
 pub unsafe extern "C" fn pandar_plugin_firmware_next_callback(
     session: *mut c_void,
     timeout_ms: u64,
@@ -338,8 +343,8 @@ unsafe fn request_parts<'a>(
     printer_id_len: usize,
 ) -> Option<(&'a FirmwarePluginSession, String, String)> {
     let session = unsafe { session_ref(session) }?;
-    let studio_dev_id = read_utf8(studio_dev_id_ptr, studio_dev_id_len)?;
-    let printer_id = read_utf8(printer_id_ptr, printer_id_len)?;
+    let studio_dev_id = unsafe { read_utf8(studio_dev_id_ptr, studio_dev_id_len) }?;
+    let printer_id = unsafe { read_utf8(printer_id_ptr, printer_id_len) }?;
     if studio_dev_id.trim().is_empty() || printer_id.trim().is_empty() {
         return None;
     }

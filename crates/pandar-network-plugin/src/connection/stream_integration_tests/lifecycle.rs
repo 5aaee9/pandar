@@ -16,13 +16,15 @@ fn connection_answers_hub_ping_without_reconnecting() {
     let (_, _, envelope) = cached_print_info(session);
     assert!(envelope.contains("serial-1"), "{envelope}");
     assert_eq!(requests.lock().unwrap().len(), 1, "no reconnect happened");
-    let plan = pandar_plugin_studio_heartbeat_plan(
-        session,
-        std::ptr::null_mut(),
-        Some(noop_heartbeat as StudioHeartbeatVisitor),
-    );
+    let plan = unsafe {
+        pandar_plugin_studio_heartbeat_plan(
+            session,
+            std::ptr::null_mut(),
+            Some(noop_heartbeat as StudioHeartbeatVisitor),
+        )
+    };
     assert_eq!(plan.refresh, 0);
-    pandar_plugin_printer_refresh_session_destroy(session);
+    unsafe { pandar_plugin_printer_refresh_session_destroy(session) };
 }
 
 #[test]
@@ -66,7 +68,7 @@ fn malformed_or_unsupported_initial_stream_never_commits_staged_records() {
     let (_, _, envelope) = cached_print_info(session);
     assert!(envelope.contains("serial-2"), "{envelope}");
     assert!(!envelope.contains("serial-1"), "{envelope}");
-    pandar_plugin_printer_refresh_session_destroy(session);
+    unsafe { pandar_plugin_printer_refresh_session_destroy(session) };
 }
 
 #[test]
@@ -90,5 +92,5 @@ fn established_stream_close_waits_one_second_before_redial() {
         "redial skipped first backoff: {elapsed:?}"
     );
     drop(requests);
-    pandar_plugin_printer_refresh_session_destroy(session);
+    unsafe { pandar_plugin_printer_refresh_session_destroy(session) };
 }

@@ -28,7 +28,9 @@ fn body(result: PluginHttpResult) -> String {
     }
     let bytes = unsafe { std::slice::from_raw_parts(result.body_ptr, result.body_len) };
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap);
+    unsafe {
+        pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap)
+    };
     body
 }
 
@@ -81,16 +83,18 @@ fn assert_plugin_multipart_print_request(request: &str) {
 }
 
 fn exchange_ticket(hub_url: &[u8], ticket: &[u8]) -> PluginHttpResult {
-    pandar_plugin_exchange_ticket(
-        hub_url.as_ptr(),
-        hub_url.len(),
-        ticket.as_ptr(),
-        ticket.len(),
-    )
+    unsafe {
+        pandar_plugin_exchange_ticket(
+            hub_url.as_ptr(),
+            hub_url.len(),
+            ticket.as_ptr(),
+            ticket.len(),
+        )
+    }
 }
 
 fn get_jobs(hub_url: &[u8], token: &[u8]) -> PluginHttpResult {
-    pandar_plugin_get_jobs(hub_url.as_ptr(), hub_url.len(), token.as_ptr(), token.len())
+    unsafe { pandar_plugin_get_jobs(hub_url.as_ptr(), hub_url.len(), token.as_ptr(), token.len()) }
 }
 
 fn submit_print(hub_url: &[u8], token: &[u8], artifact_path: &[u8]) -> PluginHttpResult {
@@ -107,32 +111,34 @@ fn submit_print_with_modes(
 ) -> PluginHttpResult {
     let printer_id = b"printer";
     let filename = b"job.3mf";
-    pandar_plugin_submit_print(
-        hub_url.as_ptr(),
-        hub_url.len(),
-        token.as_ptr(),
-        token.len(),
-        printer_id.as_ptr(),
-        printer_id.len(),
-        filename.as_ptr(),
-        filename.len(),
-        artifact_path.as_ptr(),
-        artifact_path.len(),
-        1,
-        true,
-        true,
-        auto_bed_leveling,
-        false,
-        auto_flow_cali,
-        auto_offset_cali,
-        false,
-        b"".as_ptr(),
-        0,
-        b"".as_ptr(),
-        0,
-        b"".as_ptr(),
-        0,
-    )
+    unsafe {
+        pandar_plugin_submit_print(
+            hub_url.as_ptr(),
+            hub_url.len(),
+            token.as_ptr(),
+            token.len(),
+            printer_id.as_ptr(),
+            printer_id.len(),
+            filename.as_ptr(),
+            filename.len(),
+            artifact_path.as_ptr(),
+            artifact_path.len(),
+            1,
+            true,
+            true,
+            auto_bed_leveling,
+            false,
+            auto_flow_cali,
+            auto_offset_cali,
+            false,
+            b"".as_ptr(),
+            0,
+            b"".as_ptr(),
+            0,
+            b"".as_ptr(),
+            0,
+        )
+    }
 }
 fn submit_printer_operation(
     hub_url: &[u8],
@@ -140,16 +146,18 @@ fn submit_printer_operation(
     operation_json: &[u8],
 ) -> PluginHttpResult {
     let printer_id = b"printer";
-    pandar_plugin_submit_printer_operation(
-        hub_url.as_ptr(),
-        hub_url.len(),
-        token.as_ptr(),
-        token.len(),
-        printer_id.as_ptr(),
-        printer_id.len(),
-        operation_json.as_ptr(),
-        operation_json.len(),
-    )
+    unsafe {
+        pandar_plugin_submit_printer_operation(
+            hub_url.as_ptr(),
+            hub_url.len(),
+            token.as_ptr(),
+            token.len(),
+            printer_id.as_ptr(),
+            printer_id.len(),
+            operation_json.as_ptr(),
+            operation_json.len(),
+        )
+    }
 }
 
 fn write_artifact(path: &Path, bytes: &[u8]) {

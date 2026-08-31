@@ -36,7 +36,9 @@ type AccountVisitor = unsafe extern "C" fn(
 const ACCOUNT_FAILURE: &str = "account_state_unavailable";
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_decode_session(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_decode_session(
     body_ptr: *const u8,
     body_len: usize,
     session_kind: i32,
@@ -44,7 +46,7 @@ pub extern "C" fn pandar_plugin_account_decode_session(
     visitor: Option<AccountVisitor>,
 ) -> PluginHttpResult {
     account_result((|| {
-        let body = borrowed(body_ptr, body_len)?;
+        let body = unsafe { borrowed(body_ptr, body_len) }?;
         let session: SessionInput =
             serde_json::from_str(body).context("decode typed account session")?;
         ensure!(
@@ -53,19 +55,23 @@ pub extern "C" fn pandar_plugin_account_decode_session(
         );
         let token = session.token;
         let profile = session.profile.normalize()?;
-        visit_account(
-            context,
-            visitor,
-            &token,
-            &profile,
-            SessionKind::try_from(session_kind)?,
-        )?;
+        unsafe {
+            visit_account(
+                context,
+                visitor,
+                &token,
+                &profile,
+                SessionKind::try_from(session_kind)?,
+            )
+        }?;
         Ok(())
     })())
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_decode_profile(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_decode_profile(
     body_ptr: *const u8,
     body_len: usize,
     fallback_token_ptr: *const u8,
@@ -74,29 +80,33 @@ pub extern "C" fn pandar_plugin_account_decode_profile(
     visitor: Option<AccountVisitor>,
 ) -> PluginHttpResult {
     account_result((|| {
-        let body = borrowed(body_ptr, body_len)?;
+        let body = unsafe { borrowed(body_ptr, body_len) }?;
         let input: types::ProfileInput =
             serde_json::from_str(body).context("decode typed account profile input")?;
         let token = if input.token.trim().is_empty() {
-            borrowed(fallback_token_ptr, fallback_token_len)?.to_owned()
+            unsafe { borrowed(fallback_token_ptr, fallback_token_len) }?.to_owned()
         } else {
             input.token.clone()
         };
         ensure!(!token.trim().is_empty(), "account profile has no token");
         let profile = input.normalize()?;
-        visit_account(
-            context,
-            visitor,
-            &token,
-            &profile,
-            SessionKind::Authenticated,
-        )?;
+        unsafe {
+            visit_account(
+                context,
+                visitor,
+                &token,
+                &profile,
+                SessionKind::Authenticated,
+            )
+        }?;
         Ok(())
     })())
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_load(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_load(
     config_dir_ptr: *const u8,
     config_dir_len: usize,
     expected_hub_ptr: *const u8,
@@ -105,8 +115,8 @@ pub extern "C" fn pandar_plugin_account_load(
     visitor: Option<AccountVisitor>,
 ) -> PluginHttpResult {
     let loaded = (|| {
-        let config_dir = borrowed(config_dir_ptr, config_dir_len)?;
-        let expected_hub = borrowed(expected_hub_ptr, expected_hub_len)?;
+        let config_dir = unsafe { borrowed(config_dir_ptr, config_dir_len) }?;
+        let expected_hub = unsafe { borrowed(expected_hub_ptr, expected_hub_len) }?;
         let Some(login) = persistence::load(config_dir)? else {
             return Ok(false);
         };
@@ -117,13 +127,15 @@ pub extern "C" fn pandar_plugin_account_load(
             !login.token.trim().is_empty(),
             "persisted Studio login has no token"
         );
-        visit_account(
-            context,
-            visitor,
-            &login.token,
-            &login.profile,
-            login.session_kind,
-        )?;
+        unsafe {
+            visit_account(
+                context,
+                visitor,
+                &login.token,
+                &login.profile,
+                login.session_kind,
+            )
+        }?;
         Ok(true)
     })();
     match loaded {
@@ -134,7 +146,9 @@ pub extern "C" fn pandar_plugin_account_load(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_persist(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_persist(
     config_dir_ptr: *const u8,
     config_dir_len: usize,
     hub_url_ptr: *const u8,
@@ -146,13 +160,13 @@ pub extern "C" fn pandar_plugin_account_persist(
     profile_len: usize,
 ) -> PluginHttpResult {
     account_result((|| {
-        let token = borrowed(token_ptr, token_len)?;
-        let profile_json = borrowed(profile_ptr, profile_len)?;
+        let token = unsafe { borrowed(token_ptr, token_len) }?;
+        let profile_json = unsafe { borrowed(profile_ptr, profile_len) }?;
         if token.is_empty() && profile_json.is_empty() {
             return Ok(());
         }
-        let config_dir = borrowed(config_dir_ptr, config_dir_len)?;
-        let hub_url = canonical_hub_identity(borrowed(hub_url_ptr, hub_url_len)?);
+        let config_dir = unsafe { borrowed(config_dir_ptr, config_dir_len) }?;
+        let hub_url = canonical_hub_identity(unsafe { borrowed(hub_url_ptr, hub_url_len) }?);
         ensure!(
             !token.trim().is_empty(),
             "persisted Studio login has no token"
@@ -173,19 +187,23 @@ pub extern "C" fn pandar_plugin_account_persist(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_clear(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_clear(
     config_dir_ptr: *const u8,
     config_dir_len: usize,
 ) -> PluginHttpResult {
     account_result((|| {
-        persistence::clear(borrowed(config_dir_ptr, config_dir_len)?)?
+        persistence::clear(unsafe { borrowed(config_dir_ptr, config_dir_len) }?)?
             .require_confirmed("durably clear persisted Studio login")?;
         Ok(())
     })())
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_login_envelope(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_login_envelope(
     logout: bool,
     token_ptr: *const u8,
     token_len: usize,
@@ -197,10 +215,10 @@ pub extern "C" fn pandar_plugin_account_login_envelope(
     avatar_len: usize,
 ) -> PluginHttpResult {
     json_result((|| {
-        let token = borrowed(token_ptr, token_len)?;
-        let user_id = borrowed(user_id_ptr, user_id_len)?;
-        let user_name = borrowed(user_name_ptr, user_name_len)?;
-        let avatar = borrowed(avatar_ptr, avatar_len)?;
+        let token = unsafe { borrowed(token_ptr, token_len) }?;
+        let user_id = unsafe { borrowed(user_id_ptr, user_id_len) }?;
+        let user_name = unsafe { borrowed(user_name_ptr, user_name_len) }?;
+        let avatar = unsafe { borrowed(avatar_ptr, avatar_len) }?;
         let online = !logout && !token.is_empty();
         serde_json::to_string(&LoginEnvelope {
             sequence_id: "0",
@@ -225,12 +243,14 @@ pub extern "C" fn pandar_plugin_account_login_envelope(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_token_body(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_token_body(
     token_ptr: *const u8,
     token_len: usize,
 ) -> PluginHttpResult {
     json_result((|| {
-        let token = borrowed(token_ptr, token_len)?;
+        let token = unsafe { borrowed(token_ptr, token_len) }?;
         serde_json::to_string(&StudioToken {
             access_token: token,
             refresh_token: "",
@@ -245,7 +265,9 @@ pub extern "C" fn pandar_plugin_account_token_body(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_profile_body(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_profile_body(
     user_id_ptr: *const u8,
     user_id_len: usize,
     user_name_ptr: *const u8,
@@ -254,8 +276,8 @@ pub extern "C" fn pandar_plugin_account_profile_body(
     avatar_len: usize,
 ) -> PluginHttpResult {
     let body = (|| {
-        let user_id = borrowed(user_id_ptr, user_id_len)?;
-        let user_name = borrowed(user_name_ptr, user_name_len)?;
+        let user_id = unsafe { borrowed(user_id_ptr, user_id_len) }?;
+        let user_name = unsafe { borrowed(user_name_ptr, user_name_len) }?;
         if user_id.is_empty() || user_name.is_empty() {
             return Ok(None);
         }
@@ -263,7 +285,7 @@ pub extern "C" fn pandar_plugin_account_profile_body(
             user_id,
             account: user_name,
             name: user_name,
-            avatar: borrowed(avatar_ptr, avatar_len)?,
+            avatar: unsafe { borrowed(avatar_ptr, avatar_len) }?,
         })
         .context("encode Studio profile body")
         .map(Some)
@@ -276,21 +298,27 @@ pub extern "C" fn pandar_plugin_account_profile_body(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_local_base_url(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_local_base_url(
     body_ptr: *const u8,
     body_len: usize,
 ) -> PluginHttpResult {
-    json_field_result::<LocalServerBaseUrl>(body_ptr, body_len, |value| value.base_url)
+    unsafe { json_field_result::<LocalServerBaseUrl>(body_ptr, body_len, |value| value.base_url) }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_local_hub_url(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_local_hub_url(
     body_ptr: *const u8,
     body_len: usize,
 ) -> PluginHttpResult {
-    json_field_result::<LocalServerConfig>(body_ptr, body_len, |value| {
-        canonical_hub_identity(&value.hub_url)
-    })
+    unsafe {
+        json_field_result::<LocalServerConfig>(body_ptr, body_len, |value| {
+            canonical_hub_identity(&value.hub_url)
+        })
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -302,7 +330,7 @@ pub extern "C" fn pandar_plugin_account_session_action(status: i32, http_code: u
     }
 }
 
-fn visit_account(
+unsafe fn visit_account(
     context: *mut std::ffi::c_void,
     visitor: Option<AccountVisitor>,
     token: &str,
@@ -331,13 +359,13 @@ fn visit_account(
     Ok(())
 }
 
-fn json_field_result<T: serde::de::DeserializeOwned>(
+unsafe fn json_field_result<T: serde::de::DeserializeOwned>(
     body_ptr: *const u8,
     body_len: usize,
     select: impl FnOnce(T) -> String,
 ) -> PluginHttpResult {
     json_result((|| {
-        let value = serde_json::from_str::<T>(borrowed(body_ptr, body_len)?)
+        let value = serde_json::from_str::<T>(unsafe { borrowed(body_ptr, body_len) }?)
             .context("decode typed local server response")?;
         let selected = select(value);
         ensure!(!selected.is_empty(), "local server response field is empty");

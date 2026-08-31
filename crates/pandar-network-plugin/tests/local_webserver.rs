@@ -17,7 +17,9 @@ fn body(result: PluginHttpResult) -> String {
     }
     let bytes = unsafe { std::slice::from_raw_parts(result.body_ptr, result.body_len) };
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap);
+    unsafe {
+        pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap)
+    };
     body
 }
 
@@ -27,14 +29,16 @@ fn start_local(
     web_configured: bool,
     hub_configured: bool,
 ) -> StartLocalResponse {
-    let result = pandar_plugin_start_local_webserver(
-        web_url.as_ptr(),
-        web_url.len(),
-        hub_url.as_ptr(),
-        hub_url.len(),
-        web_configured,
-        hub_configured,
-    );
+    let result = unsafe {
+        pandar_plugin_start_local_webserver(
+            web_url.as_ptr(),
+            web_url.len(),
+            hub_url.as_ptr(),
+            hub_url.len(),
+            web_configured,
+            hub_configured,
+        )
+    };
     if result.status != 0 {
         panic!("start local webserver failed: {}", body(result));
     }

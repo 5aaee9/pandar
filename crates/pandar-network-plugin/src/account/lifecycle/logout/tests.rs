@@ -93,12 +93,14 @@ fn requested_upgrade_replays_a_passive_empty_transaction_to_fence_the_epoch() {
     let directory = tempfile::tempdir().unwrap();
     let hub = b"http://127.0.0.1:8080";
     let token = b"";
-    let session = pandar_plugin_printer_refresh_session_create(
-        hub.as_ptr(),
-        hub.len(),
-        token.as_ptr(),
-        token.len(),
-    );
+    let session = unsafe {
+        pandar_plugin_printer_refresh_session_create(
+            hub.as_ptr(),
+            hub.len(),
+            token.as_ptr(),
+            token.len(),
+        )
+    };
     let mut account = EmptyAccount {
         session,
         identity: pandar_plugin_account_identity_create(),
@@ -122,5 +124,5 @@ fn requested_upgrade_replays_a_passive_empty_transaction_to_fence_the_epoch() {
     assert_eq!(account.actions, vec![ACCOUNT_ACTION_NONE, MUTATION_CLEAR]);
     assert_eq!(account.account_epoch, 8);
     assert_eq!(outcome.status, 0, "{outcome:?}");
-    pandar_plugin_printer_refresh_session_destroy(session);
+    unsafe { pandar_plugin_printer_refresh_session_destroy(session) };
 }

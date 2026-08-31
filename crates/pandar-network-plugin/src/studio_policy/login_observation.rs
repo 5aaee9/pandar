@@ -26,13 +26,15 @@ pub extern "C" fn pandar_plugin_account_identity_create() -> u64 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_observe_login(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_observe_login(
     identity: u64,
     account_epoch: u64,
     token_ptr: *const u8,
     token_len: usize,
 ) -> bool {
-    let Some(token) = read_utf8(token_ptr, token_len) else {
+    let Some(token) = (unsafe { read_utf8(token_ptr, token_len) }) else {
         clear(identity);
         return false;
     };
@@ -52,14 +54,16 @@ pub extern "C" fn pandar_plugin_account_login_observation_clear(identity: u64) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_logout_action(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_logout_action(
     identity: u64,
     request: bool,
     current_epoch: u64,
     token_ptr: *const u8,
     token_len: usize,
 ) -> i32 {
-    let Some(current_token) = read_utf8(token_ptr, token_len) else {
+    let Some(current_token) = (unsafe { read_utf8(token_ptr, token_len) }) else {
         clear(identity);
         return ACCOUNT_ACTION_FAILURE;
     };

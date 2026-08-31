@@ -6,16 +6,20 @@ use crate::{
 };
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_exchange_ticket(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_exchange_ticket(
     hub_url_ptr: *const u8,
     hub_url_len: usize,
     ticket_ptr: *const u8,
     ticket_len: usize,
 ) -> PluginHttpResult {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
+    let Some(hub_url) = unsafe { read_utf8(hub_url_ptr, hub_url_len) }.and_then(normalize_hub_url)
+    else {
         return invalid_input("invalid_hub_url");
     };
-    let Some(ticket) = read_utf8(ticket_ptr, ticket_len).filter(|ticket| !ticket.trim().is_empty())
+    let Some(ticket) =
+        unsafe { read_utf8(ticket_ptr, ticket_len) }.filter(|ticket| !ticket.trim().is_empty())
     else {
         return invalid_input("invalid_plugin_ticket");
     };
@@ -28,11 +32,14 @@ pub extern "C" fn pandar_plugin_exchange_ticket(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_create_no_auth_session(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_create_no_auth_session(
     hub_url_ptr: *const u8,
     hub_url_len: usize,
 ) -> PluginHttpResult {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
+    let Some(hub_url) = unsafe { read_utf8(hub_url_ptr, hub_url_len) }.and_then(normalize_hub_url)
+    else {
         return invalid_input("invalid_hub_url");
     };
     create_no_auth_session_with_cancellation(&hub_url, RequestCancellation::disabled())
@@ -56,16 +63,20 @@ pub extern "C" fn pandar_plugin_no_auth_retryable_connect_failure(status: i32) -
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_delete_session(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_delete_session(
     hub_url_ptr: *const u8,
     hub_url_len: usize,
     token_ptr: *const u8,
     token_len: usize,
 ) -> PluginHttpResult {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
+    let Some(hub_url) = unsafe { read_utf8(hub_url_ptr, hub_url_len) }.and_then(normalize_hub_url)
+    else {
         return invalid_input("invalid_hub_url");
     };
-    let Some(token) = read_utf8(token_ptr, token_len).filter(|token| !token.trim().is_empty())
+    let Some(token) =
+        unsafe { read_utf8(token_ptr, token_len) }.filter(|token| !token.trim().is_empty())
     else {
         return invalid_input("invalid_auth_token");
     };

@@ -51,24 +51,28 @@ fn empty_account_session_is_a_persistence_no_op() {
     let hub_url = b"http://127.0.0.1:8080";
     let empty = b"";
 
-    let result = pandar_plugin_account_persist(
-        config_dir.as_ptr(),
-        config_dir.len(),
-        hub_url.as_ptr(),
-        hub_url.len(),
-        empty.as_ptr(),
-        empty.len(),
-        SessionKind::Authenticated as i32,
-        empty.as_ptr(),
-        empty.len(),
-    );
+    let result = unsafe {
+        pandar_plugin_account_persist(
+            config_dir.as_ptr(),
+            config_dir.len(),
+            hub_url.as_ptr(),
+            hub_url.len(),
+            empty.as_ptr(),
+            empty.len(),
+            SessionKind::Authenticated as i32,
+            empty.as_ptr(),
+            empty.len(),
+        )
+    };
     let status = result.status;
     let http_code = result.http_code;
-    crate::pandar_plugin_free_with_capacity(
-        result.body_ptr.cast(),
-        result.body_len,
-        result.body_cap,
-    );
+    unsafe {
+        crate::pandar_plugin_free_with_capacity(
+            result.body_ptr.cast(),
+            result.body_len,
+            result.body_cap,
+        )
+    };
 
     assert_eq!(status, 0);
     assert_eq!(http_code, 200);
@@ -85,24 +89,28 @@ fn partially_empty_account_session_is_rejected() {
     let token = b"secret-token";
 
     let persist = |token: &[u8], profile: &[u8]| {
-        let result = pandar_plugin_account_persist(
-            config_dir.as_ptr(),
-            config_dir.len(),
-            hub_url.as_ptr(),
-            hub_url.len(),
-            token.as_ptr(),
-            token.len(),
-            SessionKind::Authenticated as i32,
-            profile.as_ptr(),
-            profile.len(),
-        );
+        let result = unsafe {
+            pandar_plugin_account_persist(
+                config_dir.as_ptr(),
+                config_dir.len(),
+                hub_url.as_ptr(),
+                hub_url.len(),
+                token.as_ptr(),
+                token.len(),
+                SessionKind::Authenticated as i32,
+                profile.as_ptr(),
+                profile.len(),
+            )
+        };
         let status = result.status;
         let http_code = result.http_code;
-        crate::pandar_plugin_free_with_capacity(
-            result.body_ptr.cast(),
-            result.body_len,
-            result.body_cap,
-        );
+        unsafe {
+            crate::pandar_plugin_free_with_capacity(
+                result.body_ptr.cast(),
+                result.body_len,
+                result.body_cap,
+            )
+        };
         (status, http_code)
     };
 

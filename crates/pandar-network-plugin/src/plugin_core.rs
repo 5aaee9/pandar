@@ -100,17 +100,20 @@ pub(crate) unsafe fn core<'a>(core: *mut c_void) -> Option<&'a PluginCore> {
 
 #[unsafe(no_mangle)]
 /// # Safety
-/// Input pointers must be valid for their corresponding lengths.
+/// Input pointers must be valid for their corresponding lengths. A non-null return is one
+/// caller-owned core that must be destroyed exactly once with `pandar_plugin_core_destroy` after
+/// all borrowed component pointers and dispatcher threads are finished.
 pub unsafe extern "C" fn pandar_plugin_core_create(
     hub_url_ptr: *const u8,
     hub_url_len: usize,
     token_ptr: *const u8,
     token_len: usize,
 ) -> *mut c_void {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
+    let Some(hub_url) = unsafe { read_utf8(hub_url_ptr, hub_url_len) }.and_then(normalize_hub_url)
+    else {
         return std::ptr::null_mut();
     };
-    let Some(token) = read_utf8(token_ptr, token_len) else {
+    let Some(token) = (unsafe { read_utf8(token_ptr, token_len) }) else {
         return std::ptr::null_mut();
     };
     Box::into_raw(Box::new(PluginCore::new(hub_url, token))).cast()

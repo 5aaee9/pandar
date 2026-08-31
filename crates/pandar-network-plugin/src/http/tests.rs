@@ -30,7 +30,9 @@ fn body(result: PluginHttpResult) -> String {
     }
     let bytes = unsafe { std::slice::from_raw_parts(result.body_ptr, result.body_len) };
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap);
+    unsafe {
+        pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap)
+    };
     body
 }
 
@@ -213,7 +215,7 @@ fn multipart_network_failure_logs_complete_redacted_chain() {
 fn no_auth_retry_is_limited_to_connection_failures_before_request_delivery() {
     let url = "http://127.0.0.1:0";
 
-    let connect_failure = pandar_plugin_create_no_auth_session(url.as_ptr(), url.len());
+    let connect_failure = unsafe { pandar_plugin_create_no_auth_session(url.as_ptr(), url.len()) };
 
     assert!(pandar_plugin_no_auth_retryable_connect_failure(
         connect_failure.status
@@ -232,7 +234,7 @@ fn no_auth_retry_is_limited_to_connection_failures_before_request_delivery() {
     });
     let url = format!("http://{address}");
 
-    let response_lost = pandar_plugin_create_no_auth_session(url.as_ptr(), url.len());
+    let response_lost = unsafe { pandar_plugin_create_no_auth_session(url.as_ptr(), url.len()) };
     server.join().unwrap();
 
     assert!(!pandar_plugin_no_auth_retryable_connect_failure(

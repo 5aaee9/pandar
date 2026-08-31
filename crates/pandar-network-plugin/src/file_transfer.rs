@@ -141,7 +141,10 @@ pub unsafe extern "C" fn ft_tunnel_create(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ft_tunnel_retain(handle: *mut FtTunnelHandle) {
+/// # Safety
+/// `handle` must own one live tunnel reference. This adds another owned reference that must later
+/// be consumed by exactly one `ft_tunnel_release` call.
+pub unsafe extern "C" fn ft_tunnel_retain(handle: *mut FtTunnelHandle) {
     if !handle.is_null() {
         // SAFETY: see module-level note.
         unsafe { retain(handle as *const FtTunnel) };
@@ -149,13 +152,18 @@ pub extern "C" fn ft_tunnel_retain(handle: *mut FtTunnelHandle) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ft_tunnel_release(handle: *mut FtTunnelHandle) {
+/// # Safety
+/// `handle` must own one live tunnel reference. This consumes that reference and may destroy the
+/// allocation; the caller must not use that reference after this call.
+pub unsafe extern "C" fn ft_tunnel_release(handle: *mut FtTunnelHandle) {
     // SAFETY: see module-level note.
     unsafe { release(handle as *mut FtTunnel) };
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ft_tunnel_start_connect(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn ft_tunnel_start_connect(
     handle: *mut FtTunnelHandle,
     cb: Option<FtTunnelConnectCb>,
     user: *mut c_void,
@@ -186,12 +194,17 @@ pub extern "C" fn ft_tunnel_start_connect(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ft_tunnel_sync_connect(handle: *mut FtTunnelHandle) -> c_int {
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn ft_tunnel_sync_connect(handle: *mut FtTunnelHandle) -> c_int {
     if handle.is_null() { FT_EINVAL } else { FT_EIO }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ft_tunnel_set_status_cb(
+/// # Safety
+/// `handle` must identify a live tunnel. When `cb` is present, it and `user` must remain valid and
+/// safe to invoke until replaced, cleared with `None`, or the final tunnel reference is released.
+pub unsafe extern "C" fn ft_tunnel_set_status_cb(
     handle: *mut FtTunnelHandle,
     cb: Option<FtTunnelStatusCb>,
     user: *mut c_void,
@@ -209,7 +222,9 @@ pub extern "C" fn ft_tunnel_set_status_cb(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ft_tunnel_shutdown(handle: *mut FtTunnelHandle) -> c_int {
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn ft_tunnel_shutdown(handle: *mut FtTunnelHandle) -> c_int {
     if handle.is_null() {
         return FT_EINVAL;
     }

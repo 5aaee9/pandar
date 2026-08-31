@@ -79,7 +79,7 @@ pub struct PluginPendingOutcome {
     pub logged_out: i32,
 }
 
-fn bridge<'a>(ptr: *const PluginDispatchBridge) -> Option<&'a PluginDispatchBridge> {
+unsafe fn bridge<'a>(ptr: *const PluginDispatchBridge) -> Option<&'a PluginDispatchBridge> {
     // SAFETY: the shim passes a pointer to its static bridge instance, which
     // outlives every dispatch call.
     unsafe { ptr.as_ref() }

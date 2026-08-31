@@ -27,12 +27,14 @@ fn makerworld_or_incomplete_metadata_is_rejected_without_delivery() {
             current_snapshot: Some(current_snapshot),
         };
         let mut captured = None;
-        let result = pandar_plugin_studio_get_model_task(
-            &account,
-            bytes("41"),
-            (&mut captured as *mut Option<CapturedTask>).cast(),
-            Some(capture_task),
-        );
+        let result = unsafe {
+            pandar_plugin_studio_get_model_task(
+                &account,
+                bytes("41"),
+                (&mut captured as *mut Option<CapturedTask>).cast(),
+                Some(capture_task),
+            )
+        };
 
         assert_eq!(result.status, 1, "accepted invalid response: {body}");
         assert_eq!(result.http_code, 502, "wrong status for: {body}");

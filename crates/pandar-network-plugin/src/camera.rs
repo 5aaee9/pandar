@@ -45,15 +45,17 @@ impl Drop for ActiveRelay {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_camera_url(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_camera_url(
     session_ptr: *mut c_void,
     dev_id_ptr: *const u8,
     dev_id_len: usize,
 ) -> PluginHttpResult {
-    let Some(session) = crate::connection::ffi::session(session_ptr) else {
+    let Some(session) = (unsafe { crate::connection::ffi::session(session_ptr) }) else {
         return result(-1, 0, stable_error_body("invalid_handle"));
     };
-    let Some(dev_id) = read_utf8(dev_id_ptr, dev_id_len) else {
+    let Some(dev_id) = (unsafe { read_utf8(dev_id_ptr, dev_id_len) }) else {
         return invalid_input("camera_unavailable");
     };
     let Some(snapshot) = session.studio_camera_snapshot(dev_id) else {

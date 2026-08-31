@@ -82,6 +82,10 @@ impl Candidate {
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// `session_ptr` must identify a live account lifecycle session, `user_info_ptr` must be valid for
+/// `user_info_len`, and `account_context` plus `with_current` must remain valid for every callback
+/// made during this synchronous call.
 pub unsafe extern "C" fn pandar_plugin_account_change_user(
     session_ptr: *mut c_void,
     identity: u64,
@@ -90,7 +94,7 @@ pub unsafe extern "C" fn pandar_plugin_account_change_user(
     account_context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
 ) -> PluginLifecycleResult {
-    let Some(user_info) = read_utf8(user_info_ptr, user_info_len) else {
+    let Some(user_info) = (unsafe { read_utf8(user_info_ptr, user_info_len) }) else {
         return lifecycle(stable_failure("account_state_unavailable", 0));
     };
     if user_info.is_empty() || user_info == "{}" {
@@ -104,7 +108,7 @@ pub unsafe extern "C" fn pandar_plugin_account_change_user(
             )
         };
     }
-    let current = match capture(account_context, with_current) {
+    let current = match unsafe { capture(account_context, with_current) } {
         Ok(current) => current,
         Err(error) => return lifecycle(diagnosed(error)),
     };
@@ -146,18 +150,22 @@ pub unsafe extern "C" fn pandar_plugin_account_change_user(
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// `ticket_ptr` must be valid for `ticket_len`; `account_context` plus `with_current` must remain
+/// valid for every callback made during this synchronous call.
 pub unsafe extern "C" fn pandar_plugin_account_exchange_ticket(
     ticket_ptr: *const u8,
     ticket_len: usize,
     account_context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
 ) -> PluginLifecycleResult {
-    let current = match capture(account_context, with_current) {
+    let current = match unsafe { capture(account_context, with_current) } {
         Ok(current) => current,
         Err(error) => return lifecycle(diagnosed(error)),
     };
     let expected = ExpectedAccount::from_view(&current);
-    let Some(ticket) = read_utf8(ticket_ptr, ticket_len).filter(|ticket| !ticket.trim().is_empty())
+    let Some(ticket) =
+        unsafe { read_utf8(ticket_ptr, ticket_len) }.filter(|ticket| !ticket.trim().is_empty())
     else {
         let failure = stable_failure("invalid_plugin_ticket", 401);
         report_failure(account_context, with_current, &expected, &failure, true);
@@ -174,12 +182,14 @@ pub unsafe extern "C" fn pandar_plugin_account_exchange_ticket(
         report_failure(account_context, with_current, &expected, &pending, true);
         return lifecycle(pending);
     }
-    let response = take_http(pandar_plugin_exchange_ticket(
-        expected.hub_url.as_ptr(),
-        expected.hub_url.len(),
-        ticket.as_ptr(),
-        ticket.len(),
-    ));
+    let response = take_http(unsafe {
+        pandar_plugin_exchange_ticket(
+            expected.hub_url.as_ptr(),
+            expected.hub_url.len(),
+            ticket.as_ptr(),
+            ticket.len(),
+        )
+    });
     if response.status != 0 {
         report_failure(account_context, with_current, &expected, &response, true);
         return lifecycle(response);
@@ -205,16 +215,19 @@ pub unsafe extern "C" fn pandar_plugin_account_exchange_ticket(
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// `token_ptr` must be valid for `token_len`; `account_context` plus `with_current` must remain
+/// valid for every callback made during this synchronous call.
 pub unsafe extern "C" fn pandar_plugin_account_profile(
     token_ptr: *const u8,
     token_len: usize,
     account_context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
 ) -> PluginLifecycleResult {
-    let Some(requested_token) = read_utf8(token_ptr, token_len) else {
+    let Some(requested_token) = (unsafe { read_utf8(token_ptr, token_len) }) else {
         return lifecycle(stable_failure("account_state_unavailable", 0));
     };
-    let current = match capture(account_context, with_current) {
+    let current = match unsafe { capture(account_context, with_current) } {
         Ok(current) => current,
         Err(error) => return lifecycle(diagnosed(error)),
     };

@@ -8,7 +8,9 @@ fn body(result: PluginHttpResult) -> (i32, u32, String) {
         unsafe { std::slice::from_raw_parts(result.body_ptr, result.body_len) }
     };
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap);
+    unsafe {
+        pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap)
+    };
     (result.status, result.http_code, body)
 }
 
@@ -27,22 +29,13 @@ fn print_info_policy_owns_admission_and_stale_response() {
         (-19, 409, r#"{"error":"account_transition"}"#.to_owned())
     );
     assert_eq!(
-        body(pandar_plugin_studio_print_info_admission(
-            true,
-            true,
-            b"token".as_ptr(),
-            5,
-        )),
+        body(unsafe {
+            pandar_plugin_studio_print_info_admission(true, true, b"token".as_ptr(), 5)
+        }),
         (-11, 409, r#"{"error":"account_transition"}"#.to_owned())
     );
     assert_eq!(
-        body(pandar_plugin_studio_print_info_result(
-            0,
-            200,
-            b"[]".as_ptr(),
-            2,
-            false,
-        )),
+        body(unsafe { pandar_plugin_studio_print_info_result(0, 200, b"[]".as_ptr(), 2, false,) }),
         (-11, 401, r#"{"error":"invalid_auth_token"}"#.to_owned())
     );
 }
@@ -58,23 +51,15 @@ fn printer_response_policy_owns_stale_dispositions() {
         )
     );
     assert_eq!(
-        body(pandar_plugin_studio_firmware_catalog_result(
-            0,
-            200,
-            b"{}".as_ptr(),
-            2,
-            false,
-        )),
+        body(unsafe {
+            pandar_plugin_studio_firmware_catalog_result(0, 200, b"{}".as_ptr(), 2, false)
+        }),
         (-19, 409, r#"{"error":"stale_firmware_catalog"}"#.to_owned())
     );
     assert_eq!(
-        body(pandar_plugin_studio_printer_operation_result(
-            0,
-            200,
-            b"{}".as_ptr(),
-            2,
-            false,
-        )),
+        body(unsafe {
+            pandar_plugin_studio_printer_operation_result(0, 200, b"{}".as_ptr(), 2, false)
+        }),
         (
             -19,
             409,
@@ -86,31 +71,47 @@ fn printer_response_policy_owns_stale_dispositions() {
 #[test]
 fn account_policy_owns_state_changes_and_abi_status() {
     assert_eq!(
-        pandar_plugin_account_change_action(b"{}".as_ptr(), 2),
+        unsafe { pandar_plugin_account_change_action(b"{}".as_ptr(), 2) },
         ACCOUNT_ACTION_LOGOUT
     );
     assert_eq!(
-        pandar_plugin_account_change_action(b"{\"user_id\":\"u\"}".as_ptr(), 15),
+        unsafe { pandar_plugin_account_change_action(b"{\"user_id\":\"u\"}".as_ptr(), 15) },
         ACCOUNT_ACTION_LOGIN
     );
     assert_eq!(
-        login_observation::pandar_plugin_account_logout_action(1, false, 0, b"".as_ptr(), 0),
+        unsafe {
+            login_observation::pandar_plugin_account_logout_action(1, false, 0, b"".as_ptr(), 0)
+        },
         ACCOUNT_ACTION_NONE
     );
     assert_eq!(
-        login_observation::pandar_plugin_account_logout_action(1, true, 0, b"".as_ptr(), 0),
+        unsafe {
+            login_observation::pandar_plugin_account_logout_action(1, true, 0, b"".as_ptr(), 0)
+        },
         ACCOUNT_ACTION_LOGOUT
     );
     assert_eq!(
-        login_observation::pandar_plugin_account_logout_action(1, true, 0, b"".as_ptr(), 0),
+        unsafe {
+            login_observation::pandar_plugin_account_logout_action(1, true, 0, b"".as_ptr(), 0)
+        },
         ACCOUNT_ACTION_LOGOUT
     );
     assert_eq!(
-        login_observation::pandar_plugin_account_logout_action(1, false, 0, b"token".as_ptr(), 5,),
+        unsafe {
+            login_observation::pandar_plugin_account_logout_action(
+                1,
+                false,
+                0,
+                b"token".as_ptr(),
+                5,
+            )
+        },
         ACCOUNT_ACTION_LOGOUT
     );
     assert_eq!(
-        login_observation::pandar_plugin_account_logout_action(1, true, 0, [0xff].as_ptr(), 1,),
+        unsafe {
+            login_observation::pandar_plugin_account_logout_action(1, true, 0, [0xff].as_ptr(), 1)
+        },
         ACCOUNT_ACTION_FAILURE
     );
     assert_eq!(pandar_plugin_account_mutation_status(true, true), 0);
@@ -119,31 +120,41 @@ fn account_policy_owns_state_changes_and_abi_status() {
         ABI_INVALID_RESULT
     );
     assert_eq!(
-        body(pandar_plugin_account_mutation_result(
-            false,
-            true,
-            br#"{"error":"decode_failed"}"#.as_ptr(),
-            25,
-        )),
+        body(unsafe {
+            pandar_plugin_account_mutation_result(
+                false,
+                true,
+                br#"{"error":"decode_failed"}"#.as_ptr(),
+                25,
+            )
+        }),
         (-19, 0, r#"{"error":"decode_failed"}"#.to_owned())
     );
     assert_eq!(
-        pandar_plugin_account_commit_action(7, 8, b"".as_ptr(), 0, b"".as_ptr(), 0, true,),
+        unsafe {
+            pandar_plugin_account_commit_action(7, 8, b"".as_ptr(), 0, b"".as_ptr(), 0, true)
+        },
         ACCOUNT_ACTION_NONE
     );
     assert_eq!(
-        pandar_plugin_account_commit_action(7, 7, b"".as_ptr(), 0, b"token".as_ptr(), 5, true,),
+        unsafe {
+            pandar_plugin_account_commit_action(7, 7, b"".as_ptr(), 0, b"token".as_ptr(), 5, true)
+        },
         ACCOUNT_ACTION_NONE
     );
     assert_eq!(
-        pandar_plugin_account_commit_action(7, 7, b"".as_ptr(), 0, b"".as_ptr(), 0, true,),
+        unsafe {
+            pandar_plugin_account_commit_action(7, 7, b"".as_ptr(), 0, b"".as_ptr(), 0, true)
+        },
         ACCOUNT_ACTION_APPLY
     );
     assert_eq!(
-        pandar_plugin_account_commit_action(7, 7, b"old".as_ptr(), 3, b"new".as_ptr(), 3, false,),
+        unsafe {
+            pandar_plugin_account_commit_action(7, 7, b"old".as_ptr(), 3, b"new".as_ptr(), 3, false)
+        },
         ACCOUNT_ACTION_NONE
     );
-    let refresh = |current_epoch, current_config_epoch, pending, current_token: &[u8]| {
+    let refresh = |current_epoch, current_config_epoch, pending, current_token: &[u8]| unsafe {
         pandar_plugin_account_refresh_action(
             7,
             current_epoch,
@@ -181,20 +192,13 @@ fn account_policy_owns_state_changes_and_abi_status() {
 #[test]
 fn studio_info_url_policy_owns_configured_and_unavailable_results() {
     assert_eq!(
-        body(pandar_plugin_account_studio_info_url(
-            true,
-            true,
-            b"http://studio".as_ptr(),
-            13,
-        )),
+        body(unsafe {
+            pandar_plugin_account_studio_info_url(true, true, b"http://studio".as_ptr(), 13)
+        }),
         (0, 200, "http://studio".to_owned())
     );
-    let unavailable = body(pandar_plugin_account_studio_info_url(
-        true,
-        false,
-        b"".as_ptr(),
-        0,
-    ));
+    let unavailable =
+        body(unsafe { pandar_plugin_account_studio_info_url(true, false, b"".as_ptr(), 0) });
     assert_eq!(unavailable.0, -19);
     assert_eq!(unavailable.1, 501);
     assert!(unavailable.2.contains("studio_info_url_unconfigured"));

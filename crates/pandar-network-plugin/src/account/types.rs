@@ -3,7 +3,7 @@ use std::slice;
 use anyhow::{Context, ensure};
 use serde::{Deserialize, Serialize};
 
-pub(super) fn borrowed<'a>(ptr: *const u8, len: usize) -> anyhow::Result<&'a str> {
+pub(super) unsafe fn borrowed<'a>(ptr: *const u8, len: usize) -> anyhow::Result<&'a str> {
     ensure!(!ptr.is_null() || len == 0, "account input pointer is null");
     let bytes = if len == 0 {
         &[]

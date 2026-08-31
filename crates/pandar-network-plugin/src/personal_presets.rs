@@ -16,11 +16,11 @@ pub struct Account {
 }
 
 impl Account {
-    fn read(value: &Self) -> anyhow::Result<OwnedAccount> {
+    unsafe fn read(value: &Self) -> anyhow::Result<OwnedAccount> {
         Ok(OwnedAccount {
-            hub_url: value.hub_url.read()?,
-            token: value.token.read()?,
-            user_id: value.user_id.read()?,
+            hub_url: unsafe { value.hub_url.read() }?,
+            token: unsafe { value.token.read() }?,
+            user_id: unsafe { value.user_id.read() }?,
             account_epoch: value.account_epoch,
             config_epoch: value.config_epoch,
             session_kind: value.session_kind,

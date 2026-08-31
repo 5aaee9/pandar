@@ -53,7 +53,7 @@ pub unsafe extern "C" fn pandar_plugin_core_printer_refresh(
     {
         return failure(invalid_input("invalid_printer_refresh_adapter"));
     }
-    let expected = match current_expected(account_context, with_current) {
+    let expected = match unsafe { current_expected(account_context, with_current) } {
         Ok(expected) => expected,
         Err(error) => {
             eprintln!("pandar printer refresh account snapshot failed: {error:#}");
@@ -67,11 +67,13 @@ pub unsafe extern "C" fn pandar_plugin_core_printer_refresh(
         require_token: mode == STUDIO_PRINT_INFO,
         token_present: !expected.token.trim().is_empty(),
     };
-    let admission_status = with_refresh_lock(
-        adapter,
-        (&mut admission as *mut Admission<'_>).cast(),
-        begin_admission,
-    );
+    let admission_status = unsafe {
+        with_refresh_lock(
+            adapter,
+            (&mut admission as *mut Admission<'_>).cast(),
+            begin_admission,
+        )
+    };
     if admission_status != 0 {
         return failure(admission_failure(mode, admission_status, &expected.token));
     }
@@ -102,11 +104,13 @@ pub unsafe extern "C" fn pandar_plugin_core_printer_refresh(
         connection: empty_connection_result(),
         snapshot_current: true,
     };
-    if with_refresh_lock(
-        adapter,
-        (&mut finalized as *mut Finalization<'_>).cast(),
-        finalize_serve,
-    ) != 0
+    if unsafe {
+        with_refresh_lock(
+            adapter,
+            (&mut finalized as *mut Finalization<'_>).cast(),
+            finalize_serve,
+        )
+    } != 0
     {
         return failure(result(
             1,
@@ -118,13 +122,15 @@ pub unsafe extern "C" fn pandar_plugin_core_printer_refresh(
 
     let snapshot_current = finalized.snapshot_current;
     let http = if mode == STUDIO_PRINT_INFO {
-        crate::studio_policy::pandar_plugin_studio_print_info_result(
-            0,
-            200,
-            body.as_ptr(),
-            body.len(),
-            snapshot_current,
-        )
+        unsafe {
+            crate::studio_policy::pandar_plugin_studio_print_info_result(
+                0,
+                200,
+                body.as_ptr(),
+                body.len(),
+                snapshot_current,
+            )
+        }
     } else {
         result(0, 200, body)
     };
@@ -195,7 +201,7 @@ unsafe extern "C" fn finalize_serve(context: *mut c_void) -> i32 {
     0
 }
 
-fn with_refresh_lock(
+unsafe fn with_refresh_lock(
     adapter: PluginPrinterRefreshAdapter,
     context: *mut c_void,
     transaction: unsafe extern "C" fn(*mut c_void) -> i32,
@@ -213,12 +219,14 @@ fn admission_failure(mode: i32, status: i32, token: &str) -> PluginHttpResult {
         } else {
             (true, token)
         };
-        return crate::studio_policy::pandar_plugin_studio_print_info_admission(
-            true,
-            transition_pending,
-            token.as_ptr(),
-            token.len(),
-        );
+        return unsafe {
+            crate::studio_policy::pandar_plugin_studio_print_info_admission(
+                true,
+                transition_pending,
+                token.as_ptr(),
+                token.len(),
+            )
+        };
     }
     result(1, 409, stable_error_body("account_transition"))
 }

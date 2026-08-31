@@ -29,7 +29,7 @@ pub(super) const MUTATION_RUNTIME_HUB: i32 = 6;
 pub(super) const MUTATION_FIRMWARE_FENCE: i32 = 7;
 pub(super) const MUTATION_RESTORE_FAILURE: i32 = 8;
 
-pub(super) fn apply_mutation(
+pub(super) unsafe fn apply_mutation(
     session: &AccountLifecycleSession,
     connection_ptr: *mut c_void,
     firmware_ptr: *mut c_void,
@@ -38,113 +38,115 @@ pub(super) fn apply_mutation(
     current: &AccountView,
     mutation: &PluginAccountMutation,
 ) -> anyhow::Result<()> {
-    match mutation.action {
-        0 => return Ok(()),
-        MUTATION_REPLACE => {
-            let account = read_replacement(mutation)?;
-            replace(bridge, agent, &account);
-            sync_sessions(connection_ptr, firmware_ptr, &current.hub_url, &account)?;
-        }
-        MUTATION_LOGIN => {
-            let account = read_replacement(mutation)?;
-            let epoch = begin_transition(
-                connection_ptr,
-                firmware_ptr,
-                &current.hub_url,
-                &current.token,
-            )?;
-            replace(bridge, agent, &account);
-            sync_sessions(connection_ptr, firmware_ptr, &current.hub_url, &account)?;
-            session.enqueue(AccountCallback::Transition(TransitionCallback {
-                account_epoch: epoch,
-                notification: Some(true),
-                expected: None,
-                error: None,
-            }));
-        }
-        MUTATION_CLEAR => {
-            let epoch = begin_transition(
-                connection_ptr,
-                firmware_ptr,
-                &current.hub_url,
-                &current.token,
-            )?;
-            (bridge.clear)(agent);
-            sync_empty_sessions(connection_ptr, firmware_ptr, &current.hub_url)?;
-            session.enqueue(AccountCallback::Transition(TransitionCallback {
-                account_epoch: epoch,
-                notification: (mutation.notification == PluginAccountNotification::Logout)
-                    .then_some(false),
-                expected: Some(ExpectedAccount {
-                    hub_url: current.hub_url.clone(),
-                    token: String::new(),
+    unsafe {
+        match mutation.action {
+            0 => return Ok(()),
+            MUTATION_REPLACE => {
+                let account = read_replacement(mutation)?;
+                replace(bridge, agent, &account);
+                sync_sessions(connection_ptr, firmware_ptr, &current.hub_url, &account)?;
+            }
+            MUTATION_LOGIN => {
+                let account = read_replacement(mutation)?;
+                let epoch = begin_transition(
+                    connection_ptr,
+                    firmware_ptr,
+                    &current.hub_url,
+                    &current.token,
+                )?;
+                replace(bridge, agent, &account);
+                sync_sessions(connection_ptr, firmware_ptr, &current.hub_url, &account)?;
+                session.enqueue(AccountCallback::Transition(TransitionCallback {
                     account_epoch: epoch,
-                    config_epoch: current.config_epoch,
-                    session_kind: 0,
-                }),
-                error: None,
-            }));
-        }
-        MUTATION_HTTP_ERROR => session.enqueue(AccountCallback::HttpError(
-            mutation.http_code,
-            mutation.error_body.read("account HTTP error body")?,
-        )),
-        MUTATION_RUNTIME_HUB => {
-            let hub_url = mutation.hub_url.read("runtime Hub URL")?;
-            let epoch = begin_transition(
-                connection_ptr,
-                firmware_ptr,
-                &current.hub_url,
-                &current.token,
-            )?;
-            (bridge.clear)(agent);
-            (bridge.set_hub_url)(agent, PluginAccountBytes::from_str(&hub_url));
-            sync_empty_sessions(connection_ptr, firmware_ptr, &hub_url)?;
-            session.enqueue(AccountCallback::Transition(TransitionCallback {
-                account_epoch: epoch,
-                notification: None,
-                expected: None,
-                error: None,
-            }));
-        }
-        MUTATION_FIRMWARE_FENCE => {
-            let firmware =
-                unsafe { firmware_session(firmware_ptr) }.context("firmware session is missing")?;
-            firmware.fence_account(current.hub_url.clone(), current.token.clone());
-            return Ok(());
-        }
-        MUTATION_RESTORE_FAILURE => {
-            let account = read_replacement(mutation)?;
-            let epoch = begin_transition(
-                connection_ptr,
-                firmware_ptr,
-                &current.hub_url,
-                &current.token,
-            )?;
-            replace(bridge, agent, &account);
-            sync_sessions(connection_ptr, firmware_ptr, &current.hub_url, &account)?;
-            session.enqueue(AccountCallback::Transition(TransitionCallback {
-                account_epoch: epoch,
-                notification: Some(true),
-                expected: Some(ExpectedAccount {
-                    hub_url: current.hub_url.clone(),
-                    token: account.token.clone(),
+                    notification: Some(true),
+                    expected: None,
+                    error: None,
+                }));
+            }
+            MUTATION_CLEAR => {
+                let epoch = begin_transition(
+                    connection_ptr,
+                    firmware_ptr,
+                    &current.hub_url,
+                    &current.token,
+                )?;
+                (bridge.clear)(agent);
+                sync_empty_sessions(connection_ptr, firmware_ptr, &current.hub_url)?;
+                session.enqueue(AccountCallback::Transition(TransitionCallback {
                     account_epoch: epoch,
-                    config_epoch: current.config_epoch,
-                    session_kind: account.session_kind,
-                }),
-                error: Some((
-                    mutation.http_code,
-                    mutation.error_body.read("account restore error body")?,
-                )),
-            }));
+                    notification: (mutation.notification == PluginAccountNotification::Logout)
+                        .then_some(false),
+                    expected: Some(ExpectedAccount {
+                        hub_url: current.hub_url.clone(),
+                        token: String::new(),
+                        account_epoch: epoch,
+                        config_epoch: current.config_epoch,
+                        session_kind: 0,
+                    }),
+                    error: None,
+                }));
+            }
+            MUTATION_HTTP_ERROR => session.enqueue(AccountCallback::HttpError(
+                mutation.http_code,
+                mutation.error_body.read("account HTTP error body")?,
+            )),
+            MUTATION_RUNTIME_HUB => {
+                let hub_url = mutation.hub_url.read("runtime Hub URL")?;
+                let epoch = begin_transition(
+                    connection_ptr,
+                    firmware_ptr,
+                    &current.hub_url,
+                    &current.token,
+                )?;
+                (bridge.clear)(agent);
+                (bridge.set_hub_url)(agent, PluginAccountBytes::from_str(&hub_url));
+                sync_empty_sessions(connection_ptr, firmware_ptr, &hub_url)?;
+                session.enqueue(AccountCallback::Transition(TransitionCallback {
+                    account_epoch: epoch,
+                    notification: None,
+                    expected: None,
+                    error: None,
+                }));
+            }
+            MUTATION_FIRMWARE_FENCE => {
+                let firmware =
+                    firmware_session(firmware_ptr).context("firmware session is missing")?;
+                firmware.fence_account(current.hub_url.clone(), current.token.clone());
+                return Ok(());
+            }
+            MUTATION_RESTORE_FAILURE => {
+                let account = read_replacement(mutation)?;
+                let epoch = begin_transition(
+                    connection_ptr,
+                    firmware_ptr,
+                    &current.hub_url,
+                    &current.token,
+                )?;
+                replace(bridge, agent, &account);
+                sync_sessions(connection_ptr, firmware_ptr, &current.hub_url, &account)?;
+                session.enqueue(AccountCallback::Transition(TransitionCallback {
+                    account_epoch: epoch,
+                    notification: Some(true),
+                    expected: Some(ExpectedAccount {
+                        hub_url: current.hub_url.clone(),
+                        token: account.token.clone(),
+                        account_epoch: epoch,
+                        config_epoch: current.config_epoch,
+                        session_kind: account.session_kind,
+                    }),
+                    error: Some((
+                        mutation.http_code,
+                        mutation.error_body.read("account restore error body")?,
+                    )),
+                }));
+            }
+            action => anyhow::bail!("unknown account mutation action {action}"),
         }
-        action => anyhow::bail!("unknown account mutation action {action}"),
+        if mutation.action != MUTATION_HTTP_ERROR && mutation.action != MUTATION_FIRMWARE_FENCE {
+            (bridge.reset_personal_presets)(agent);
+        }
+        Ok(())
     }
-    if mutation.action != MUTATION_HTTP_ERROR && mutation.action != MUTATION_FIRMWARE_FENCE {
-        (bridge.reset_personal_presets)(agent);
-    }
-    Ok(())
 }
 
 struct Replacement {
@@ -157,14 +159,14 @@ struct Replacement {
     session_kind: i32,
 }
 
-fn read_replacement(mutation: &PluginAccountMutation) -> anyhow::Result<Replacement> {
-    let profile_json = mutation.profile_json.read("account profile")?;
+unsafe fn read_replacement(mutation: &PluginAccountMutation) -> anyhow::Result<Replacement> {
+    let profile_json = unsafe { mutation.profile_json.read("account profile") }?;
     let profile: Profile = serde_json::from_str(&profile_json).context("decode account profile")?;
     Ok(Replacement {
-        token: mutation.token.read("account token")?,
-        user_id: mutation.user_id.read("account user id")?,
-        user_name: mutation.user_name.read("account user name")?,
-        avatar: mutation.avatar.read("account avatar")?,
+        token: unsafe { mutation.token.read("account token") }?,
+        user_id: unsafe { mutation.user_id.read("account user id") }?,
+        user_name: unsafe { mutation.user_name.read("account user name") }?,
+        avatar: unsafe { mutation.avatar.read("account avatar") }?,
         profile_json,
         tenant_id: profile.tenant_id,
         session_kind: mutation.session_kind,
@@ -184,28 +186,32 @@ fn replace(bridge: &PluginAccountSessionBridge, agent: *mut c_void, account: &Re
     );
 }
 
-fn sync_sessions(
+unsafe fn sync_sessions(
     connection_ptr: *mut c_void,
     firmware_ptr: *mut c_void,
     hub_url: &str,
     account: &Replacement,
 ) -> anyhow::Result<()> {
     ensure!(
-        pandar_plugin_printer_refresh_session_update(
-            connection_ptr,
-            hub_url.as_ptr(),
-            hub_url.len(),
-            account.token.as_ptr(),
-            account.token.len(),
-        ) == 0,
+        unsafe {
+            pandar_plugin_printer_refresh_session_update(
+                connection_ptr,
+                hub_url.as_ptr(),
+                hub_url.len(),
+                account.token.as_ptr(),
+                account.token.len(),
+            )
+        } == 0,
         "update printer refresh account"
     );
     ensure!(
-        pandar_plugin_printer_refresh_session_set_tenant(
-            connection_ptr,
-            account.tenant_id.as_ptr(),
-            account.tenant_id.len(),
-        ) == 0,
+        unsafe {
+            pandar_plugin_printer_refresh_session_set_tenant(
+                connection_ptr,
+                account.tenant_id.as_ptr(),
+                account.tenant_id.len(),
+            )
+        } == 0,
         "update printer refresh tenant"
     );
     let firmware =
@@ -214,7 +220,7 @@ fn sync_sessions(
     Ok(())
 }
 
-fn sync_empty_sessions(
+unsafe fn sync_empty_sessions(
     connection_ptr: *mut c_void,
     firmware_ptr: *mut c_void,
     hub_url: &str,
@@ -228,20 +234,20 @@ fn sync_empty_sessions(
         tenant_id: String::new(),
         session_kind: 0,
     };
-    sync_sessions(connection_ptr, firmware_ptr, hub_url, &account)
+    unsafe { sync_sessions(connection_ptr, firmware_ptr, hub_url, &account) }
 }
 
-fn begin_transition(
+unsafe fn begin_transition(
     connection_ptr: *mut c_void,
     firmware_ptr: *mut c_void,
     hub_url: &str,
     token: &str,
 ) -> anyhow::Result<u64> {
-    let connection =
-        connection_session(connection_ptr).context("printer refresh session is missing")?;
+    let connection = unsafe { connection_session(connection_ptr) }
+        .context("printer refresh session is missing")?;
     let (state, _) = connection.studio_request_snapshot(String::new());
     ensure!(
-        pandar_plugin_studio_begin_account_transition(connection_ptr) == 0,
+        unsafe { pandar_plugin_studio_begin_account_transition(connection_ptr) } == 0,
         "begin account printer transition"
     );
     let firmware =

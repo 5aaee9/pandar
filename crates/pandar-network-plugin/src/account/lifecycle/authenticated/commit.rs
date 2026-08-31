@@ -54,12 +54,14 @@ pub(super) fn commit_login(
         candidate,
         state: CommitState::Pending,
     };
-    if let Err(error) = transact(
-        account_context,
-        with_current,
-        (&mut context as *mut CommitContext<'_>).cast(),
-        login_transaction,
-    ) {
+    if let Err(error) = unsafe {
+        transact(
+            account_context,
+            with_current,
+            (&mut context as *mut CommitContext<'_>).cast(),
+            login_transaction,
+        )
+    } {
         return CommitState::Failed(diagnosed(error));
     }
     context.state
@@ -74,12 +76,14 @@ pub(super) fn fence_firmware(
         expected,
         state: CommitState::Pending,
     };
-    if let Err(error) = transact(
-        account_context,
-        with_current,
-        (&mut context as *mut FirmwareFenceContext<'_>).cast(),
-        firmware_fence_transaction,
-    ) {
+    if let Err(error) = unsafe {
+        transact(
+            account_context,
+            with_current,
+            (&mut context as *mut FirmwareFenceContext<'_>).cast(),
+            firmware_fence_transaction,
+        )
+    } {
         return CommitState::Failed(diagnosed(error));
     }
     context.state
@@ -141,12 +145,14 @@ pub(super) fn report_failure(
         return;
     }
     let mut context = ErrorContext { expected, failure };
-    if let Err(error) = transact(
-        account_context,
-        with_current,
-        (&mut context as *mut ErrorContext<'_>).cast(),
-        error_transaction,
-    ) {
+    if let Err(error) = unsafe {
+        transact(
+            account_context,
+            with_current,
+            (&mut context as *mut ErrorContext<'_>).cast(),
+            error_transaction,
+        )
+    } {
         eprintln!("pandar authenticated account failure delivery failed: {error:#}");
     }
 }
@@ -160,7 +166,7 @@ unsafe extern "C" fn login_transaction(
         return 1;
     };
     let work: anyhow::Result<()> = (|| {
-        let current = AccountView::read(view)?;
+        let current = unsafe { AccountView::read(view) }?;
         if !context.expected.matches(&current) {
             context.state = CommitState::Stale;
             return Ok(());
@@ -186,7 +192,7 @@ unsafe extern "C" fn login_transaction(
                 return Ok(());
             }
         }
-        set_candidate(mutation, MUTATION_LOGIN, context.candidate)?;
+        unsafe { set_candidate(mutation, MUTATION_LOGIN, context.candidate) }?;
         context.state = CommitState::Applied;
         Ok(())
     })();
@@ -202,7 +208,7 @@ unsafe extern "C" fn firmware_fence_transaction(
         return 1;
     };
     let work: anyhow::Result<()> = (|| {
-        let current = AccountView::read(view)?;
+        let current = unsafe { AccountView::read(view) }?;
         if !context.expected.matches(&current) {
             context.state = CommitState::Stale;
             return Ok(());
@@ -224,16 +230,16 @@ unsafe extern "C" fn error_transaction(
         return 1;
     };
     let work: anyhow::Result<()> = (|| {
-        let current = AccountView::read(view)?;
+        let current = unsafe { AccountView::read(view) }?;
         if context.expected.matches(&current) {
-            set_error(mutation, MUTATION_HTTP_ERROR, context.failure)?;
+            unsafe { set_error(mutation, MUTATION_HTTP_ERROR, context.failure) }?;
         }
         Ok(())
     })();
     work.map_or(1, |()| 0)
 }
 
-fn set_candidate(
+unsafe fn set_candidate(
     mutation: *mut PluginAccountMutation,
     action: i32,
     candidate: &Candidate,
@@ -249,7 +255,7 @@ fn set_candidate(
     Ok(())
 }
 
-fn set_error(
+unsafe fn set_error(
     mutation: *mut PluginAccountMutation,
     action: i32,
     failure: &NoAuthRotationOutcome,

@@ -32,8 +32,8 @@ extern "C" fn replace(
 ) {
     let mut state = BRIDGE_STATE.lock().unwrap();
     state.as_mut().unwrap().replacements.push((
-        token.read("token").unwrap(),
-        tenant.read("tenant").unwrap(),
+        unsafe { token.read("token") }.unwrap(),
+        unsafe { tenant.read("tenant") }.unwrap(),
         kind,
     ));
 }
@@ -49,7 +49,7 @@ extern "C" fn set_hub(_: *mut c_void, hub: PluginAccountBytes) {
         .as_mut()
         .unwrap()
         .hub_urls
-        .push(hub.read("hub").unwrap());
+        .push(unsafe { hub.read("hub") }.unwrap());
 }
 
 extern "C" fn login(_: *mut c_void, status: i32, logged_in: bool) {
@@ -73,7 +73,7 @@ extern "C" fn error(_: *mut c_void, code: u32, body: PluginAccountBytes) {
         .as_mut()
         .unwrap()
         .errors
-        .push((code, body.read("error").unwrap()));
+        .push((code, unsafe { body.read("error") }.unwrap()));
 }
 
 extern "C" fn reset(_: *mut c_void) {
@@ -102,10 +102,12 @@ impl Harness {
         *BRIDGE_STATE.lock().unwrap() = Some(BridgeState::default());
         let mut connection = Box::new(ConnectionSession::new("https://hub-a".into(), "old".into()));
         assert_eq!(
-            crate::connection::pandar_plugin_connection_set_account_epoch(
-                (&mut *connection as *mut ConnectionSession).cast(),
-                7,
-            ),
+            unsafe {
+                crate::connection::pandar_plugin_connection_set_account_epoch(
+                    (&mut *connection as *mut ConnectionSession).cast(),
+                    7,
+                )
+            },
             0
         );
         Self {

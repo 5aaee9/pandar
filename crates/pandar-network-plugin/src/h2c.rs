@@ -2,7 +2,9 @@ use super::{PluginHttpResult, RequestKind, invalid_input, normalize_hub_url, rea
 use crate::http::{plugin_auto_nozzle_mapping_url, post_json};
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_submit_h2c_auto_nozzle_mapping(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_submit_h2c_auto_nozzle_mapping(
     hub_url_ptr: *const u8,
     hub_url_len: usize,
     token_ptr: *const u8,
@@ -13,10 +15,10 @@ pub extern "C" fn pandar_plugin_submit_h2c_auto_nozzle_mapping(
     request_json_len: usize,
 ) -> PluginHttpResult {
     let (Some(hub_url), Some(token), Some(printer_id), Some(request_json)) = (
-        read_utf8(hub_url_ptr, hub_url_len),
-        read_utf8(token_ptr, token_len),
-        read_utf8(printer_id_ptr, printer_id_len),
-        read_utf8(request_json_ptr, request_json_len),
+        unsafe { read_utf8(hub_url_ptr, hub_url_len) },
+        unsafe { read_utf8(token_ptr, token_len) },
+        unsafe { read_utf8(printer_id_ptr, printer_id_len) },
+        unsafe { read_utf8(request_json_ptr, request_json_len) },
     ) else {
         return invalid_input("bad_request");
     };

@@ -28,11 +28,13 @@ fn assert_cancelled(result: PluginHttpResult) {
         std::slice::from_raw_parts(result.body_ptr, result.body_len)
     })
     .into_owned();
-    crate::pandar_plugin_free_with_capacity(
-        result.body_ptr.cast(),
-        result.body_len,
-        result.body_cap,
-    );
+    unsafe {
+        crate::pandar_plugin_free_with_capacity(
+            result.body_ptr.cast(),
+            result.body_len,
+            result.body_cap,
+        )
+    };
     assert_eq!(result.status, 1);
     assert_eq!(result.http_code, 0);
     assert_eq!(body, crate::stable_error_body("request_cancelled"));

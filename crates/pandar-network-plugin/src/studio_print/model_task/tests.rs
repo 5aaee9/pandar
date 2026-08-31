@@ -92,12 +92,14 @@ fn ordinary_model_task_is_delivered_through_the_ffi_boundary() {
         current_snapshot: Some(current_snapshot as StudioSnapshotCallback),
     };
     let mut captured = None;
-    let result = pandar_plugin_studio_get_model_task(
-        &account,
-        bytes("41"),
-        (&mut captured as *mut Option<CapturedTask>).cast(),
-        Some(capture_task),
-    );
+    let result = unsafe {
+        pandar_plugin_studio_get_model_task(
+            &account,
+            bytes("41"),
+            (&mut captured as *mut Option<CapturedTask>).cast(),
+            Some(capture_task),
+        )
+    };
 
     assert_eq!(result.status, 0);
     assert_eq!(result.http_code, 200);
@@ -114,11 +116,13 @@ fn ordinary_model_task_is_delivered_through_the_ffi_boundary() {
             profile_name: " 0.20mm Standard ".to_owned(),
         })
     );
-    crate::pandar_plugin_free_with_capacity(
-        result.body_ptr.cast(),
-        result.body_len,
-        result.body_cap,
-    );
+    unsafe {
+        crate::pandar_plugin_free_with_capacity(
+            result.body_ptr.cast(),
+            result.body_len,
+            result.body_cap,
+        )
+    };
     let request = server.join().expect("model-task server joined");
     assert!(request.starts_with("GET /api/v1/plugin/jobs/41/model-task HTTP/1.1"));
     assert!(
@@ -143,12 +147,14 @@ fn stale_account_response_is_rejected_without_delivery() {
         current_snapshot: Some(stale_snapshot),
     };
     let mut captured = None;
-    let result = pandar_plugin_studio_get_model_task(
-        &account,
-        bytes("41"),
-        (&mut captured as *mut Option<CapturedTask>).cast(),
-        Some(capture_task),
-    );
+    let result = unsafe {
+        pandar_plugin_studio_get_model_task(
+            &account,
+            bytes("41"),
+            (&mut captured as *mut Option<CapturedTask>).cast(),
+            Some(capture_task),
+        )
+    };
 
     assert_eq!(result.status, 1);
     assert_eq!(result.http_code, 409);
@@ -172,12 +178,14 @@ fn metadata_unavailable_error_is_preserved_without_delivery() {
         current_snapshot: Some(current_snapshot),
     };
     let mut captured = None;
-    let result = pandar_plugin_studio_get_model_task(
-        &account,
-        bytes("41"),
-        (&mut captured as *mut Option<CapturedTask>).cast(),
-        Some(capture_task),
-    );
+    let result = unsafe {
+        pandar_plugin_studio_get_model_task(
+            &account,
+            bytes("41"),
+            (&mut captured as *mut Option<CapturedTask>).cast(),
+            Some(capture_task),
+        )
+    };
 
     assert_eq!(result.status, 1);
     assert_eq!(result.http_code, 409);
@@ -209,9 +217,7 @@ fn bytes(value: &str) -> PluginBytes {
 }
 
 fn read(value: PluginBytes) -> String {
-    value
-        .read("model_task")
-        .unwrap_or_else(|_| panic!("valid model-task text"))
+    unsafe { value.read("model_task") }.unwrap_or_else(|_| panic!("valid model-task text"))
 }
 
 fn read_request(stream: &mut std::net::TcpStream) -> String {
@@ -253,9 +259,11 @@ fn model_task_server_with_status(
 }
 
 fn free(result: crate::PluginHttpResult) {
-    crate::pandar_plugin_free_with_capacity(
-        result.body_ptr.cast(),
-        result.body_len,
-        result.body_cap,
-    );
+    unsafe {
+        crate::pandar_plugin_free_with_capacity(
+            result.body_ptr.cast(),
+            result.body_len,
+            result.body_cap,
+        )
+    };
 }

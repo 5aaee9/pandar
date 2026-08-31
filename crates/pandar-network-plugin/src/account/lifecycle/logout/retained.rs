@@ -196,12 +196,14 @@ fn restore(
         failure,
         state: RestoreState::Pending,
     };
-    let result = transact(
-        account_context,
-        with_current,
-        (&mut context as *mut RestoreContext<'_>).cast(),
-        restore_transaction,
-    );
+    let result = unsafe {
+        transact(
+            account_context,
+            with_current,
+            (&mut context as *mut RestoreContext<'_>).cast(),
+            restore_transaction,
+        )
+    };
     if let Err(error) = result {
         eprintln!("pandar account logout restore failed: {error:#}");
     } else if matches!(context.state, RestoreState::Failed | RestoreState::Pending) {
@@ -218,7 +220,7 @@ unsafe extern "C" fn restore_transaction(
         return 1;
     };
     let work: anyhow::Result<()> = (|| {
-        let current = AccountView::read(view)?;
+        let current = unsafe { AccountView::read(view) }?;
         if !context.expected.matches(&current) {
             context.state = RestoreState::Stale;
             return Ok(());

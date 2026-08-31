@@ -66,22 +66,29 @@ impl ModelTaskResponse {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_get_model_task(
+/// # Safety
+/// `account`, `task_id`, and nested byte views must remain valid for this call. Account snapshot and
+/// visitor callbacks plus their contexts must remain callable for the full operation. Successful
+/// snapshot callback byte views must stay readable until return, and the visitor must copy borrowed
+/// task byte views before returning.
+pub unsafe extern "C" fn pandar_plugin_studio_get_model_task(
     account: *const PluginStudioAccount,
     task_id: PluginBytes,
     visitor_context: *mut c_void,
     visitor: Option<StudioModelTaskVisitor>,
 ) -> PluginHttpResult {
-    get_model_task(
-        account,
-        task_id,
-        visitor_context,
-        visitor,
-        ModelTaskCancellation::disabled(),
-    )
+    unsafe {
+        get_model_task(
+            account,
+            task_id,
+            visitor_context,
+            visitor,
+            ModelTaskCancellation::disabled(),
+        )
+    }
 }
 
-pub(super) fn get_model_task(
+pub(super) unsafe fn get_model_task(
     account: *const PluginStudioAccount,
     task_id: PluginBytes,
     visitor_context: *mut c_void,
@@ -94,11 +101,11 @@ pub(super) fn get_model_task(
     if visitor_context.is_null() {
         return tasks::failure_result(400, "invalid_model_task_target");
     }
-    let account = match account_from_ptr(account) {
+    let account = match unsafe { account_from_ptr(account) } {
         Ok(account) => account,
         Err(result) => return result,
     };
-    let requested = match task_id.read("task_id") {
+    let requested = match unsafe { task_id.read("task_id") } {
         Ok(task_id) => task_id,
         Err(_) => return tasks::failure_result(400, "invalid_task_id"),
     };

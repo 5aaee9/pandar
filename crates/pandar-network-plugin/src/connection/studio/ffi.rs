@@ -3,8 +3,10 @@ use std::ffi::c_void;
 use super::*;
 use crate::{PluginHttpResult, read_utf8, result};
 
-fn session(session_ptr: *mut c_void) -> Option<&'static crate::connection::ConnectionSession> {
-    crate::connection::ffi::session(session_ptr)
+unsafe fn session(
+    session_ptr: *mut c_void,
+) -> Option<&'static crate::connection::ConnectionSession> {
+    unsafe { crate::connection::ffi::session(session_ptr) }
 }
 
 fn invalid_delivery(status: i32) -> PluginStudioDeliveryResult {
@@ -39,14 +41,16 @@ fn visit_payload(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_request_snapshot(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_request_snapshot(
     session_ptr: *mut c_void,
     dev_id_ptr: *const u8,
     dev_id_len: usize,
     context: *mut c_void,
     visitor: Option<StudioRequestVisitor>,
 ) -> PluginStudioRequestState {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return PluginStudioRequestState {
             status: -1,
             authorized: 0,
@@ -55,7 +59,7 @@ pub extern "C" fn pandar_plugin_studio_request_snapshot(
             cache_generation: 0,
         };
     };
-    let Some(dev_id) = read_utf8(dev_id_ptr, dev_id_len) else {
+    let Some(dev_id) = (unsafe { read_utf8(dev_id_ptr, dev_id_len) }) else {
         return PluginStudioRequestState {
             status: -19,
             authorized: 0,
@@ -80,12 +84,14 @@ pub extern "C" fn pandar_plugin_studio_request_snapshot(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_set_listener(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_set_listener(
     session_ptr: *mut c_void,
     kind: i32,
     present: bool,
 ) -> i32 {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return -1;
     };
     if session.studio_set_listener(kind, present) {
@@ -96,23 +102,29 @@ pub extern "C" fn pandar_plugin_studio_set_listener(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_selected(session_ptr: *mut c_void) -> PluginHttpResult {
-    let Some(session) = session(session_ptr) else {
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_selected(
+    session_ptr: *mut c_void,
+) -> PluginHttpResult {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return result(-1, 0, String::new());
     };
     result(0, 200, session.studio_selected())
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_set_selected(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_set_selected(
     session_ptr: *mut c_void,
     selected_ptr: *const u8,
     selected_len: usize,
 ) -> i32 {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return -1;
     };
-    let Some(selected) = read_utf8(selected_ptr, selected_len) else {
+    let Some(selected) = (unsafe { read_utf8(selected_ptr, selected_len) }) else {
         return -19;
     };
     session.studio_set_selected(selected);
@@ -120,15 +132,19 @@ pub extern "C" fn pandar_plugin_studio_set_selected(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_add_subscription(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_add_subscription(
     session_ptr: *mut c_void,
     dev_id_ptr: *const u8,
     dev_id_len: usize,
 ) -> i32 {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return -1;
     };
-    let Some(dev_id) = read_utf8(dev_id_ptr, dev_id_len).filter(|dev_id| !dev_id.is_empty()) else {
+    let Some(dev_id) =
+        unsafe { read_utf8(dev_id_ptr, dev_id_len) }.filter(|dev_id| !dev_id.is_empty())
+    else {
         return -2;
     };
     session.studio_add_subscription(dev_id);
@@ -136,15 +152,19 @@ pub extern "C" fn pandar_plugin_studio_add_subscription(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_del_subscription(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_del_subscription(
     session_ptr: *mut c_void,
     dev_id_ptr: *const u8,
     dev_id_len: usize,
 ) -> i32 {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return -1;
     };
-    let Some(dev_id) = read_utf8(dev_id_ptr, dev_id_len).filter(|dev_id| !dev_id.is_empty()) else {
+    let Some(dev_id) =
+        unsafe { read_utf8(dev_id_ptr, dev_id_len) }.filter(|dev_id| !dev_id.is_empty())
+    else {
         return -2;
     };
     session.studio_del_subscription(dev_id);
@@ -152,12 +172,14 @@ pub extern "C" fn pandar_plugin_studio_del_subscription(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_heartbeat_plan(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_heartbeat_plan(
     session_ptr: *mut c_void,
     context: *mut c_void,
     visitor: Option<StudioHeartbeatVisitor>,
 ) -> PluginStudioHeartbeatPlan {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return PluginStudioHeartbeatPlan {
             wait_ms: DISPATCHER_IDLE_WAIT_MS,
             refresh: 0,
@@ -179,7 +201,9 @@ pub extern "C" fn pandar_plugin_studio_heartbeat_plan(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_prepare_connected(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_prepare_connected(
     session_ptr: *mut c_void,
     dev_id_ptr: *const u8,
     dev_id_len: usize,
@@ -187,10 +211,10 @@ pub extern "C" fn pandar_plugin_studio_prepare_connected(
     context: *mut c_void,
     visitor: Option<StudioPayloadVisitor>,
 ) -> PluginStudioDeliveryResult {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return invalid_delivery(-1);
     };
-    let Some(dev_id) = read_utf8(dev_id_ptr, dev_id_len) else {
+    let Some(dev_id) = (unsafe { read_utf8(dev_id_ptr, dev_id_len) }) else {
         return invalid_delivery(-2);
     };
     let (delivery, payload) = session.studio_prepare_connected(dev_id, now_ms);
@@ -199,7 +223,9 @@ pub extern "C" fn pandar_plugin_studio_prepare_connected(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_prepare_message(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_prepare_message(
     session_ptr: *mut c_void,
     tunnel: i32,
     dev_id_ptr: *const u8,
@@ -210,10 +236,10 @@ pub extern "C" fn pandar_plugin_studio_prepare_message(
     context: *mut c_void,
     visitor: Option<StudioPayloadVisitor>,
 ) -> PluginStudioDeliveryResult {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return invalid_delivery(-1);
     };
-    let Some(dev_id) = read_utf8(dev_id_ptr, dev_id_len) else {
+    let Some(dev_id) = (unsafe { read_utf8(dev_id_ptr, dev_id_len) }) else {
         return invalid_delivery(-2);
     };
     let (delivery, payload) = session.studio_prepare_message(
@@ -228,33 +254,37 @@ pub extern "C" fn pandar_plugin_studio_prepare_message(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_status_target_available(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_status_target_available(
     session_ptr: *mut c_void,
     tunnel: i32,
     dev_id_ptr: *const u8,
     dev_id_len: usize,
     local_generation: u64,
 ) -> i32 {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return 0;
     };
-    read_utf8(dev_id_ptr, dev_id_len).is_some_and(|dev_id| {
+    unsafe { read_utf8(dev_id_ptr, dev_id_len) }.is_some_and(|dev_id| {
         session.studio_status_target_available(tunnel, dev_id, local_generation)
     }) as i32
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_connect_local(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_connect_local(
     session_ptr: *mut c_void,
     dev_id_ptr: *const u8,
     dev_id_len: usize,
     context: *mut c_void,
     visitor: Option<StudioPayloadVisitor>,
 ) -> PluginStudioDeliveryResult {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return invalid_delivery(-1);
     };
-    let Some(dev_id) = read_utf8(dev_id_ptr, dev_id_len) else {
+    let Some(dev_id) = (unsafe { read_utf8(dev_id_ptr, dev_id_len) }) else {
         return invalid_delivery(-2);
     };
     let (delivery, payload) = session.studio_connect_local(dev_id);
@@ -263,8 +293,10 @@ pub extern "C" fn pandar_plugin_studio_connect_local(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_disconnect_local(session_ptr: *mut c_void) -> i32 {
-    let Some(session) = session(session_ptr) else {
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_disconnect_local(session_ptr: *mut c_void) -> i32 {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return -1;
     };
     session.studio_disconnect_local();
@@ -272,44 +304,53 @@ pub extern "C" fn pandar_plugin_studio_disconnect_local(session_ptr: *mut c_void
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_local_generation(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_local_generation(
     session_ptr: *mut c_void,
     dev_id_ptr: *const u8,
     dev_id_len: usize,
 ) -> u64 {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return 0;
     };
-    read_utf8(dev_id_ptr, dev_id_len)
+    unsafe { read_utf8(dev_id_ptr, dev_id_len) }
         .map(|dev_id| session.studio_local_generation(dev_id))
         .unwrap_or_default()
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_complete_delivery(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_complete_delivery(
     session_ptr: *mut c_void,
     ticket: u64,
     delivered: bool,
 ) -> i32 {
-    session(session_ptr).is_some_and(|session| session.studio_complete_delivery(ticket, delivered))
+    unsafe { session(session_ptr) }
+        .is_some_and(|session| session.studio_complete_delivery(ticket, delivered)) as i32
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_claim_delivery(
+    session_ptr: *mut c_void,
+    ticket: u64,
+) -> i32 {
+    unsafe { session(session_ptr) }.is_some_and(|session| session.studio_claim_delivery(ticket))
         as i32
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_claim_delivery(
-    session_ptr: *mut c_void,
-    ticket: u64,
-) -> i32 {
-    session(session_ptr).is_some_and(|session| session.studio_claim_delivery(ticket)) as i32
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_take_work(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_take_work(
     session_ptr: *mut c_void,
     context: *mut c_void,
     visitor: Option<StudioWorkVisitor>,
 ) -> i32 {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return -1;
     };
     let work = session.studio_take_work();
@@ -332,8 +373,12 @@ pub extern "C" fn pandar_plugin_studio_take_work(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_begin_account_transition(session_ptr: *mut c_void) -> i32 {
-    let Some(session) = session(session_ptr) else {
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_begin_account_transition(
+    session_ptr: *mut c_void,
+) -> i32 {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return -1;
     };
     session.begin_account_transition();
@@ -341,11 +386,13 @@ pub extern "C" fn pandar_plugin_studio_begin_account_transition(session_ptr: *mu
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_finish_account_transition(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_studio_finish_account_transition(
     session_ptr: *mut c_void,
     account_epoch: u64,
 ) -> i32 {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return -1;
     };
     session.finish_account_transition(account_epoch);

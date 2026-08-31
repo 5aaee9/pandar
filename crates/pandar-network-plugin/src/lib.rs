@@ -120,24 +120,30 @@ pub struct PluginHttpResult {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_get_jobs(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_get_jobs(
     hub_url_ptr: *const u8,
     hub_url_len: usize,
     token_ptr: *const u8,
     token_len: usize,
 ) -> PluginHttpResult {
-    get_json(
-        hub_url_ptr,
-        hub_url_len,
-        token_ptr,
-        token_len,
-        "/api/v1/plugin/jobs",
-        RequestKind::JobLookup,
-    )
+    unsafe {
+        get_json(
+            hub_url_ptr,
+            hub_url_len,
+            token_ptr,
+            token_len,
+            "/api/v1/plugin/jobs",
+            RequestKind::JobLookup,
+        )
+    }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_submit_print(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_submit_print(
     hub_url_ptr: *const u8,
     hub_url_len: usize,
     token_ptr: *const u8,
@@ -163,20 +169,22 @@ pub extern "C" fn pandar_plugin_submit_print(
     ams_mapping_info_ptr: *const u8,
     ams_mapping_info_len: usize,
 ) -> PluginHttpResult {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
+    let Some(hub_url) = unsafe { read_utf8(hub_url_ptr, hub_url_len) }.and_then(normalize_hub_url)
+    else {
         return invalid_input("invalid_hub_url");
     };
-    let Some(token) = read_utf8(token_ptr, token_len).filter(|token| !token.trim().is_empty())
+    let Some(token) =
+        unsafe { read_utf8(token_ptr, token_len) }.filter(|token| !token.trim().is_empty())
     else {
         return invalid_input("invalid_auth_token");
     };
-    let Some(printer_id) = read_utf8(printer_id_ptr, printer_id_len) else {
+    let Some(printer_id) = (unsafe { read_utf8(printer_id_ptr, printer_id_len) }) else {
         return invalid_input("invalid_printer_id");
     };
-    let Some(filename) = read_utf8(filename_ptr, filename_len) else {
+    let Some(filename) = (unsafe { read_utf8(filename_ptr, filename_len) }) else {
         return invalid_input("bad_request");
     };
-    let Some(artifact_path) = read_utf8(artifact_path_ptr, artifact_path_len) else {
+    let Some(artifact_path) = (unsafe { read_utf8(artifact_path_ptr, artifact_path_len) }) else {
         return invalid_input("artifact_missing");
     };
     let Some(auto_bed_leveling) = calibration_mode(auto_bed_leveling) else {
@@ -188,17 +196,19 @@ pub extern "C" fn pandar_plugin_submit_print(
     let Some(auto_offset_cali) = calibration_mode(auto_offset_cali) else {
         return invalid_input("bad_request");
     };
-    let Ok(ams_mapping) = parse_optional_json::<AmsMapping>(ams_mapping_ptr, ams_mapping_len)
+    let Ok(ams_mapping) =
+        (unsafe { parse_optional_json::<AmsMapping>(ams_mapping_ptr, ams_mapping_len) })
     else {
         return invalid_input("bad_request");
     };
-    let Ok(ams_mapping2) = parse_optional_json::<AmsMapping2>(ams_mapping2_ptr, ams_mapping2_len)
+    let Ok(ams_mapping2) =
+        (unsafe { parse_optional_json::<AmsMapping2>(ams_mapping2_ptr, ams_mapping2_len) })
     else {
         return invalid_input("bad_request");
     };
-    let Ok(ams_mapping_info) =
+    let Ok(ams_mapping_info) = (unsafe {
         parse_optional_json::<AmsMappingInfo>(ams_mapping_info_ptr, ams_mapping_info_len)
-    else {
+    }) else {
         return invalid_input("bad_request");
     };
     let artifact_path = PathBuf::from(artifact_path);
@@ -234,7 +244,9 @@ pub extern "C" fn pandar_plugin_submit_print(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_submit_printer_operation(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_submit_printer_operation(
     hub_url_ptr: *const u8,
     hub_url_len: usize,
     token_ptr: *const u8,
@@ -245,10 +257,10 @@ pub extern "C" fn pandar_plugin_submit_printer_operation(
     operation_json_len: usize,
 ) -> PluginHttpResult {
     let (Some(hub_url), Some(token), Some(printer_id), Some(operation_json)) = (
-        read_utf8(hub_url_ptr, hub_url_len),
-        read_utf8(token_ptr, token_len),
-        read_utf8(printer_id_ptr, printer_id_len),
-        read_utf8(operation_json_ptr, operation_json_len),
+        unsafe { read_utf8(hub_url_ptr, hub_url_len) },
+        unsafe { read_utf8(token_ptr, token_len) },
+        unsafe { read_utf8(printer_id_ptr, printer_id_len) },
+        unsafe { read_utf8(operation_json_ptr, operation_json_len) },
     ) else {
         return invalid_input("bad_request");
     };
@@ -286,7 +298,10 @@ pub(crate) fn submit_printer_operation_upstream(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_free(ptr: *mut c_void, len: usize) {
+/// # Safety
+/// `ptr` must be null or an allocation returned by a Pandar API whose documented capacity equals
+/// `len`. A non-null allocation must be released exactly once and never used after this call.
+pub unsafe extern "C" fn pandar_plugin_free(ptr: *mut c_void, len: usize) {
     if !ptr.is_null() && len > 0 {
         unsafe {
             drop(Vec::from_raw_parts(ptr.cast::<u8>(), len, len));
@@ -295,7 +310,14 @@ pub extern "C" fn pandar_plugin_free(ptr: *mut c_void, len: usize) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_free_with_capacity(ptr: *mut c_void, len: usize, cap: usize) {
+/// # Safety
+/// `ptr` must be null or the body allocation from a Pandar result with exactly this `len` and
+/// `cap`. A non-null allocation must be released exactly once and never used after this call.
+pub unsafe extern "C" fn pandar_plugin_free_with_capacity(
+    ptr: *mut c_void,
+    len: usize,
+    cap: usize,
+) {
     if !ptr.is_null() && cap > 0 {
         unsafe {
             drop(Vec::from_raw_parts(ptr.cast::<u8>(), len, cap));
@@ -353,7 +375,7 @@ fn result(status: i32, http_code: u32, body: impl Into<String>) -> PluginHttpRes
     }
 }
 
-fn read_utf8(ptr: *const u8, len: usize) -> Option<String> {
+unsafe fn read_utf8(ptr: *const u8, len: usize) -> Option<String> {
     if ptr.is_null() {
         return None;
     }
@@ -362,8 +384,11 @@ fn read_utf8(ptr: *const u8, len: usize) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn parse_optional_json<T: DeserializeOwned>(ptr: *const u8, len: usize) -> Result<Option<T>, ()> {
-    let value = read_utf8(ptr, len).ok_or(())?;
+unsafe fn parse_optional_json<T: DeserializeOwned>(
+    ptr: *const u8,
+    len: usize,
+) -> Result<Option<T>, ()> {
+    let value = unsafe { read_utf8(ptr, len) }.ok_or(())?;
     if value.trim().is_empty() {
         return Ok(None);
     }
@@ -371,14 +396,4 @@ fn parse_optional_json<T: DeserializeOwned>(ptr: *const u8, len: usize) -> Resul
 }
 
 #[cfg(test)]
-#[test]
-fn hub_url_normalization_allows_loopback_http() {
-    assert_eq!(
-        normalize_hub_url("http://localhost:3000/".to_owned()),
-        Some("http://localhost:3000".to_owned())
-    );
-    assert_eq!(
-        normalize_hub_url("http://127.0.0.1:8080/".to_owned()),
-        Some("http://127.0.0.1:8080".to_owned())
-    );
-}
+mod tests;

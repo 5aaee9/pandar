@@ -140,6 +140,7 @@ fn is_test_source(path: &Path) -> bool {
     };
     name == "tests.rs"
         || name.ends_with("_test.rs")
+        || name.ends_with("_tests.rs")
         || name.contains(".test.")
         || name.contains(".spec.")
 }
@@ -156,6 +157,9 @@ mod tests {
             "src/test/kotlin/ModuleTest.kt"
         )));
         assert!(!is_production_module(Path::new("app/module.test.tsx")));
+        assert!(!is_production_module(Path::new(
+            "src/external_race_tests.rs"
+        )));
         assert!(is_ignored_directory(Path::new("build")));
         assert!(is_ignored_directory(Path::new("generated")));
     }

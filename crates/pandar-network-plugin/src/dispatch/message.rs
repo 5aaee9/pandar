@@ -268,14 +268,15 @@ pub unsafe extern "C" fn pandar_plugin_dispatch_message(
     agent: *mut c_void,
     request: PluginDispatchMessageRequest,
 ) -> i32 {
-    let (Some(bridge), Some(session)) = (bridge(bridge_ptr), connection_session(request.session))
-    else {
+    let (Some(bridge), Some(session)) = (unsafe { bridge(bridge_ptr) }, unsafe {
+        connection_session(request.session)
+    }) else {
         return ABI_INVALID_RESULT;
     };
-    let Some(dev_id) = read_utf8(request.dev_id_ptr, request.dev_id_len) else {
+    let Some(dev_id) = (unsafe { read_utf8(request.dev_id_ptr, request.dev_id_len) }) else {
         return ABI_CONNECT_FAILED;
     };
-    let Some(message) = read_utf8(request.message_ptr, request.message_len) else {
+    let Some(message) = (unsafe { read_utf8(request.message_ptr, request.message_len) }) else {
         return ABI_INVALID_RESULT;
     };
     let context = DispatchContext {

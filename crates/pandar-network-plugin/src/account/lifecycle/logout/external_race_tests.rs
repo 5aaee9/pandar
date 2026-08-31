@@ -189,12 +189,14 @@ fn external_requested_upgrades_passive_finalizing_and_gets_exact_delete_failure(
 
     let directory = tempfile::tempdir().unwrap();
     let token = "external-upgrade-secret-token";
-    let session = pandar_plugin_printer_refresh_session_create(
-        hub_url.as_ptr(),
-        hub_url.len(),
-        token.as_ptr(),
-        token.len(),
-    );
+    let session = unsafe {
+        pandar_plugin_printer_refresh_session_create(
+            hub_url.as_ptr(),
+            hub_url.len(),
+            token.as_ptr(),
+            token.len(),
+        )
+    };
     let identity = pandar_plugin_account_identity_create();
     let account = Arc::new(RaceAccount {
         config_dir: directory.path().to_str().unwrap().to_owned(),
@@ -227,7 +229,7 @@ fn external_requested_upgrades_passive_finalizing_and_gets_exact_delete_failure(
 
     let requested =
         thread::spawn(move || run_logout(session_address, identity, true, account_address));
-    crate::connection::ffi::session(session)
+    unsafe { crate::connection::ffi::session(session) }
         .unwrap()
         .wait_for_account_logout_follower();
     *account.release_clear.0.lock().unwrap() = true;
@@ -262,7 +264,7 @@ fn external_requested_upgrades_passive_finalizing_and_gets_exact_delete_failure(
             .join("pandar-plugin-pending-revocations.json")
             .exists()
     );
-    pandar_plugin_printer_refresh_session_destroy(session);
+    unsafe { pandar_plugin_printer_refresh_session_destroy(session) };
 }
 
 #[test]
@@ -319,12 +321,14 @@ fn external_requested_upgrade_keeps_direct_intent_when_delete_is_ambiguous() {
     .unwrap();
     let login_bytes = std::fs::read(directory.path().join("pandar-plugin-login.json")).unwrap();
 
-    let session = pandar_plugin_printer_refresh_session_create(
-        hub_url.as_ptr(),
-        hub_url.len(),
-        token.as_ptr(),
-        token.len(),
-    );
+    let session = unsafe {
+        pandar_plugin_printer_refresh_session_create(
+            hub_url.as_ptr(),
+            hub_url.len(),
+            token.as_ptr(),
+            token.len(),
+        )
+    };
     let identity = pandar_plugin_account_identity_create();
     let account = Arc::new(RaceAccount {
         config_dir: config_dir.clone(),
@@ -356,7 +360,7 @@ fn external_requested_upgrade_keeps_direct_intent_when_delete_is_ambiguous() {
     );
     let requested =
         thread::spawn(move || run_logout(session_address, identity, true, account_address));
-    crate::connection::ffi::session(session)
+    unsafe { crate::connection::ffi::session(session) }
         .unwrap()
         .wait_for_account_logout_follower();
     *account.release_return.0.lock().unwrap() = true;
@@ -396,5 +400,5 @@ fn external_requested_upgrade_keeps_direct_intent_when_delete_is_ambiguous() {
             .is_file()
     );
     assert_eq!(persistence::load(&config_dir).unwrap(), None);
-    pandar_plugin_printer_refresh_session_destroy(session);
+    unsafe { pandar_plugin_printer_refresh_session_destroy(session) };
 }

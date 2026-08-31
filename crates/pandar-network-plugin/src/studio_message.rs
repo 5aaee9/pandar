@@ -95,11 +95,13 @@ pub struct PluginStudioMessageResult {
 /// Stable parser statuses: 0 is an operation with HTTP 200; 1 is unsupported with HTTP 400;
 /// 2 is an invalid native candidate with HTTP 400. Both error statuses use the same body.
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_operation_json_from_gcode(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_operation_json_from_gcode(
     message_ptr: *const u8,
     message_len: usize,
 ) -> PluginHttpResult {
-    read_utf8(message_ptr, message_len)
+    unsafe { read_utf8(message_ptr, message_len) }
         .map_or(StudioOperationParse::Unsupported, |message| {
             operation_json_from_gcode(&message)
         })
@@ -109,11 +111,13 @@ pub extern "C" fn pandar_plugin_operation_json_from_gcode(
 /// Stable status-request kinds: 0 is not a status request, 1 is `info.get_version`,
 /// and 2 is `pushing.pushall`. The body is the typed request sequence string.
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_classify_status_request(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_classify_status_request(
     message_ptr: *const u8,
     message_len: usize,
 ) -> PluginHttpResult {
-    let (kind, sequence_id) = read_utf8(message_ptr, message_len)
+    let (kind, sequence_id) = unsafe { read_utf8(message_ptr, message_len) }
         .map_or((0, String::new()), |message| {
             crate::studio_status::classify_status_request(&message)
         });
@@ -146,11 +150,13 @@ impl PluginStudioMessageResult {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_dispatch_studio_message(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_dispatch_studio_message(
     message_ptr: *const u8,
     message_len: usize,
 ) -> PluginStudioMessageResult {
-    let Some(message) = read_utf8(message_ptr, message_len) else {
+    let Some(message) = (unsafe { read_utf8(message_ptr, message_len) }) else {
         return PluginStudioMessageResult::invalid(UNSUPPORTED);
     };
     match classify_studio_message(&message) {
@@ -222,15 +228,17 @@ mod tests {
     use super::*;
 
     fn dispatch(message: &str) -> PluginStudioMessageResult {
-        pandar_plugin_dispatch_studio_message(message.as_ptr(), message.len())
+        unsafe { pandar_plugin_dispatch_studio_message(message.as_ptr(), message.len()) }
     }
 
     fn free_body(outcome: PluginStudioMessageResult) {
-        crate::pandar_plugin_free_with_capacity(
-            outcome.body_ptr.cast(),
-            outcome.body_len,
-            outcome.body_cap,
-        );
+        unsafe {
+            crate::pandar_plugin_free_with_capacity(
+                outcome.body_ptr.cast(),
+                outcome.body_len,
+                outcome.body_cap,
+            )
+        };
     }
 
     #[test]

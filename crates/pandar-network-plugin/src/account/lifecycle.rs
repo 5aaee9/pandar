@@ -81,11 +81,11 @@ impl NoAuthExpected {
     }
 }
 
-pub(crate) fn current_expected(
+pub(crate) unsafe fn current_expected(
     account_context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
 ) -> anyhow::Result<NoAuthExpected> {
-    let current = capture(account_context, with_current)?;
+    let current = unsafe { capture(account_context, with_current) }?;
     Ok(NoAuthExpected {
         hub_url: current.hub_url,
         token: current.token,
@@ -95,32 +95,34 @@ pub(crate) fn current_expected(
     })
 }
 
-pub(crate) fn recover(
+pub(crate) unsafe fn recover(
     session_ptr: *mut c_void,
     expected: NoAuthExpected,
     account_context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
 ) -> NoAuthRecovery {
-    recover_with_cancellation(
-        session_ptr,
-        expected,
-        account_context,
-        with_current,
-        RequestCancellation::disabled(),
-    )
+    unsafe {
+        recover_with_cancellation(
+            session_ptr,
+            expected,
+            account_context,
+            with_current,
+            RequestCancellation::disabled(),
+        )
+    }
 }
 
-pub(crate) fn recover_with_cancellation(
+pub(crate) unsafe fn recover_with_cancellation(
     session_ptr: *mut c_void,
     expected: NoAuthExpected,
     account_context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
     cancellation: RequestCancellation,
 ) -> NoAuthRecovery {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return NoAuthRecovery::Failed(stable_outcome("invalid_refresh_session"));
     };
-    let current = match capture(account_context, with_current) {
+    let current = match unsafe { capture(account_context, with_current) } {
         Ok(current) => current,
         Err(error) => return NoAuthRecovery::Failed(diagnosed_outcome(error)),
     };
@@ -195,6 +197,9 @@ pub(crate) fn recover_with_cancellation(
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// `session_ptr` must identify a live connection session. `account_context` and `with_current`
+/// must remain valid for this call and every synchronous account transaction callback it invokes.
 pub unsafe extern "C" fn pandar_plugin_account_no_auth_bootstrap(
     session_ptr: *mut c_void,
     initial_attempt: bool,
@@ -202,13 +207,13 @@ pub unsafe extern "C" fn pandar_plugin_account_no_auth_bootstrap(
     account_context: *mut c_void,
     with_current: Option<PluginWithCurrentAccount>,
 ) -> PluginLifecycleResult {
-    let Some(session) = session(session_ptr) else {
+    let Some(session) = (unsafe { session(session_ptr) }) else {
         return lifecycle_failure(stable_outcome("invalid_refresh_session"), false);
     };
     if session.account_logout_in_flight() || session.no_auth_rotation_in_flight() {
         return lifecycle_none();
     }
-    let expected = match capture(account_context, with_current) {
+    let expected = match unsafe { capture(account_context, with_current) } {
         Ok(current) => current,
         Err(error) => return lifecycle_failure(diagnosed_outcome(error), false),
     };
@@ -220,7 +225,7 @@ pub unsafe extern "C" fn pandar_plugin_account_no_auth_bootstrap(
         return lifecycle_none();
     }
     if initial_attempt {
-        pandar_plugin_no_auth_retry_arm(session_ptr, now_ms);
+        unsafe { pandar_plugin_no_auth_retry_arm(session_ptr, now_ms) };
     }
     let config_dir = expected.config_dir.clone();
     let expected = NoAuthExpected {
@@ -234,20 +239,19 @@ pub unsafe extern "C" fn pandar_plugin_account_no_auth_bootstrap(
     if pending.status != 0 {
         return lifecycle_failure(pending, initial_attempt);
     }
-    let retry_started = pandar_plugin_no_auth_retry_begin(session_ptr, now_ms) == 1;
+    let retry_started = unsafe { pandar_plugin_no_auth_retry_begin(session_ptr, now_ms) } == 1;
     if !retry_started {
         return lifecycle_none();
     }
     if !initial_current(account_context, with_current, &expected) {
-        pandar_plugin_no_auth_retry_complete(session_ptr, 1, now_ms);
+        unsafe { pandar_plugin_no_auth_retry_complete(session_ptr, 1, now_ms) };
         return lifecycle_none();
     }
-    let response = take_http(pandar_plugin_create_no_auth_session(
-        expected.hub_url.as_ptr(),
-        expected.hub_url.len(),
-    ));
+    let response = take_http(unsafe {
+        pandar_plugin_create_no_auth_session(expected.hub_url.as_ptr(), expected.hub_url.len())
+    });
     if response.status != 0 {
-        pandar_plugin_no_auth_retry_complete(session_ptr, response.status, now_ms);
+        unsafe { pandar_plugin_no_auth_retry_complete(session_ptr, response.status, now_ms) };
         let report = initial_attempt && initial_current(account_context, with_current, &expected);
         return lifecycle_failure(response, report);
     }
@@ -262,7 +266,7 @@ pub unsafe extern "C" fn pandar_plugin_account_no_auth_bootstrap(
     });
     match committed {
         Ok(true) => {
-            pandar_plugin_no_auth_retry_complete(session_ptr, 0, now_ms);
+            unsafe { pandar_plugin_no_auth_retry_complete(session_ptr, 0, now_ms) };
             PluginLifecycleResult {
                 http: result(0, 200, ""),
                 account_event: ACCOUNT_EVENT_LOGIN,
@@ -270,34 +274,36 @@ pub unsafe extern "C" fn pandar_plugin_account_no_auth_bootstrap(
             }
         }
         Ok(false) => {
-            pandar_plugin_no_auth_retry_complete(session_ptr, 1, now_ms);
+            unsafe { pandar_plugin_no_auth_retry_complete(session_ptr, 1, now_ms) };
             lifecycle_none()
         }
         Err(error) => {
-            pandar_plugin_no_auth_retry_complete(session_ptr, 1, now_ms);
+            unsafe { pandar_plugin_no_auth_retry_complete(session_ptr, 1, now_ms) };
             lifecycle_failure(diagnosed_outcome(error), false)
         }
     }
 }
 
 fn refresh_action(expected: &NoAuthExpected, current: &AccountView) -> i32 {
-    crate::studio_policy::account_refresh::pandar_plugin_account_refresh_action(
-        expected.account_epoch,
-        current.account_epoch,
-        expected.config_epoch,
-        current.config_epoch,
-        current.transition_pending,
-        expected.session_kind,
-        current.session_kind,
-        expected.hub_url.as_ptr(),
-        expected.hub_url.len(),
-        current.hub_url.as_ptr(),
-        current.hub_url.len(),
-        expected.token.as_ptr(),
-        expected.token.len(),
-        current.token.as_ptr(),
-        current.token.len(),
-    )
+    unsafe {
+        crate::studio_policy::account_refresh::pandar_plugin_account_refresh_action(
+            expected.account_epoch,
+            current.account_epoch,
+            expected.config_epoch,
+            current.config_epoch,
+            current.transition_pending,
+            expected.session_kind,
+            current.session_kind,
+            expected.hub_url.as_ptr(),
+            expected.hub_url.len(),
+            current.hub_url.as_ptr(),
+            current.hub_url.len(),
+            expected.token.as_ptr(),
+            expected.token.len(),
+            current.token.as_ptr(),
+            current.token.len(),
+        )
+    }
 }
 
 pub(super) fn retry_pending_revocation(config_dir: &str) -> NoAuthRotationOutcome {
@@ -316,7 +322,7 @@ fn recovery_from_outcome(
     if outcome.status != 0 {
         return NoAuthRecovery::Failed(outcome);
     }
-    let current = match capture(account_context, with_current) {
+    let current = match unsafe { capture(account_context, with_current) } {
         Ok(current) => current,
         Err(error) => return NoAuthRecovery::Failed(diagnosed_outcome(error)),
     };
@@ -336,11 +342,13 @@ pub(crate) fn take_http(response: PluginHttpResult) -> NoAuthRotationOutcome {
         })
         .into_owned()
     };
-    crate::pandar_plugin_free_with_capacity(
-        response.body_ptr.cast(),
-        response.body_len,
-        response.body_cap,
-    );
+    unsafe {
+        crate::pandar_plugin_free_with_capacity(
+            response.body_ptr.cast(),
+            response.body_len,
+            response.body_cap,
+        )
+    };
     NoAuthRotationOutcome {
         status: response.status,
         http_code: response.http_code,

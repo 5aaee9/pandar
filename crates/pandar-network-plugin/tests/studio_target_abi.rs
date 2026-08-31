@@ -35,6 +35,8 @@ fn take_body(result: PluginHttpResult) -> String {
     }
     let bytes = unsafe { std::slice::from_raw_parts(result.body_ptr, result.body_len) };
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap);
+    unsafe {
+        pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap)
+    };
     body
 }

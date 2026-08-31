@@ -4,7 +4,9 @@ type RuntimeConfigVisitor =
     unsafe extern "C" fn(*mut std::ffi::c_void, *const u8, usize, bool, *const u8, usize, bool);
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_runtime_config(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_account_runtime_config(
     context: *mut std::ffi::c_void,
     visitor: Option<RuntimeConfigVisitor>,
 ) -> i32 {

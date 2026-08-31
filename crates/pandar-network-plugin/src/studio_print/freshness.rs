@@ -11,21 +11,23 @@ pub(super) struct AccountFreshness {
 }
 
 impl AccountFreshness {
-    pub(super) fn from_snapshot(
+    pub(super) unsafe fn from_snapshot(
         raw: &PluginStudioSnapshot,
         context: *mut c_void,
         snapshot: Option<StudioSnapshotCallback>,
     ) -> Option<Self> {
-        if raw.account_transition_pending != 0 {
-            return None;
+        unsafe {
+            if raw.account_transition_pending != 0 {
+                return None;
+            }
+            Some(Self {
+                hub_url: raw.hub_url.read("hub_url").ok()?,
+                token: raw.token.read("token").ok()?,
+                account_epoch: raw.account_epoch,
+                context,
+                snapshot,
+            })
         }
-        Some(Self {
-            hub_url: raw.hub_url.read("hub_url").ok()?,
-            token: raw.token.read("token").ok()?,
-            account_epoch: raw.account_epoch,
-            context,
-            snapshot,
-        })
     }
 
     pub(super) fn current(&self) -> bool {
@@ -36,18 +38,12 @@ impl AccountFreshness {
         callback(self.context, &mut current) != 0
             && current.account_transition_pending == 0
             && current.account_epoch == self.account_epoch
-            && current
-                .hub_url
-                .read("hub_url")
-                .is_ok_and(|value| value == self.hub_url)
-            && current
-                .token
-                .read("token")
-                .is_ok_and(|value| value == self.token)
+            && unsafe { current.hub_url.read("hub_url") }.is_ok_and(|value| value == self.hub_url)
+            && unsafe { current.token.read("token") }.is_ok_and(|value| value == self.token)
     }
 }
 
-pub(super) fn request_snapshot_current(
+pub(super) unsafe fn request_snapshot_current(
     expected: &PluginStudioSnapshot,
     current: &PluginStudioSnapshot,
 ) -> bool {
@@ -55,17 +51,17 @@ pub(super) fn request_snapshot_current(
         && current.account_epoch == expected.account_epoch
         && current.cache_generation == expected.cache_generation
         && current.firmware_generation == expected.firmware_generation
-        && equal_bytes(current.hub_url, expected.hub_url, "hub_url")
-        && equal_bytes(current.token, expected.token, "token")
+        && unsafe { equal_bytes(current.hub_url, expected.hub_url, "hub_url") }
+        && unsafe { equal_bytes(current.token, expected.token, "token") }
 }
 
-fn equal_bytes(
+unsafe fn equal_bytes(
     left: super::ffi::PluginBytes,
     right: super::ffi::PluginBytes,
     field: &'static str,
 ) -> bool {
-    left.read(field)
+    unsafe { left.read(field) }
         .ok()
-        .zip(right.read(field).ok())
+        .zip(unsafe { right.read(field) }.ok())
         .is_some_and(|(left, right)| left == right)
 }

@@ -8,7 +8,7 @@ const STATUS_GET_VERSION: i32 = 1;
 const STATUS_PUSH_ALL: i32 = 2;
 
 fn classify(message: &[u8]) -> (i32, u32, String) {
-    let result = pandar_plugin_classify_status_request(message.as_ptr(), message.len());
+    let result = unsafe { pandar_plugin_classify_status_request(message.as_ptr(), message.len()) };
     let status = result.status;
     let http_code = result.http_code;
     let body = take_body(result);
@@ -21,7 +21,9 @@ fn take_body(result: PluginHttpResult) -> String {
     }
     let bytes = unsafe { std::slice::from_raw_parts(result.body_ptr, result.body_len) };
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap);
+    unsafe {
+        pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap)
+    };
     body
 }
 

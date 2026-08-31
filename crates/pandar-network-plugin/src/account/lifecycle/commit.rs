@@ -80,12 +80,14 @@ pub(super) fn commit_candidate(
         state: CommitState::Pending,
         revoke: None,
     };
-    let transaction_result = transact(
-        account_context,
-        with_current,
-        (&mut context as *mut CommitContext<'_>).cast(),
-        commit_transaction,
-    );
+    let transaction_result = unsafe {
+        transact(
+            account_context,
+            with_current,
+            (&mut context as *mut CommitContext<'_>).cast(),
+            commit_transaction,
+        )
+    };
     if let Some((config_dir, revocation, staged)) = context.revoke.take() {
         revoke_candidate(&config_dir, revocation, staged);
     }
@@ -107,7 +109,7 @@ unsafe extern "C" fn commit_transaction(
         return 1;
     };
     let work = (|| {
-        let current = AccountView::read(view)?;
+        let current = unsafe { AccountView::read(view) }?;
         if !commit_current(context.mode, context.expected, &current) {
             stage_candidate(context, &current);
             context.state = CommitState::Rejected;
@@ -228,7 +230,7 @@ pub(super) fn initial_current(
     with_current: Option<PluginWithCurrentAccount>,
     expected: &NoAuthExpected,
 ) -> bool {
-    capture(context, with_current)
+    unsafe { capture(context, with_current) }
         .is_ok_and(|current| commit_current(CommitMode::Initial, expected, &current))
 }
 

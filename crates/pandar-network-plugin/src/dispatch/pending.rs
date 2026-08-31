@@ -16,11 +16,14 @@ pub unsafe extern "C" fn pandar_plugin_dispatch_connect_local(
     dev_id_ptr: *const u8,
     dev_id_len: usize,
 ) -> i32 {
-    let (Some(bridge), Some(session)) = (bridge(bridge_ptr), connection_session(session_ptr))
-    else {
+    let (Some(bridge), Some(session)) = (unsafe { bridge(bridge_ptr) }, unsafe {
+        connection_session(session_ptr)
+    }) else {
         return ABI_CONNECT_FAILED;
     };
-    let Some(dev_id) = read_utf8(dev_id_ptr, dev_id_len).filter(|dev_id| !dev_id.is_empty()) else {
+    let Some(dev_id) =
+        unsafe { read_utf8(dev_id_ptr, dev_id_len) }.filter(|dev_id| !dev_id.is_empty())
+    else {
         return ABI_CONNECT_FAILED;
     };
     let (delivery, payload) = session.studio_connect_local(dev_id);
@@ -66,8 +69,8 @@ pub unsafe extern "C" fn pandar_plugin_dispatch_firmware_callback(
     firmware_session_ptr: *mut c_void,
 ) -> i32 {
     let (Some(bridge), Some(session), Some(firmware_session)) = (
-        bridge(bridge_ptr),
-        connection_session(session_ptr),
+        unsafe { bridge(bridge_ptr) },
+        unsafe { connection_session(session_ptr) },
         unsafe { firmware_session_ref(firmware_session_ptr) },
     ) else {
         return 0;
@@ -127,24 +130,24 @@ pub unsafe extern "C" fn pandar_plugin_dispatch_pending(
     firmware_session_ptr: *mut c_void,
     no_auth_retry_due: i32,
 ) -> PluginPendingOutcome {
-    let Some(bridge) = bridge(bridge_ptr) else {
+    let Some(bridge) = (unsafe { bridge(bridge_ptr) }) else {
         return PluginPendingOutcome {
             wait_ms: NO_AUTH_RETRY_DELAY_MS,
             logged_out: 1,
         };
     };
-    let Some(session) = connection_session(session_ptr) else {
+    let Some(session) = (unsafe { connection_session(session_ptr) }) else {
         return PluginPendingOutcome {
             wait_ms: NO_AUTH_RETRY_DELAY_MS,
             logged_out: 1,
         };
     };
     (bridge.sync_firmware)(agent, firmware_session_ptr);
-    dispatch_pending_deliveries(bridge, agent, session_ptr, session);
+    unsafe { dispatch_pending_deliveries(bridge, agent, session_ptr, session) };
     let logged_out = session.is_logged_out();
     if no_auth_retry_due != 0 && logged_out {
         (bridge.retry_no_auth)(agent);
-        dispatch_pending_deliveries(bridge, agent, session_ptr, session);
+        unsafe { dispatch_pending_deliveries(bridge, agent, session_ptr, session) };
     }
     let (plan, _) = session.studio_heartbeat_plan();
     PluginPendingOutcome {
@@ -153,7 +156,7 @@ pub unsafe extern "C" fn pandar_plugin_dispatch_pending(
     }
 }
 
-fn dispatch_pending_deliveries(
+unsafe fn dispatch_pending_deliveries(
     bridge: &PluginDispatchBridge,
     agent: *mut c_void,
     session_ptr: *mut c_void,
@@ -168,10 +171,12 @@ fn dispatch_pending_deliveries(
         .into_iter()
         .map(|issued| issued.ticket)
         .collect();
-    dispatch_transition_and_tickets(bridge, agent, session_ptr, session, transition, &offline);
+    unsafe {
+        dispatch_transition_and_tickets(bridge, agent, session_ptr, session, transition, &offline)
+    };
 }
 
-pub(crate) fn dispatch_transition_and_tickets(
+pub(crate) unsafe fn dispatch_transition_and_tickets(
     bridge: &PluginDispatchBridge,
     agent: *mut c_void,
     session_ptr: *mut c_void,
@@ -180,12 +185,14 @@ pub(crate) fn dispatch_transition_and_tickets(
     offline_tickets: &[u64],
 ) {
     if transition.changed != 0 || transition.auth_changed != 0 {
-        pandar_plugin_shim_dispatch_connection_transition(
-            &bridge.base,
-            agent,
-            session_ptr,
-            transition,
-        );
+        unsafe {
+            pandar_plugin_shim_dispatch_connection_transition(
+                &bridge.base,
+                agent,
+                session_ptr,
+                transition,
+            )
+        };
     }
     // SAFETY: the tickets are borrowed for this call.
     unsafe {
@@ -223,8 +230,9 @@ pub unsafe extern "C" fn pandar_plugin_dispatch_refresh_drain(
     offline_tickets: *const u64,
     offline_len: usize,
 ) {
-    let (Some(bridge), Some(session)) = (bridge(bridge_ptr), connection_session(session_ptr))
-    else {
+    let (Some(bridge), Some(session)) = (unsafe { bridge(bridge_ptr) }, unsafe {
+        connection_session(session_ptr)
+    }) else {
         return;
     };
     // SAFETY: the caller borrows the ticket slice for this call.
@@ -233,5 +241,7 @@ pub unsafe extern "C" fn pandar_plugin_dispatch_refresh_drain(
     } else {
         unsafe { std::slice::from_raw_parts(offline_tickets, offline_len) }
     };
-    dispatch_transition_and_tickets(bridge, agent, session_ptr, session, transition, tickets);
+    unsafe {
+        dispatch_transition_and_tickets(bridge, agent, session_ptr, session, transition, tickets)
+    };
 }

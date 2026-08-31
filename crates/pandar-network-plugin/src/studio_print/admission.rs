@@ -124,143 +124,147 @@ impl PrintFailure {
     }
 }
 
-pub(super) fn admit(raw: &PluginStudioPrintParams) -> Result<AdmittedPrint, PrintFailure> {
-    let hub_url = raw.snapshot.hub_url.read("dev_id")?;
-    let hub_url =
-        crate::normalize_hub_url(hub_url).ok_or_else(|| PrintFailure::simple("invalid_hub_url"))?;
-    let token = raw.snapshot.token.read("dev_id")?;
-    if token.trim().is_empty() {
-        return Err(PrintFailure::simple("invalid_auth_token"));
-    }
-    let dev_id = required(raw.dev_id.read("dev_id")?, "dev_id")?;
-    let printer_id = required(raw.snapshot.printer_id.read("dev_id")?, "dev_id")?;
-    if raw.snapshot.printer_authorized == 0 || raw.snapshot.account_transition_pending != 0 {
-        return Err(PrintFailure::invalid("dev_id"));
-    }
-    drop(dev_id);
+pub(super) unsafe fn admit(raw: &PluginStudioPrintParams) -> Result<AdmittedPrint, PrintFailure> {
+    unsafe {
+        let hub_url = raw.snapshot.hub_url.read("dev_id")?;
+        let hub_url = crate::normalize_hub_url(hub_url)
+            .ok_or_else(|| PrintFailure::simple("invalid_hub_url"))?;
+        let token = raw.snapshot.token.read("dev_id")?;
+        if token.trim().is_empty() {
+            return Err(PrintFailure::simple("invalid_auth_token"));
+        }
+        let dev_id = required(raw.dev_id.read("dev_id")?, "dev_id")?;
+        let printer_id = required(raw.snapshot.printer_id.read("dev_id")?, "dev_id")?;
+        if raw.snapshot.printer_authorized == 0 || raw.snapshot.account_transition_pending != 0 {
+            return Err(PrintFailure::invalid("dev_id"));
+        }
+        drop(dev_id);
 
-    drop(raw.ftp_folder.read("ftp_folder")?);
-    drop(raw.dev_ip.read("dev_ip")?);
-    drop(raw.username.read("username")?);
-    drop(raw.password.read("password")?);
-    let _ = raw.use_ssl_for_ftp;
-    let _ = raw.use_ssl_for_mqtt;
-    reject_non_default(&raw.ftp_file.read("ftp_file")?, "ftp_file")?;
-    reject_non_default(&raw.ftp_file_md5.read("ftp_file_md5")?, "ftp_file_md5")?;
-    reject_non_default(&raw.extra_options.read("extra_options")?, "extra_options")?;
-    unsupported_non_default(&raw.dst_file.read("dst_file")?, "dst_file")?;
-    if raw.task_ext_change_assist != 0 {
-        return Err(PrintFailure::unsupported("task_ext_change_assist"));
-    }
+        drop(raw.ftp_folder.read("ftp_folder")?);
+        drop(raw.dev_ip.read("dev_ip")?);
+        drop(raw.username.read("username")?);
+        drop(raw.password.read("password")?);
+        let _ = raw.use_ssl_for_ftp;
+        let _ = raw.use_ssl_for_mqtt;
+        reject_non_default(&raw.ftp_file.read("ftp_file")?, "ftp_file")?;
+        reject_non_default(&raw.ftp_file_md5.read("ftp_file_md5")?, "ftp_file_md5")?;
+        reject_non_default(&raw.extra_options.read("extra_options")?, "extra_options")?;
+        unsupported_non_default(&raw.dst_file.read("dst_file")?, "dst_file")?;
+        if raw.task_ext_change_assist != 0 {
+            return Err(PrintFailure::unsupported("task_ext_change_assist"));
+        }
 
-    let connection_type = match raw.connection_type.read("connection_type")?.as_str() {
-        "" | "cloud" => "cloud".to_owned(),
-        _ => return Err(PrintFailure::invalid("connection_type")),
-    };
-    let print_type = raw.print_type.read("print_type")?;
-    if print_type.is_empty() {
-        return Err(PrintFailure::invalid("print_type"));
-    }
-    if print_type != "from_normal" {
-        return Err(PrintFailure::unsupported("print_type"));
-    }
-    let plate_index = u32::try_from(raw.plate_index)
-        .ok()
-        .filter(|value| *value > 0)
-        .ok_or_else(|| PrintFailure::invalid("plate_index"))?;
-    let auto_bed_leveling = calibration(raw.auto_bed_leveling, "auto_bed_leveling")?;
-    let auto_flow_cali = calibration(raw.auto_flow_cali, "auto_flow_cali")?;
-    let auto_offset_cali = calibration(raw.auto_offset_cali, "auto_offset_cali")?;
-    let extruder_cali_manual_mode = i8::try_from(raw.extruder_cali_manual_mode)
-        .ok()
-        .filter(|value| matches!(value, -1..=1))
-        .ok_or_else(|| PrintFailure::invalid("extruder_cali_manual_mode"))?;
+        let connection_type = match raw.connection_type.read("connection_type")?.as_str() {
+            "" | "cloud" => "cloud".to_owned(),
+            _ => return Err(PrintFailure::invalid("connection_type")),
+        };
+        let print_type = raw.print_type.read("print_type")?;
+        if print_type.is_empty() {
+            return Err(PrintFailure::invalid("print_type"));
+        }
+        if print_type != "from_normal" {
+            return Err(PrintFailure::unsupported("print_type"));
+        }
+        let plate_index = u32::try_from(raw.plate_index)
+            .ok()
+            .filter(|value| *value > 0)
+            .ok_or_else(|| PrintFailure::invalid("plate_index"))?;
+        let auto_bed_leveling = calibration(raw.auto_bed_leveling, "auto_bed_leveling")?;
+        let auto_flow_cali = calibration(raw.auto_flow_cali, "auto_flow_cali")?;
+        let auto_offset_cali = calibration(raw.auto_offset_cali, "auto_offset_cali")?;
+        let extruder_cali_manual_mode = i8::try_from(raw.extruder_cali_manual_mode)
+            .ok()
+            .filter(|value| matches!(value, -1..=1))
+            .ok_or_else(|| PrintFailure::invalid("extruder_cali_manual_mode"))?;
 
-    let artifact = required(raw.filename.read("filename")?, "filename")?;
-    let artifact_path = PathBuf::from(&artifact);
-    let artifact_filename = basename(&artifact_path)
-        .ok_or_else(|| PrintFailure::invalid("filename"))?
-        .to_owned();
-    let bed_type = raw.task_bed_type.read("task_bed_type")?;
-    if !matches!(
-        bed_type.as_str(),
-        "supertack_plate" | "cool_plate" | "eng_plate" | "hot_plate" | "textured_plate"
-    ) {
-        return Err(PrintFailure::invalid("task_bed_type"));
-    }
+        let artifact = required(raw.filename.read("filename")?, "filename")?;
+        let artifact_path = PathBuf::from(&artifact);
+        let artifact_filename = basename(&artifact_path)
+            .ok_or_else(|| PrintFailure::invalid("filename"))?
+            .to_owned();
+        let bed_type = raw.task_bed_type.read("task_bed_type")?;
+        if !matches!(
+            bed_type.as_str(),
+            "supertack_plate" | "cool_plate" | "eng_plate" | "hot_plate" | "textured_plate"
+        ) {
+            return Err(PrintFailure::invalid("task_bed_type"));
+        }
 
-    Ok(AdmittedPrint {
-        hub_url,
-        token,
-        printer_id,
-        account_epoch: raw.snapshot.account_epoch,
-        cache_generation: raw.snapshot.cache_generation,
-        firmware_generation: raw.snapshot.firmware_generation,
-        task_name: raw.task_name.read("task_name")?,
-        project_name: raw.project_name.read("project_name")?,
-        preset_name: raw.preset_name.read("preset_name")?,
-        artifact_path,
-        artifact_filename,
-        config_filename: raw.config_filename.read("config_filename")?,
-        config_plate_index: None,
-        plate_index,
-        nozzle_mapping: strict_json(
-            &raw.nozzle_mapping.read("nozzle_mapping")?,
-            "nozzle_mapping",
-        )?,
-        ams_mapping: strict_json(&raw.ams_mapping.read("ams_mapping")?, "ams_mapping")?,
-        ams_mapping2: strict_json(&raw.ams_mapping2.read("ams_mapping2")?, "ams_mapping2")?,
-        ams_mapping_info: strict_json(
-            &raw.ams_mapping_info.read("ams_mapping_info")?,
-            "ams_mapping_info",
-        )?,
-        nozzles_info: strict_json(&raw.nozzles_info.read("nozzles_info")?, "nozzles_info")?,
-        connection_type,
-        comments: raw.comments.read("comments")?,
-        origin_profile_id: i64::from(raw.origin_profile_id),
-        stl_design_id: i64::from(raw.stl_design_id),
-        origin_model_id: raw.origin_model_id.read("origin_model_id")?,
-        print_type,
-        dev_name: raw.dev_name.read("dev_name")?,
-        bed_leveling: raw.task_bed_leveling != 0,
-        flow_cali: raw.task_flow_cali != 0,
-        vibration_cali: raw.task_vibration_cali != 0,
-        layer_inspect: raw.task_layer_inspect != 0,
-        timelapse: raw.task_record_timelapse != 0,
-        timelapse_use_internal: raw.task_timelapse_use_internal != 0,
-        use_ams: raw.task_use_ams != 0,
-        bed_type,
-        auto_bed_leveling,
-        auto_flow_cali,
-        auto_offset_cali,
-        extruder_cali_manual_mode,
-        try_emmc_print: raw.try_emmc_print != 0,
-        svc_context: raw.svc_context.read("svc_context")?,
-        slicer_uid: raw.slicer_uid.read("slicer_uid")?,
-    })
+        Ok(AdmittedPrint {
+            hub_url,
+            token,
+            printer_id,
+            account_epoch: raw.snapshot.account_epoch,
+            cache_generation: raw.snapshot.cache_generation,
+            firmware_generation: raw.snapshot.firmware_generation,
+            task_name: raw.task_name.read("task_name")?,
+            project_name: raw.project_name.read("project_name")?,
+            preset_name: raw.preset_name.read("preset_name")?,
+            artifact_path,
+            artifact_filename,
+            config_filename: raw.config_filename.read("config_filename")?,
+            config_plate_index: None,
+            plate_index,
+            nozzle_mapping: strict_json(
+                &raw.nozzle_mapping.read("nozzle_mapping")?,
+                "nozzle_mapping",
+            )?,
+            ams_mapping: strict_json(&raw.ams_mapping.read("ams_mapping")?, "ams_mapping")?,
+            ams_mapping2: strict_json(&raw.ams_mapping2.read("ams_mapping2")?, "ams_mapping2")?,
+            ams_mapping_info: strict_json(
+                &raw.ams_mapping_info.read("ams_mapping_info")?,
+                "ams_mapping_info",
+            )?,
+            nozzles_info: strict_json(&raw.nozzles_info.read("nozzles_info")?, "nozzles_info")?,
+            connection_type,
+            comments: raw.comments.read("comments")?,
+            origin_profile_id: i64::from(raw.origin_profile_id),
+            stl_design_id: i64::from(raw.stl_design_id),
+            origin_model_id: raw.origin_model_id.read("origin_model_id")?,
+            print_type,
+            dev_name: raw.dev_name.read("dev_name")?,
+            bed_leveling: raw.task_bed_leveling != 0,
+            flow_cali: raw.task_flow_cali != 0,
+            vibration_cali: raw.task_vibration_cali != 0,
+            layer_inspect: raw.task_layer_inspect != 0,
+            timelapse: raw.task_record_timelapse != 0,
+            timelapse_use_internal: raw.task_timelapse_use_internal != 0,
+            use_ams: raw.task_use_ams != 0,
+            bed_type,
+            auto_bed_leveling,
+            auto_flow_cali,
+            auto_offset_cali,
+            extruder_cali_manual_mode,
+            try_emmc_print: raw.try_emmc_print != 0,
+            svc_context: raw.svc_context.read("svc_context")?,
+            slicer_uid: raw.slicer_uid.read("slicer_uid")?,
+        })
+    }
 }
 
 impl AdmittedPrint {
-    pub(super) fn matches_snapshot(&self, snapshot: &PluginStudioSnapshot) -> bool {
-        snapshot.printer_authorized != 0
-            && snapshot.account_transition_pending == 0
-            && snapshot.account_epoch == self.account_epoch
-            && snapshot.cache_generation == self.cache_generation
-            && snapshot.firmware_generation == self.firmware_generation
-            && snapshot
-                .hub_url
-                .read("hub_url")
-                .ok()
-                .and_then(crate::normalize_hub_url)
-                .is_some_and(|value| value == self.hub_url)
-            && snapshot
-                .token
-                .read("dev_id")
-                .is_ok_and(|value| value == self.token)
-            && snapshot
-                .printer_id
-                .read("dev_id")
-                .is_ok_and(|value| value == self.printer_id)
+    pub(super) unsafe fn matches_snapshot(&self, snapshot: &PluginStudioSnapshot) -> bool {
+        unsafe {
+            snapshot.printer_authorized != 0
+                && snapshot.account_transition_pending == 0
+                && snapshot.account_epoch == self.account_epoch
+                && snapshot.cache_generation == self.cache_generation
+                && snapshot.firmware_generation == self.firmware_generation
+                && snapshot
+                    .hub_url
+                    .read("hub_url")
+                    .ok()
+                    .and_then(crate::normalize_hub_url)
+                    .is_some_and(|value| value == self.hub_url)
+                && snapshot
+                    .token
+                    .read("dev_id")
+                    .is_ok_and(|value| value == self.token)
+                && snapshot
+                    .printer_id
+                    .read("dev_id")
+                    .is_ok_and(|value| value == self.printer_id)
+        }
     }
 }
 

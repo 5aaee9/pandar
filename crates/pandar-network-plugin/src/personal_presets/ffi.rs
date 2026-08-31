@@ -13,7 +13,7 @@ pub struct PresetBytes {
 }
 
 impl PresetBytes {
-    pub(super) fn read(self) -> anyhow::Result<String> {
+    pub(super) unsafe fn read(self) -> anyhow::Result<String> {
         if self.len == 0 {
             return Ok(String::new());
         }
@@ -68,7 +68,9 @@ fn result(status: i32, http_code: u32, updated_time: i64, code: i32, id: String)
 }
 
 /// # Safety
-/// `account` and `entries` must point to readable values for the duration of this call.
+/// `account` and all of its nested byte views, plus `setting_id` and `name`, must remain readable
+/// for this call. `entries` must be null when `entry_count` is zero or reference that many entries;
+/// every entry key/value byte view must remain valid for its paired length.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pandar_plugin_personal_preset_mutate(
     operation: i32,
@@ -81,7 +83,7 @@ pub unsafe extern "C" fn pandar_plugin_personal_preset_mutate(
     let Some(account) = (unsafe { account.as_ref() }) else {
         return result(-1, 0, 0, 0, String::new());
     };
-    let Ok(account) = Account::read(account) else {
+    let Ok(account) = (unsafe { Account::read(account) }) else {
         return result(operation_error(operation), 403, 0, 0, String::new());
     };
     if account.session_kind != 1
@@ -92,7 +94,7 @@ pub unsafe extern "C" fn pandar_plugin_personal_preset_mutate(
         return result(operation_error(operation), 403, 0, 0, String::new());
     }
     let output = (|| -> Result<(i64, String, i32), Failure> {
-        let setting_id = setting_id.read()?;
+        let setting_id = unsafe { setting_id.read() }?;
         if operation != 1 && setting_id.is_empty() {
             return Err(Failure::Invalid);
         }
@@ -100,7 +102,9 @@ pub unsafe extern "C" fn pandar_plugin_personal_preset_mutate(
             http::delete(&account.hub_url, &account.token, &setting_id).map_err(Failure::Http)?;
             return Ok((0, String::new(), 0));
         }
-        let request = PresetRequest::from_flat(name.read()?, read_entries(entries, entry_count)?)?;
+        let request = PresetRequest::from_flat(unsafe { name.read() }?, unsafe {
+            read_entries(entries, entry_count)
+        }?)?;
         let mutation = match operation {
             1 => http::create(&account.hub_url, &account.token, &request),
             2 => http::update(&account.hub_url, &account.token, &setting_id, &request),
@@ -159,7 +163,9 @@ impl From<anyhow::Error> for Failure {
 }
 
 /// # Safety
-/// `account` must be readable and every supplied callback must remain valid during this call.
+/// `account`, `bundle`, and all nested byte views must remain valid for this call. Every callback
+/// in `callbacks` and its context must remain callable for the full synchronous operation and must
+/// copy any borrowed entry byte views before returning.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pandar_plugin_personal_preset_list(
     account: *const Account,
@@ -171,7 +177,7 @@ pub unsafe extern "C" fn pandar_plugin_personal_preset_list(
     };
     let identity = account.identity;
     cache::reset(identity);
-    let Ok(account) = Account::read(account) else {
+    let Ok(account) = (unsafe { Account::read(account) }) else {
         return -9;
     };
     if account.session_kind != 1
@@ -186,7 +192,7 @@ pub unsafe extern "C" fn pandar_plugin_personal_preset_list(
         if callback(&callbacks, callbacks.current, 0) == 0 {
             return Err(Failure::Stale);
         }
-        let bundle = bundle.read()?;
+        let bundle = unsafe { bundle.read() }?;
         let listed =
             http::list(&account.hub_url, &account.token, &bundle).map_err(Failure::Http)?;
         let total = listed.presets.len();
@@ -292,7 +298,9 @@ pub extern "C" fn pandar_plugin_personal_preset_reset(identity: u64) {
 }
 
 /// # Safety
-/// `account`, `context`, and `visitor` must remain valid for the duration of this call.
+/// `account` and all nested byte views must remain valid for this call. When present, `visitor` and
+/// `context` must remain callable for the full operation; the visitor must copy borrowed key/value
+/// byte views before returning.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pandar_plugin_personal_preset_drain(
     account: *const Account,
@@ -303,7 +311,7 @@ pub unsafe extern "C" fn pandar_plugin_personal_preset_drain(
         return -1;
     };
     let identity = account.identity;
-    let Ok(account) = Account::read(account) else {
+    let Ok(account) = (unsafe { Account::read(account) }) else {
         cache::reset(identity);
         return -19;
     };
@@ -328,7 +336,7 @@ pub unsafe extern "C" fn pandar_plugin_personal_preset_drain(
     0
 }
 
-fn read_entries(
+unsafe fn read_entries(
     entries: *const PresetEntry,
     count: usize,
 ) -> anyhow::Result<BTreeMap<String, String>> {
@@ -338,7 +346,7 @@ fn read_entries(
     anyhow::ensure!(!entries.is_null(), "preset entries pointer is null");
     unsafe { slice::from_raw_parts(entries, count) }
         .iter()
-        .map(|entry| Ok((entry.key.read()?, entry.value.read()?)))
+        .map(|entry| Ok((unsafe { entry.key.read() }?, unsafe { entry.value.read() }?)))
         .collect()
 }
 fn bytes(value: &str) -> PresetBytes {

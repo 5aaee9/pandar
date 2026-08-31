@@ -162,12 +162,14 @@ fn clear_current(
         expected,
         state: ClearState::Pending,
     };
-    if let Err(error) = transact(
-        account_context,
-        with_current,
-        (&mut context as *mut ClearContext<'_>).cast(),
-        clear_transaction,
-    ) {
+    if let Err(error) = unsafe {
+        transact(
+            account_context,
+            with_current,
+            (&mut context as *mut ClearContext<'_>).cast(),
+            clear_transaction,
+        )
+    } {
         return diagnosed_outcome(error);
     }
     match context.state {
@@ -188,7 +190,7 @@ unsafe extern "C" fn clear_transaction(
         return 1;
     };
     let work: anyhow::Result<()> = (|| {
-        let current = AccountView::read(view)?;
+        let current = unsafe { AccountView::read(view) }?;
         if !context.expected.matches(&current) {
             context.state = ClearState::Stale;
             return Ok(());
@@ -210,12 +212,14 @@ fn report_failure(
     failure: &NoAuthRotationOutcome,
 ) {
     let mut context = ReportContext { expected, failure };
-    if let Err(error) = transact(
-        account_context,
-        with_current,
-        (&mut context as *mut ReportContext<'_>).cast(),
-        report_transaction,
-    ) {
+    if let Err(error) = unsafe {
+        transact(
+            account_context,
+            with_current,
+            (&mut context as *mut ReportContext<'_>).cast(),
+            report_transaction,
+        )
+    } {
         eprintln!("pandar account logout failure delivery failed: {error:#}");
     }
 }
@@ -229,7 +233,7 @@ unsafe extern "C" fn report_transaction(
         return 1;
     };
     let work: anyhow::Result<()> = (|| {
-        let current = AccountView::read(view)?;
+        let current = unsafe { AccountView::read(view) }?;
         if context.expected.matches(&current) {
             let mutation =
                 unsafe { mutation.as_mut() }.context("account HTTP error mutation is missing")?;

@@ -160,7 +160,7 @@ fn unrecognized_server_error_maps_to_invalid_response() {
 #[test]
 fn exchange_ticket_rejects_empty_ticket_before_network() {
     let hub = b"http://127.0.0.1:9";
-    let result = pandar_plugin_exchange_ticket(hub.as_ptr(), hub.len(), b"".as_ptr(), 0);
+    let result = unsafe { pandar_plugin_exchange_ticket(hub.as_ptr(), hub.len(), b"".as_ptr(), 0) };
 
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 400);

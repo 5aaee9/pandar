@@ -51,21 +51,24 @@ impl Drop for CallbackGate<'_> {
     }
 }
 
-fn bridge<'a>(bridge: *const ShimCallbackBridge) -> Option<&'a ShimCallbackBridge> {
+unsafe fn bridge<'a>(bridge: *const ShimCallbackBridge) -> Option<&'a ShimCallbackBridge> {
     // SAFETY: the shim passes a pointer to its static bridge instance, which
     // outlives every dispatch call.
     unsafe { bridge.as_ref() }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_shim_dispatch_connection_transition(
+/// # Safety
+/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
+pub unsafe extern "C" fn pandar_plugin_shim_dispatch_connection_transition(
     bridge_ptr: *const ShimCallbackBridge,
     agent: *mut c_void,
     session_ptr: *mut c_void,
     result: PluginConnectionResult,
 ) {
-    let (Some(bridge), Some(session)) = (bridge(bridge_ptr), connection_session(session_ptr))
-    else {
+    let (Some(bridge), Some(session)) = (unsafe { bridge(bridge_ptr) }, unsafe {
+        connection_session(session_ptr)
+    }) else {
         return;
     };
     if result.changed != 0 {
@@ -114,8 +117,9 @@ pub unsafe extern "C" fn pandar_plugin_shim_dispatch_offline_deliveries(
     offline_tickets: *const u64,
     offline_len: usize,
 ) {
-    let (Some(bridge), Some(session)) = (bridge(bridge_ptr), connection_session(session_ptr))
-    else {
+    let (Some(bridge), Some(session)) = (unsafe { bridge(bridge_ptr) }, unsafe {
+        connection_session(session_ptr)
+    }) else {
         return;
     };
     if !offline_tickets.is_null() {

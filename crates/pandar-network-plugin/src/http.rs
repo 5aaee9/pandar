@@ -38,7 +38,7 @@ pub(super) fn calibration_mode(value: i32) -> Option<PrintCalibrationMode> {
     PrintCalibrationMode::try_from(value).ok()
 }
 
-pub(super) fn get_json(
+pub(super) unsafe fn get_json(
     hub_url_ptr: *const u8,
     hub_url_len: usize,
     token_ptr: *const u8,
@@ -46,10 +46,12 @@ pub(super) fn get_json(
     path: &str,
     kind: RequestKind,
 ) -> PluginHttpResult {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
+    let Some(hub_url) = unsafe { read_utf8(hub_url_ptr, hub_url_len) }.and_then(normalize_hub_url)
+    else {
         return invalid_input("invalid_hub_url");
     };
-    let Some(token) = read_utf8(token_ptr, token_len).filter(|token| !token.trim().is_empty())
+    let Some(token) =
+        unsafe { read_utf8(token_ptr, token_len) }.filter(|token| !token.trim().is_empty())
     else {
         return invalid_input("invalid_auth_token");
     };

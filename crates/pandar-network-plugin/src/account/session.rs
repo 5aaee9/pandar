@@ -85,6 +85,8 @@ impl AccountLifecycleSession {
 }
 
 #[unsafe(no_mangle)]
+/// Returns one caller-owned session. The caller must eventually pass it exactly once to
+/// `pandar_plugin_account_session_destroy` after all callbacks and borrowers have finished.
 pub extern "C" fn pandar_plugin_account_session_create() -> *mut c_void {
     Box::into_raw(Box::new(AccountLifecycleSession::new())).cast()
 }
@@ -105,12 +107,13 @@ pub unsafe extern "C" fn pandar_plugin_account_session_apply_lifecycle_result(
     if lifecycle.account_event == 1 {
         session.enqueue(AccountCallback::UserLogin(true));
     } else if lifecycle.report_http_error != 0 {
-        let body = match (PluginAccountBytes {
-            ptr: lifecycle.http.body_ptr,
-            len: lifecycle.http.body_len,
-        })
-        .read("account lifecycle HTTP error body")
-        {
+        let body = match unsafe {
+            (PluginAccountBytes {
+                ptr: lifecycle.http.body_ptr,
+                len: lifecycle.http.body_len,
+            })
+            .read("account lifecycle HTTP error body")
+        } {
             Ok(body) => body,
             Err(error) => {
                 eprintln!("pandar account lifecycle callback failed: {error:#}");
@@ -151,22 +154,24 @@ pub unsafe extern "C" fn pandar_plugin_account_session_apply(
     }) else {
         return 1;
     };
-    let current = match AccountView::read(current_ptr) {
+    let current = match unsafe { AccountView::read(current_ptr) } {
         Ok(current) => current,
         Err(error) => {
             eprintln!("pandar account mutation application failed: {error:#}");
             return 1;
         }
     };
-    if let Err(error) = apply_mutation(
-        session,
-        connection_ptr,
-        firmware_ptr,
-        bridge,
-        agent,
-        &current,
-        mutation,
-    ) {
+    if let Err(error) = unsafe {
+        apply_mutation(
+            session,
+            connection_ptr,
+            firmware_ptr,
+            bridge,
+            agent,
+            &current,
+            mutation,
+        )
+    } {
         eprintln!("pandar account mutation application failed: {error:#}");
         return 1;
     }

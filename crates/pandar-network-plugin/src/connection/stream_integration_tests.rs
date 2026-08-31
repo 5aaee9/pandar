@@ -199,23 +199,24 @@ fn removed_frame(dev_id: &str) -> String {
 // ---- session helpers -------------------------------------------------------
 
 fn create_session(hub_url: &str) -> *mut c_void {
-    pandar_plugin_printer_refresh_session_create(
-        hub_url.as_ptr(),
-        hub_url.len(),
-        b"stream-token".as_ptr(),
-        "stream-token".len(),
-    )
+    unsafe {
+        pandar_plugin_printer_refresh_session_create(
+            hub_url.as_ptr(),
+            hub_url.len(),
+            b"stream-token".as_ptr(),
+            "stream-token".len(),
+        )
+    }
 }
 
 fn set_tenant(session: *mut c_void, tenant: &str) {
-    assert_eq!(
-        0,
+    assert_eq!(0, unsafe {
         pandar_plugin_printer_refresh_session_set_tenant(session, tenant.as_ptr(), tenant.len())
-    );
+    });
 }
 
 fn cached_print_info(session_ptr: *mut c_void) -> (i32, u32, String) {
-    let session = super::ffi::session(session_ptr).expect("test connection session");
+    let session = unsafe { super::ffi::session(session_ptr) }.expect("test connection session");
     match session.cached_printer_projection() {
         Some(projection) => (0, 200, projection.body),
         None => (1, 503, String::new()),
