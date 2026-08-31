@@ -1,6 +1,5 @@
 use std::ffi::c_void;
 
-pub type PrinterRefreshObservationReservation = extern "C" fn(*mut c_void);
 pub type PrinterRefreshTransaction = unsafe extern "C" fn(*mut c_void) -> i32;
 pub type PrinterRefreshWithLock =
     unsafe extern "C" fn(*mut c_void, *mut c_void, Option<PrinterRefreshTransaction>) -> i32;

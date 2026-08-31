@@ -10,6 +10,9 @@ pub(crate) mod stream;
 mod studio;
 mod types;
 
+#[cfg(all(test, unix))]
+mod stream_integration_tests;
+
 pub use ffi::*;
 pub use no_auth_refresh::*;
 pub use studio::*;
@@ -23,7 +26,7 @@ use std::{
 };
 
 use crate::{
-    PluginHttpResult, invalid_input, normalize_hub_url, read_utf8, result, stable_error_body,
+    PluginHttpResult, normalize_hub_url, read_utf8, result, stable_error_body,
     studio_status::{FirmwareProjection, PrinterObservation},
 };
 pub(crate) use account_logout::AccountLogoutBegin;
@@ -264,11 +267,6 @@ impl ConnectionSession {
         state
             .printers_fresh
             .then(|| state.printers.values().cloned().collect())
-    }
-
-    fn cached_print_info(&self) -> Option<String> {
-        self.cached_printer_projection()
-            .map(|projection| projection.body)
     }
 
     pub(in crate::connection) fn cached_printer_projection(

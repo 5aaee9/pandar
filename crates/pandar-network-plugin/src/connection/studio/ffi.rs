@@ -80,31 +80,6 @@ pub extern "C" fn pandar_plugin_studio_request_snapshot(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_connection_studio_snapshot_current(
-    session_ptr: *mut c_void,
-    account_epoch: u64,
-    cache_generation: u64,
-) -> i32 {
-    session(session_ptr).is_some_and(|session| {
-        session.studio_request_snapshot_current(account_epoch, cache_generation)
-    }) as i32
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_account_request_admitted(session_ptr: *mut c_void) -> i32 {
-    session(session_ptr).is_some_and(|session| session.studio_account_request_admitted()) as i32
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_studio_account_request_current(
-    session_ptr: *mut c_void,
-    account_epoch: u64,
-) -> i32 {
-    session(session_ptr)
-        .is_some_and(|session| session.studio_account_request_current(account_epoch)) as i32
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_studio_set_listener(
     session_ptr: *mut c_void,
     kind: i32,

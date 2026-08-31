@@ -101,25 +101,6 @@ pub extern "C" fn pandar_plugin_connection_take_transition(
     session(session_ptr).map_or_else(empty_connection_result, ConnectionSession::take_transition)
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_printer_refresh(
-    session_ptr: *mut c_void,
-    observation_context: *mut c_void,
-    reserve_observation: Option<PrinterRefreshObservationReservation>,
-) -> PluginHttpResult {
-    // Reserved ABI parameters from the retired polling path; the cache is the
-    // only data source now.
-    let _ = (observation_context, reserve_observation);
-    let Some(session) = session(session_ptr) else {
-        return invalid_input("invalid_printer_refresh_session");
-    };
-    session.wake_worker();
-    match session.cached_print_info() {
-        Some(body) => result(0, 200, body),
-        None => result(1, 503, stable_error_body("cache_initializing")),
-    }
-}
-
 /// Stores the account tenant used to build the printer-events stream URL.
 #[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_printer_refresh_session_set_tenant(

@@ -108,11 +108,6 @@ impl ConnectionSession {
             .account_transition_pending
     }
 
-    pub(super) fn studio_account_request_current(&self, account_epoch: u64) -> bool {
-        let state = self.state.lock().expect("connection state");
-        !state.studio.account_transition_pending && state.account_epoch == account_epoch
-    }
-
     pub(crate) fn begin_printer_cache_admission(
         &self,
         account_epoch: u64,

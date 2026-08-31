@@ -1,9 +1,7 @@
-//! Stream-equivalent coverage for the retired printer polling suite: a mock
+//! Stream-equivalent coverage for the printer cache: a mock
 //! Hub accepts the Studio-projection WebSocket upgrade, emits scripted
 //! snapshot frames plus live follow-up frames, and the tests assert cache and
-//! delivery behavior through the public FFI.
-
-#![cfg(unix)]
+//! delivery behavior through private state plus the active FFI.
 
 use std::{
     ffi::c_void,
@@ -16,11 +14,10 @@ use std::{
     time::Duration,
 };
 
-use pandar_network_plugin::{
-    PluginConnectionResult, PluginHttpResult, StudioHeartbeatVisitor, StudioWorkVisitor,
+use crate::{
+    PluginConnectionResult, StudioHeartbeatVisitor, StudioWorkVisitor,
     pandar_plugin_connection_set_account_epoch, pandar_plugin_connection_take_offline,
     pandar_plugin_connection_take_transition, pandar_plugin_connection_visit_printers,
-    pandar_plugin_free_with_capacity, pandar_plugin_printer_refresh,
     pandar_plugin_printer_refresh_session_create, pandar_plugin_printer_refresh_session_destroy,
     pandar_plugin_printer_refresh_session_set_tenant, pandar_plugin_studio_heartbeat_plan,
     pandar_plugin_studio_set_listener, pandar_plugin_studio_set_selected,
@@ -217,21 +214,12 @@ fn set_tenant(session: *mut c_void, tenant: &str) {
     );
 }
 
-fn body(result: PluginHttpResult) -> (i32, u32, String) {
-    unsafe {
-        let bytes = std::slice::from_raw_parts(result.body_ptr, result.body_len);
-        let text = String::from_utf8_lossy(bytes).to_string();
-        pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap);
-        (result.status, result.http_code, text)
+fn cached_print_info(session_ptr: *mut c_void) -> (i32, u32, String) {
+    let session = super::ffi::session(session_ptr).expect("test connection session");
+    match session.cached_printer_projection() {
+        Some(projection) => (0, 200, projection.body),
+        None => (1, 503, String::new()),
     }
-}
-
-fn cached_print_info(session: *mut c_void) -> (i32, u32, String) {
-    body(pandar_plugin_printer_refresh(
-        session,
-        std::ptr::null_mut(),
-        None,
-    ))
 }
 
 fn wait_until(predicate: impl Fn() -> bool) {
@@ -299,7 +287,7 @@ extern "C" fn noop_heartbeat(_: *mut c_void, _: i32, _: *const u8, _: usize, _: 
 
 // ---- tests -----------------------------------------------------------------
 
-#[path = "printer_stream/caching.rs"]
+#[path = "stream_integration_tests/caching.rs"]
 mod caching;
-#[path = "printer_stream/lifecycle.rs"]
+#[path = "stream_integration_tests/lifecycle.rs"]
 mod lifecycle;
