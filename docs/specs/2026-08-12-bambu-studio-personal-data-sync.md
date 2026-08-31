@@ -270,7 +270,7 @@ Do not add preset policy, JSON parsing, URLs, or synchronization state to the C+
 
 ## Compatibility scope
 
-The six personal-preset ABI functions exist in all currently catalogued Pandar ABI series (`02.06.00` through `02.08.01`). Implement the behavior once behind the shared Rust module and verify every catalogued series with its exact pinned source contract.
+The six personal-preset ABI functions exist in all currently catalogued Pandar ABI series (`02.06.00` through `02.08.02`). Implement the behavior once behind the shared Rust module and verify every catalogued series with its exact pinned source contract.
 
 This feature does not change export counts or ABI signatures. It changes the disposition of operations 9–14 from explicitly unsupported to handled; all unrelated cloud settings and cloud filament surfaces remain unsupported.
 

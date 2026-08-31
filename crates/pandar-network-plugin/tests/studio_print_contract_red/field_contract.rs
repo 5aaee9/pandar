@@ -1,7 +1,21 @@
 use crate::{
-    field_cases::{Expectation, FIELD_CASES},
+    field_cases::{Expectation, FIELD_CASES, FieldCase, QUEUE_PLATE_ID_FIELD, SLICER_UID_FIELD},
     harness::{ProbeEvidence, print_requests, run_probe},
 };
+
+fn selected_field_cases() -> Vec<FieldCase> {
+    let capabilities = &pandar_studio_profile::abi_series(pandar_network_plugin::STUDIO_ABI_SERIES)
+        .unwrap()
+        .capabilities;
+    let mut cases = FIELD_CASES.to_vec();
+    if capabilities.print_slicer_uid {
+        cases.push(SLICER_UID_FIELD);
+    }
+    if capabilities.print_queue_plate_id {
+        cases.push(QUEUE_PLATE_ID_FIELD);
+    }
+    cases
+}
 
 fn multipart_value(request: &str, field: &str) -> Option<String> {
     let marker = format!(r#"name="{field}""#);
@@ -78,9 +92,9 @@ fn error_contract(evidence: &ProbeEvidence, field: &str, error: &str) -> Result<
 }
 
 #[test]
-fn all_44_print_params_have_explicit_compiled_abi_dispositions() {
+fn all_selected_print_params_have_explicit_compiled_abi_dispositions() {
     let mut failures = Vec::new();
-    for (field, disposition, expected) in FIELD_CASES {
+    for (field, disposition, expected) in selected_field_cases() {
         let evidence = run_probe("print", field);
         failures.extend(leakage_failures(&evidence, field));
         match expected {

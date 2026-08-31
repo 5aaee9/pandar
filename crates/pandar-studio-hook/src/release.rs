@@ -255,6 +255,13 @@ mod tests {
             beta.hook_bundle_name(),
             "pandar-studio-hook-02.08.01-windows-amd64.zip"
         );
+
+        let latest = pandar_studio_profile::abi_series("02.08.02").unwrap();
+        assert_eq!(latest.reference_studio_version, "02.08.02.61");
+        assert_eq!(
+            latest.hook_bundle_name(),
+            "pandar-studio-hook-02.08.02-windows-amd64.zip"
+        );
     }
 
     #[test]

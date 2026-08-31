@@ -20,6 +20,15 @@ pub extern "C" fn pandar_plugin_sync_ams_filaments(agent_valid: bool) -> PluginH
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn pandar_plugin_sync_slot_mappings(agent_valid: bool) -> PluginHttpResult {
+    if agent_valid {
+        result(-33, 0, stable_error_body("unsupported_slot_mappings_sync"))
+    } else {
+        result(-1, 0, stable_error_body("invalid_handle"))
+    }
+}
+
+#[unsafe(no_mangle)]
 /// # Safety
 /// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
 pub unsafe extern "C" fn pandar_plugin_local_connect_json(

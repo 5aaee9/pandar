@@ -6,10 +6,10 @@ BambuSource local-media export contract. It does not prove that Bambu Studio loa
 played camera frames, or that a real printer accepted an action.
 
 Current releases build separate artifacts for ABI series `02.06.00`, `02.06.01`, `02.07.00`,
-`02.07.01`, `02.08.00`, and `02.08.01`. `studio-abi-profiles.json` pins the exact reference Studio
+`02.07.01`, `02.08.00`, `02.08.01`, and `02.08.02`. `studio-abi-profiles.json` pins the exact reference Studio
 commit, source network-agent version, reported `<abi-series>.99` version, and export contract for each
 series. `02.06.00` requires 103 network plus 21 File Transfer names, `02.06.01` through `02.08.00`
-require 108 plus 21, and `02.08.01` requires 109 plus 21. Contract counts are not the dynamic
+require 108 plus 21, `02.08.01` requires 109 plus 21, and `02.08.02` requires 110 plus 21. Contract counts are not the dynamic
 library's total export count; the historical final12 Windows PE has 271 exports after Pandar flat-FFI
 and aws-lc exports are included.
 
@@ -35,7 +35,7 @@ Each candidate archive has exactly three top-level files:
 | `macos-arm64`   | `pandar`     | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` |
 | `windows-amd64` | `pandar.exe` | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      |
 
-The network plugin must expose the complete pinned 124-, 129-, or 130-name Studio contract set for its
+The network plugin must expose the complete pinned 124-, 129-, 130-, or 131-name Studio contract set for its
 named ABI series; this check does not require the binary to have only that many total exports. The
 companion must export `pandar_bambu_source_sentinel` plus exactly the 21 `Bambu_*` symbols used by the
 pinned local-media ABI. Those exports implement only Pandar's authenticated loopback MJPEG path; they

@@ -280,7 +280,7 @@ cargo test -p pandar-core --test module_size
 ```bash
 # Repeat with each PANDAR_STUDIO_ABI_SERIES and native artifact
 PANDAR_STUDIO_ABI_SERIES=02.06.00 cargo build -p pandar-network-plugin
-# ... through 02.08.01
+# ... through 02.08.02
 
 cargo run --manifest-path tools/studio-abi-contract/Cargo.toml -- \
   --studio-source <series-pinned-checkout> \

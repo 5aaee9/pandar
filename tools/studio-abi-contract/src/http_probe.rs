@@ -47,6 +47,14 @@ fn serve_until_print(listener: TcpListener) -> Result<Vec<u8>, String> {
                     .set_nonblocking(false)
                     .map_err(|error| format!("configure accepted print sink socket: {error}"))?;
                 let request = read_request(&mut stream)?;
+                if is_printer_events_upgrade(&request) {
+                    thread::spawn(move || {
+                        if let Err(error) = serve_printer_events(stream, &request) {
+                            eprintln!("contract printer-event stream failed: {error}");
+                        }
+                    });
+                    continue;
+                }
                 let is_print = request.starts_with(b"POST /api/v1/plugin/prints ");
                 if is_print {
                     print_request = Some(request);
@@ -81,6 +89,84 @@ fn serve_until_print(listener: TcpListener) -> Result<Vec<u8>, String> {
             Err(error) => return Err(format!("accept contract print request: {error}")),
         }
     }
+}
+
+fn is_printer_events_upgrade(request: &[u8]) -> bool {
+    let request = String::from_utf8_lossy(request);
+    let request_line = request.lines().next().unwrap_or_default();
+    let upgrade_header = request.lines().any(|line| {
+        line.split_once(':')
+            .is_some_and(|(name, _)| name.eq_ignore_ascii_case("upgrade"))
+    });
+    request_line
+        == "GET /api/v1/tenants/contract-tenant/printer-events?projection=studio&version=1 HTTP/1.1"
+        && upgrade_header
+}
+
+fn serve_printer_events(mut stream: TcpStream, request: &[u8]) -> Result<(), String> {
+    let request = String::from_utf8_lossy(request);
+    let key = request.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("sec-websocket-key")
+            .then(|| value.trim().to_owned())
+    });
+    let key = key.ok_or("contract printer-event upgrade omitted Sec-WebSocket-Key")?;
+    let accept = tungstenite::handshake::derive_accept_key(key.as_bytes());
+    let handshake = format!(
+        "HTTP/1.1 101 Switching Protocols\r\n\
+         Connection: Upgrade\r\n\
+         Upgrade: websocket\r\n\
+         Sec-WebSocket-Accept: {accept}\r\n\
+         \r\n"
+    );
+    stream
+        .write_all(handshake.as_bytes())
+        .map_err(|error| format!("write contract printer-event handshake: {error}"))?;
+    let mut socket =
+        tungstenite::WebSocket::from_raw_socket(stream, tungstenite::protocol::Role::Server, None);
+    for frame in printer_snapshot_frames() {
+        socket
+            .write(tungstenite::Message::text(frame))
+            .map_err(|error| format!("write contract printer-event snapshot: {error}"))?;
+    }
+    socket
+        .flush()
+        .map_err(|error| format!("flush contract printer-event snapshot: {error}"))?;
+    socket
+        .get_mut()
+        .set_nonblocking(true)
+        .map_err(|error| format!("configure contract printer-event stream: {error}"))?;
+    loop {
+        match socket.read() {
+            Ok(_) => {
+                socket
+                    .flush()
+                    .map_err(|error| format!("flush contract printer-event response: {error}"))?;
+            }
+            Err(tungstenite::Error::Io(error))
+                if error.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(
+                tungstenite::Error::ConnectionClosed
+                | tungstenite::Error::AlreadyClosed
+                | tungstenite::Error::Protocol(
+                    tungstenite::error::ProtocolError::ResetWithoutClosingHandshake,
+                ),
+            ) => return Ok(()),
+            Err(error) => return Err(format!("read contract printer-event stream: {error}")),
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn printer_snapshot_frames() -> [String; 3] {
+    let response = serde_json::from_str::<serde_json::Value>(printer_response())
+        .expect("contract printer response is valid JSON");
+    let printer = &response["devices"][0];
+    [
+        r#"{"type":"snapshot_begin","version":1}"#.to_owned(),
+        format!(r#"{{"type":"printer_upsert","printer":{printer}}}"#),
+        r#"{"type":"snapshot_end","version":1}"#.to_owned(),
+    ]
 }
 
 fn read_request(stream: &mut TcpStream) -> Result<Vec<u8>, String> {

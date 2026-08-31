@@ -163,6 +163,10 @@ fn compiled_probe() -> &'static CompiledProbe {
         let manifest_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let workspace = manifest_directory.parent().and_then(Path::parent).unwrap();
         pinned::stage(workspace, directory.path());
+        let capabilities =
+            &pandar_studio_profile::abi_series(pandar_network_plugin::STUDIO_ABI_SERIES)
+                .unwrap()
+                .capabilities;
         let (mut command, compiler) = discovered_compiler();
         if cfg!(target_env = "msvc") {
             command
@@ -175,6 +179,12 @@ fn compiled_probe() -> &'static CompiledProbe {
                 .arg(&fixture)
                 .arg(format!("/Fe{}", executable.display()))
                 .arg(format!("/Fo{}", object.display()));
+            if capabilities.print_slicer_uid {
+                command.arg("/DPANDAR_STUDIO_PRINT_SLICER_UID");
+            }
+            if capabilities.print_queue_plate_id {
+                command.arg("/DPANDAR_STUDIO_PRINT_QUEUE_PLATE_ID");
+            }
         } else {
             command
                 .arg("-std=c++17")
@@ -182,6 +192,12 @@ fn compiled_probe() -> &'static CompiledProbe {
                 .arg(&fixture)
                 .arg("-o")
                 .arg(&executable);
+            if capabilities.print_slicer_uid {
+                command.arg("-DPANDAR_STUDIO_PRINT_SLICER_UID");
+            }
+            if capabilities.print_queue_plate_id {
+                command.arg("-DPANDAR_STUDIO_PRINT_QUEUE_PLATE_ID");
+            }
             if cfg!(target_os = "linux") {
                 command.arg("-ldl");
             }

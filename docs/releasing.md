@@ -74,7 +74,7 @@ docker pull ghcr.io/projectpandar/pandar/hub:v0.1.4
 docker pull ghcr.io/projectpandar/pandar/web:v0.1.4
 ```
 
-The `v0.1.4` release is expected to have 60 desktop files: each of the six ABI series has four
+The next seven-series release is expected to have 70 desktop files: each ABI series has four
 `.tar.gz` archives and their `.sha256` sidecars, plus a Windows Studio hook `.zip` and its
 `.sha256` sidecar. Run the checksum, CLI startup, and plugin checks from
 `docs/release-installation.md` on every target host.

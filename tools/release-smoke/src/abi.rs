@@ -87,6 +87,11 @@ fn parse_expected_symbols(
         if !abi_series.capabilities.ams_sync && symbol == "bambu_network_sync_ams_filaments" {
             continue;
         }
+        if !abi_series.capabilities.slot_mappings_sync
+            && symbol == "bambu_network_sync_slot_mappings"
+        {
+            continue;
+        }
         match symbol {
             symbol if symbol.starts_with("bambu_network_") => network_count += 1,
             symbol if symbol.starts_with("ft_") => file_transfer_count += 1,

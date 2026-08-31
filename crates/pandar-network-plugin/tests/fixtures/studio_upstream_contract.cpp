@@ -174,15 +174,20 @@ void check_print(const Library& library, const char* artifact)
         library.require<Slic3r::func_start_print>("bambu_network_start_print");
     if (change_user(
             agent.get(),
-            R"({"token":"contract-token","user_id":"contract-user","user_name":"Contract"})"
+            R"({"token":"contract-token","user_id":"contract-user","user_name":"Contract","tenant_id":"contract-tenant","tenant_name":"Contract Tenant"})"
     ) != BAMBU_NETWORK_SUCCESS) {
         fail("failed to install contract print identity");
     }
     unsigned int http_code = 0;
     std::string print_info;
-    if (get_print_info(agent.get(), &http_code, &print_info) != BAMBU_NETWORK_SUCCESS ||
+    const int print_info_status = get_print_info(agent.get(), &http_code, &print_info);
+    if (print_info_status != BAMBU_NETWORK_SUCCESS ||
         http_code != 200 || print_info.find("contract-device") == std::string::npos) {
-        fail("failed to refresh the contract printer cache");
+        fail(
+            "failed to refresh the contract printer cache: status=" +
+            std::to_string(print_info_status) + " http=" + std::to_string(http_code) +
+            " body=" + print_info
+        );
     }
     BBL::PrintParams params{};
     params.dev_id = "contract-device";
@@ -207,6 +212,9 @@ void check_print(const Library& library, const char* artifact)
 #endif
 #if defined(PANDAR_STUDIO_PRINT_SLICER_UID)
     params.slicer_uid = "contract-slicer-uid";
+#endif
+#if defined(PANDAR_STUDIO_PRINT_QUEUE_PLATE_ID)
+    params.queue_plate_id = "contract-queue-plate";
 #endif
     bool finished = false;
     BBL::OnUpdateStatusFn update = [&finished](int stage, int code, std::string) {
@@ -263,6 +271,39 @@ void check_ams(const Library& library)
 }
 #endif
 
+#if defined(PANDAR_STUDIO_SLOT_MAPPINGS_SYNC)
+void check_slot_mappings(const Library& library)
+{
+    const auto sync = library.require<Slic3r::func_sync_slot_mappings>(
+        "bambu_network_sync_slot_mappings"
+    );
+    std::string invalid_body = "sentinel";
+    if (sync(nullptr, {}, &invalid_body) != BAMBU_NETWORK_ERR_INVALID_HANDLE ||
+        invalid_body != R"({"error":"invalid_handle"})") {
+        fail("slot mappings sync invalid-handle contract changed");
+    }
+    Agent agent(library);
+    BBL::SlotMappingsSyncParams params{};
+    params.devId = "contract-device";
+    BBL::SlotMappingItem item{};
+    item.amsSn = "contract-ams";
+    item.slotId = "contract-slot";
+    item.spoolId = 37;
+    item.rfid = "contract-rfid";
+    item.amsId = 13;
+    item.amsType = 17;
+    params.mappings.push_back(std::move(item));
+    std::string body = "sentinel";
+    const int result = sync(agent.get(), std::move(params), &body);
+    if (result != BAMBU_NETWORK_ERR_SLOT_MAPPINGS_SYNC_FAILED) {
+        fail("slot mappings sync must return explicit unsupported failure");
+    }
+    if (body != R"({"error":"unsupported_slot_mappings_sync"})") {
+        fail("slot mappings sync must return the exact redacted unsupported body");
+    }
+}
+#endif
+
 #include "studio_upstream_ft_contract.hpp"
 
 } // namespace
@@ -270,7 +311,7 @@ void check_ams(const Library& library)
 int main(int argc, char** argv)
 {
     if (argc < 3 || argc > 4) {
-        std::cerr << "usage: studio_upstream_contract <plugin> <version|bind|print|ams|ft> [artifact]\n";
+        std::cerr << "usage: studio_upstream_contract <plugin> <version|bind|print|ams|slot-mappings|ft> [artifact]\n";
         return 2;
     }
     const std::string mode = argv[2];
@@ -283,6 +324,9 @@ int main(int argc, char** argv)
     }
 #if defined(PANDAR_STUDIO_AMS_SYNC)
     else if (mode == "ams") check_ams(library);
+#endif
+#if defined(PANDAR_STUDIO_SLOT_MAPPINGS_SYNC)
+    else if (mode == "slot-mappings") check_slot_mappings(library);
 #endif
     else if (mode == "ft") check_ft(library);
     else fail("unknown contract mode: " + mode);

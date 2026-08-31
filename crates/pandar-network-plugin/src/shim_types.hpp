@@ -23,6 +23,7 @@
 #include "shim_ams_types.hpp"
 #include "shim_lifetime_state.hpp"
 #include "shim_model_task_types.hpp"
+#include "shim_slot_mapping_types.hpp"
 
 #if defined(_WIN32)
 #define PANDAR_ABI extern "C" __declspec(dllexport)
@@ -53,6 +54,7 @@ constexpr int BAMBU_NETWORK_ERR_UPDATE_FILAMENT_FAILED = -29;
 constexpr int BAMBU_NETWORK_ERR_DELETE_FILAMENT_FAILED = -30;
 constexpr int BAMBU_NETWORK_ERR_GET_FILAMENT_CONFIG_FAILED = -31;
 constexpr int BAMBU_NETWORK_ERR_AMS_SYNC_FAILED = -32;
+constexpr int BAMBU_NETWORK_ERR_SLOT_MAPPINGS_SYNC_FAILED = -33;
 constexpr int BAMBU_NETWORK_ERR_BIND_FAILED = -5;
 constexpr int BAMBU_NETWORK_ERR_UNBIND_FAILED = -6;
 constexpr int BAMBU_NETWORK_ERR_PUT_SETTING_FAILED = -8;
@@ -140,6 +142,9 @@ struct PrintParams {
 #if defined(PANDAR_STUDIO_PRINT_SLICER_UID)
     std::string slicer_uid;
 #endif
+#if defined(PANDAR_STUDIO_PRINT_QUEUE_PLATE_ID)
+    std::string queue_plate_id;
+#endif
 };
 
 struct TaskQueryParams {
@@ -216,6 +221,9 @@ int32_t pandar_plugin_core_sync_firmware(void*);
 const char* pandar_plugin_network_agent_version();
 #if defined(PANDAR_STUDIO_AMS_SYNC)
 PluginHttpResult pandar_plugin_sync_ams_filaments(bool);
+#endif
+#if defined(PANDAR_STUDIO_SLOT_MAPPINGS_SYNC)
+PluginHttpResult pandar_plugin_sync_slot_mappings(bool);
 #endif
 PluginHttpResult pandar_plugin_camera_url(void*, const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_local_connect_json(

@@ -41,6 +41,12 @@ fn main() {
     if studio_abi_series.capabilities.ams_sync {
         shim_build.define("PANDAR_STUDIO_AMS_SYNC", None);
     }
+    if studio_abi_series.capabilities.print_queue_plate_id {
+        shim_build.define("PANDAR_STUDIO_PRINT_QUEUE_PLATE_ID", None);
+    }
+    if studio_abi_series.capabilities.slot_mappings_sync {
+        shim_build.define("PANDAR_STUDIO_SLOT_MAPPINGS_SYNC", None);
+    }
     if target_env == "msvc" {
         shim_build
             .flag_if_supported("/std:c++17")
@@ -141,6 +147,10 @@ fn expected_abi_symbols(
         })
         .filter(|symbol| {
             abi_series.capabilities.ams_sync || symbol != "bambu_network_sync_ams_filaments"
+        })
+        .filter(|symbol| {
+            abi_series.capabilities.slot_mappings_sync
+                || symbol != "bambu_network_sync_slot_mappings"
         })
         .collect::<Vec<_>>();
 

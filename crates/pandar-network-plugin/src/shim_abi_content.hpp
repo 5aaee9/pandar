@@ -218,6 +218,16 @@ PANDAR_ABI int bambu_network_sync_ams_filaments(void* agent, BBL::AmsSyncParams,
 }
 #endif
 
+#if defined(PANDAR_STUDIO_SLOT_MAPPINGS_SYNC)
+PANDAR_ABI int bambu_network_sync_slot_mappings(void* agent, BBL::SlotMappingsSyncParams, std::string* http_body) {
+    auto result = pandar_plugin_sync_slot_mappings(agent != nullptr);
+    const int status = result.status;
+    auto body = body_from_result(result);
+    if (http_body) *http_body = std::move(body);
+    return status;
+}
+#endif
+
 PANDAR_ABI int bambu_network_track_enable(void* agent, bool) { return studio_disposition(as_agent(agent), StudioDisposition::TrackEnable); }
 PANDAR_ABI int bambu_network_track_remove_files(void* agent) { return studio_disposition(as_agent(agent), StudioDisposition::TrackRemoveFiles); }
 PANDAR_ABI int bambu_network_track_event(void* agent, std::string, std::string) { return studio_disposition(as_agent(agent), StudioDisposition::TrackEvent); }

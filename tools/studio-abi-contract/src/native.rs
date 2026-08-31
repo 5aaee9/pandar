@@ -246,12 +246,20 @@ fn compile(
             "PANDAR_STUDIO_PRINT_SLICER_UID",
         ),
         (
+            input.abi_series.capabilities.print_queue_plate_id,
+            "PANDAR_STUDIO_PRINT_QUEUE_PLATE_ID",
+        ),
+        (
             input.abi_series.capabilities.bind_model_argument,
             "PANDAR_STUDIO_BIND_MODEL_ARGUMENT",
         ),
         (
             input.abi_series.capabilities.ams_sync,
             "PANDAR_STUDIO_AMS_SYNC",
+        ),
+        (
+            input.abi_series.capabilities.slot_mappings_sync,
+            "PANDAR_STUDIO_SLOT_MAPPINGS_SYNC",
         ),
     ];
     if cfg!(all(windows, target_env = "msvc")) {

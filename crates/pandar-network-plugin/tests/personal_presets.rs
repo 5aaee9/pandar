@@ -196,7 +196,7 @@ fn all_pinned_studio_series_expose_the_handled_personal_preset_contract() {
     let catalog = pandar_studio_profile::catalog();
     assert_eq!(
         catalog.abi_series.len(),
-        6,
+        7,
         "catalog series coverage changed"
     );
     for series in &catalog.abi_series {

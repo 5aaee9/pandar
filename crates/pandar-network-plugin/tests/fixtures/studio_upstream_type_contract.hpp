@@ -77,6 +77,9 @@ PANDAR_CHECK_MEMBER(PandarBBL::PrintParams, BBL::PrintParams, svc_context);
 #if defined(PANDAR_STUDIO_PRINT_SLICER_UID)
 PANDAR_CHECK_MEMBER(PandarBBL::PrintParams, BBL::PrintParams, slicer_uid);
 #endif
+#if defined(PANDAR_STUDIO_PRINT_QUEUE_PLATE_ID)
+PANDAR_CHECK_MEMBER(PandarBBL::PrintParams, BBL::PrintParams, queue_plate_id);
+#endif
 
 #if defined(PANDAR_STUDIO_AMS_SYNC)
 static_assert(sizeof(PandarBBL::AmsSyncParams) == sizeof(BBL::AmsSyncParams));
@@ -120,6 +123,32 @@ PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, slotId);
 PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, amsId);
 PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, amsType);
 PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, createNew);
+#endif
+
+#if defined(PANDAR_STUDIO_SLOT_MAPPINGS_SYNC)
+static_assert(sizeof(PandarBBL::SlotMappingsSyncParams) == sizeof(BBL::SlotMappingsSyncParams));
+static_assert(alignof(PandarBBL::SlotMappingsSyncParams) == alignof(BBL::SlotMappingsSyncParams));
+PANDAR_CHECK_MEMBER(PandarBBL::SlotMappingsSyncParams, BBL::SlotMappingsSyncParams, devId);
+static_assert(
+    sizeof(decltype(PandarBBL::SlotMappingsSyncParams::mappings)) ==
+    sizeof(decltype(BBL::SlotMappingsSyncParams::mappings))
+);
+static_assert(
+    alignof(decltype(PandarBBL::SlotMappingsSyncParams::mappings)) ==
+    alignof(decltype(BBL::SlotMappingsSyncParams::mappings))
+);
+static_assert(
+    offsetof(PandarBBL::SlotMappingsSyncParams, mappings) ==
+    offsetof(BBL::SlotMappingsSyncParams, mappings)
+);
+static_assert(sizeof(PandarBBL::SlotMappingItem) == sizeof(BBL::SlotMappingItem));
+static_assert(alignof(PandarBBL::SlotMappingItem) == alignof(BBL::SlotMappingItem));
+PANDAR_CHECK_MEMBER(PandarBBL::SlotMappingItem, BBL::SlotMappingItem, amsSn);
+PANDAR_CHECK_MEMBER(PandarBBL::SlotMappingItem, BBL::SlotMappingItem, slotId);
+PANDAR_CHECK_MEMBER(PandarBBL::SlotMappingItem, BBL::SlotMappingItem, spoolId);
+PANDAR_CHECK_MEMBER(PandarBBL::SlotMappingItem, BBL::SlotMappingItem, rfid);
+PANDAR_CHECK_MEMBER(PandarBBL::SlotMappingItem, BBL::SlotMappingItem, amsId);
+PANDAR_CHECK_MEMBER(PandarBBL::SlotMappingItem, BBL::SlotMappingItem, amsType);
 #endif
 
 PANDAR_CHECK_MEMBER(PandarSlic3r::ft_job_result, Slic3r::ft_job_result, ec);

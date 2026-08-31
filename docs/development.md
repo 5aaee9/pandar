@@ -186,12 +186,12 @@ Deploy in this exact order: database migration, dual-capability Agents, all Hubs
 ## Bambu Studio Network Plugin
 
 `crates/pandar-network-plugin` builds the Hub-backed adapter separately for the `02.06.00`,
-`02.06.01`, `02.07.00`, `02.07.01`, `02.08.00`, and `02.08.01` Bambu Studio ABI series. The shared
+`02.06.01`, `02.07.00`, `02.07.01`, `02.08.00`, `02.08.01`, and `02.08.02` Bambu Studio ABI series. The shared
 catalog pins one exact upstream reference version and commit for each series;
 `PANDAR_STUDIO_ABI_SERIES` selects the build and defaults to `02.07.01`. Installed four-part Studio
-versions resolve by their first three components, so `02.08.01.55` uses the reviewed `02.08.01` ABI
-artifact. The target-header caller uses upstream Boost `1.84.0` and freezes each series' 103, 108, or
-109 network exports plus 21 File Transfer exports across the C++/Rust ABI boundary.
+versions resolve by their first three components, so `02.08.02.61` uses the reviewed `02.08.02` ABI
+artifact. The target-header caller uses upstream Boost `1.84.0` and freezes each series' 103, 108, 109,
+or 110 network exports plus 21 File Transfer exports across the C++/Rust ABI boundary.
 
 Important boundaries:
 
@@ -467,7 +467,7 @@ cargo build -p pandar-network-plugin -p pandar-bambu-source
 The output libraries are under `target/{debug,release}`. A current release candidate contains exactly
 the CLI, network plugin, and BambuSource companion at top level. Native release-smoke covers
 `linux-amd64`, `macos-amd64`, `macos-arm64`, and `windows-amd64`; it verifies the selected 124-, 129-,
-or 130-name network-plugin contract plus the companion sentinel and exact 21 `Bambu_*` exports.
+130-, or 131-name network-plugin contract plus the companion sentinel and exact 21 `Bambu_*` exports.
 Historical packages with a sentinel-only companion are not current camera candidates.
 
 Install both libraries with the CLI so the companion receives Studio's exact platform name:

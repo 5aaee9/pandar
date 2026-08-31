@@ -23,6 +23,13 @@ fn canonical_export_map_is_exact_for_each_abi_series() {
     assert_eq!(symbols.all.len(), 130);
     assert!(symbols.all.contains("bambu_network_sync_ams_filaments"));
 
+    let studio_2_8_2 = pandar_studio_profile::abi_series("02.08.02").unwrap();
+    let symbols = expected_symbols(repo_root, studio_2_8_2).unwrap();
+    assert_eq!(symbols.network_count, 110);
+    assert_eq!(symbols.file_transfer_count, 21);
+    assert_eq!(symbols.all.len(), 131);
+    assert!(symbols.all.contains("bambu_network_sync_slot_mappings"));
+
     let older = pandar_studio_profile::abi_series("02.06.00").unwrap();
     let symbols = expected_symbols(repo_root, older).unwrap();
     assert_eq!(symbols.network_count, 103);

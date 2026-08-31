@@ -24,7 +24,7 @@ Bambu Studio -(network plugin ABI)-> pandar-network-plugin -(HTTP / WebSocket)->
 
 `pandar-network-plugin` is a Hub-backed Bambu Studio dynamic-library adapter. It builds one reviewed
 ABI series at a time from `studio-abi-profiles.json`. The catalog currently covers `02.06.00`,
-`02.06.01`, `02.07.00`, `02.07.01`, `02.08.00`, and `02.08.01`; a four-component Studio version
+`02.06.01`, `02.07.00`, `02.07.01`, `02.08.00`, `02.08.01`, and `02.08.02`; a four-component Studio version
 selects its artifact by the first three components. Each series is released as a separate archive because the C++
 signatures and layouts change between series. The plugin connects only to `pandar-hub`; it must not
 connect directly to `pandar-agent` or Bambu machines, and local machine access remains the agent's
@@ -447,8 +447,8 @@ Agent phase status after Phase 15:
 
 ### pandar-network-plugin
 
-- Dynamic-library crate implementing separately built binaries for the six reviewed ABI series from
-  `02.06.00` through `02.08.01`. The shared ABI-series catalog drives build selection, release
+- Dynamic-library crate implementing separately built binaries for the seven reviewed ABI series from
+  `02.06.00` through `02.08.02`. The shared ABI-series catalog drives build selection, release
   matrices, installer matching, Windows hook version gates, and ABI/release-smoke expectations.
 - File Transfer, direct discovery/bind/certificate handling, and direct printer sockets keep their
   exact ABI shape but remain explicit non-success paths.
@@ -587,4 +587,4 @@ Material-state semantics should stay split by boundary: raw Bambu report parsing
 
 ## Open Questions
 
-The previously open questions are resolved in the implementation: machine file transfer is protected implicit FTPS behind the protocol-neutral `MachineFileTransfer` boundary; access codes stay agent-local by default with optional encrypted Hub storage (`PANDAR_PRINTER_ACCESS_CODE_KEY`); the first compatibility targets are catalogued per Studio ABI series in `docs/compatibility/`; SeaORM repositories run over SQLx-managed migrations; Bambu cloud integration is limited to the Hub-backed Studio virtual-local proxy with cloud settings and AMS cloud sync explicitly unsupported; and virtual-printer/proxy behavior remains out of scope pending a roadmap decision. Active next steps are tracked in `docs/roadmap.md`.
+The previously open questions are resolved in the implementation: machine file transfer is protected implicit FTPS behind the protocol-neutral `MachineFileTransfer` boundary; access codes stay agent-local by default with optional encrypted Hub storage (`PANDAR_PRINTER_ACCESS_CODE_KEY`); the first compatibility targets are catalogued per Studio ABI series in `docs/compatibility/`; SeaORM repositories run over SQLx-managed migrations; Bambu cloud integration is limited to the Hub-backed Studio virtual-local proxy with cloud settings, AMS cloud sync, and slot-mapping cloud sync explicitly unsupported; and virtual-printer/proxy behavior remains out of scope pending a roadmap decision. Active next steps are tracked in `docs/roadmap.md`.

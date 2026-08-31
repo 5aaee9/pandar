@@ -205,6 +205,12 @@ void apply_case(BBL::PrintParams& params, const std::string& name, const std::st
     else if (name == "task_ext_change_assist") params.task_ext_change_assist = true;
     else if (name == "try_emmc_print") params.try_emmc_print = true;
     else if (name == "svc_context") params.svc_context = "service-context-sentinel";
+#if defined(PANDAR_STUDIO_PRINT_SLICER_UID)
+    else if (name == "slicer_uid") params.slicer_uid = "slicer-uid-sentinel";
+#endif
+#if defined(PANDAR_STUDIO_PRINT_QUEUE_PLATE_ID)
+    else if (name == "queue_plate_id") params.queue_plate_id = "queue-plate-sentinel";
+#endif
     else if (name == "invalid_nozzle_mapping") params.nozzle_mapping = "{";
     else if (name == "invalid_ams_mapping") params.ams_mapping = "{";
     else if (name == "invalid_ams_mapping2") params.ams_mapping2 = "{";

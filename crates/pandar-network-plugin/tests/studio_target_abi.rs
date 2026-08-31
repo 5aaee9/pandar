@@ -3,6 +3,7 @@ use std::ffi::CStr;
 use pandar_network_plugin::{
     PluginHttpResult, STUDIO_ABI_SERIES, pandar_plugin_free_with_capacity,
     pandar_plugin_network_agent_version, pandar_plugin_sync_ams_filaments,
+    pandar_plugin_sync_slot_mappings,
 };
 
 #[test]
@@ -26,6 +27,20 @@ fn ams_sync_returns_the_stable_explicit_unsupported_contract() {
     assert_eq!(
         take_body(unsupported),
         r#"{"error":"unsupported_ams_sync"}"#
+    );
+}
+
+#[test]
+fn slot_mappings_sync_returns_the_stable_explicit_unsupported_contract() {
+    let invalid = pandar_plugin_sync_slot_mappings(false);
+    assert_eq!(invalid.status, -1);
+    assert_eq!(take_body(invalid), r#"{"error":"invalid_handle"}"#);
+
+    let unsupported = pandar_plugin_sync_slot_mappings(true);
+    assert_eq!(unsupported.status, -33);
+    assert_eq!(
+        take_body(unsupported),
+        r#"{"error":"unsupported_slot_mappings_sync"}"#
     );
 }
 

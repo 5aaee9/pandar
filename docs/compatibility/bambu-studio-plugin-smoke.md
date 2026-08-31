@@ -2,10 +2,12 @@
 
 ## Scope
 
-This runbook records real Bambu Studio compatibility evidence for Phase 23. The current exact target
-is commit `ba049f6a2e08c3b6033660bb84da80c08722974b`, Studio `02.08.01.55`, network agent
-`02.08.01.52`, with the ABI caller built against Boost `1.84.0`. A successful local ABI or release-
-smoke probe is not a real Studio compatibility claim.
+This runbook records real Bambu Studio compatibility evidence for Phase 23. Its existing evidence
+uses commit `ba049f6a2e08c3b6033660bb84da80c08722974b`, Studio `02.08.01.55`, network agent
+`02.08.01.52`, with the ABI caller built against Boost `1.84.0`. The active catalog additionally pins
+Studio `02.08.02.61` at `926a7192574bcb9b3a732e1ec59a46d79cb45466`; that exact build has automated
+native ABI evidence but no real Studio row yet. Do not reuse the `02.08.01` hashes or observations for
+`02.08.02`. A successful local ABI or release-smoke probe is not a real Studio compatibility claim.
 
 ## Prerequisites
 

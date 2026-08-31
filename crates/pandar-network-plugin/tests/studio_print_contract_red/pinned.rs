@@ -14,7 +14,6 @@ pub(super) const MODEL_TASK_CALLBACK_HASH: &str = "15226032d4729ce90e5940d3cc41f
 pub(super) const MODEL_TASK_FORWARDING_HASH: &str = "7790222a37d042f2704cfb0fd78f01021aec52fe";
 
 const PRINT_HEADER: &str = "src/slic3r/Utils/bambu_networking.hpp";
-const PRINT_HEADER_BLOB: &str = "7af47353e08d400d547dc7f7036b16caeb10de96";
 const TASK_MANAGER: &str = "src/slic3r/GUI/TaskManager.cpp";
 const TASK_MANAGER_BLOB: &str = "7a7bdcce2b747902db9dfa09aa68a2044d09dfdb";
 const DEVICE_MANAGER: &str = "src/slic3r/GUI/DeviceManager.cpp";
@@ -30,7 +29,9 @@ const NLOHMANN_TREE_BLOB: &str = "adcc3cb63df154808be3958507cfce00ee1933a5";
 
 pub(super) fn stage(workspace: &Path, destination: &Path) {
     let studio = workspace.join("reference/BambuStudio");
-    verify_object(&studio, PRINT_HEADER, PRINT_HEADER_BLOB);
+    let series = pandar_studio_profile::abi_series(pandar_network_plugin::STUDIO_ABI_SERIES)
+        .expect("selected Studio ABI series is catalogued");
+    verify_commit(&studio, &series.studio_commit);
     verify_object(&studio, TASK_MANAGER, TASK_MANAGER_BLOB);
     verify_object(&studio, DEVICE_MANAGER, DEVICE_MANAGER_BLOB);
     verify_object(&studio, STATUS_PANEL, STATUS_PANEL_BLOB);
@@ -40,7 +41,7 @@ pub(super) fn stage(workspace: &Path, destination: &Path) {
 
     fs::write(
         destination.join("bambu_networking.hpp"),
-        show(&studio, PRINT_HEADER),
+        show_at(&studio, &series.studio_commit, PRINT_HEADER),
     )
     .expect("stage pinned Bambu Studio print ABI header");
     stage_tree(&studio, NLOHMANN_TREE, destination);
@@ -106,6 +107,21 @@ pub(super) fn stage(workspace: &Path, destination: &Path) {
     .expect("stage pinned consumer hash header");
 }
 
+fn verify_commit(studio: &Path, commit: &str) {
+    let object = Command::new("git")
+        .arg("-C")
+        .arg(studio)
+        .args(["rev-parse", &format!("{commit}^{{commit}}")])
+        .output()
+        .expect("resolve selected Studio commit");
+    assert!(
+        object.status.success(),
+        "resolve selected Studio commit {commit}: {}",
+        String::from_utf8_lossy(&object.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&object.stdout).trim(), commit);
+}
+
 fn verify_object(studio: &Path, path: &str, expected: &str) {
     let object = Command::new("git")
         .arg("-C")
@@ -122,7 +138,11 @@ fn verify_object(studio: &Path, path: &str, expected: &str) {
 }
 
 fn show(studio: &Path, path: &str) -> Vec<u8> {
-    let object = format!("{STUDIO_COMMIT}:{path}");
+    show_at(studio, STUDIO_COMMIT, path)
+}
+
+fn show_at(studio: &Path, commit: &str, path: &str) -> Vec<u8> {
+    let object = format!("{commit}:{path}");
     let output = Command::new("git")
         .arg("-C")
         .arg(studio)

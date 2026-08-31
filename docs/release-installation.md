@@ -30,9 +30,9 @@ The separate Windows Studio hook bundles are also built natively with MSVC.
 
 Choose the archive whose ABI series matches the first three components of `app.version` in
 `BambuStudio.conf`. Supported ABI series are `02.06.00`, `02.06.01`, `02.07.00`, `02.07.01`,
-`02.08.00`, and `02.08.01`. The `02.06.00` series requires 103 network plus 21 File Transfer names,
-`02.06.01` through `02.08.00` require 108 plus 21, and `02.08.01` requires 109 plus 21. Their C++
-ABIs differ, so no archive is a fallback for another series. The installer verifies the installed
+`02.08.00`, `02.08.01`, and `02.08.02`. The `02.06.00` series requires 103 network plus 21 File Transfer names,
+`02.06.01` through `02.08.00` require 108 plus 21, `02.08.01` requires 109 plus 21, and `02.08.02`
+requires 110 plus 21. Their C++ ABIs differ, so no archive is a fallback for another series. The installer verifies the installed
 Studio version resolves to the archive's ABI series before changing the Studio plugin directory.
 
 ## Checksum Verification
@@ -426,7 +426,7 @@ cleanup checks passed.
 
 | Target label    | Current operator status | Current ABI-series evidence                                                                                                      | Next action                                                                               |
 | --------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `linux-amd64`   | `untested`              | No current six-series tagged package or real Studio run exists; final16 is historical Public Beta evidence only.                 | Run the tag workflow and exact Studio checklist for each supported ABI series.            |
+| `linux-amd64`   | `untested`              | No current seven-series tagged package or real Studio run exists; final16 is historical Public Beta evidence only.               | Run the tag workflow and exact Studio checklist for each supported ABI series.            |
 | `windows-amd64` | `untested`              | The ABI-series hook/package contract is configured, but no current native package or real Studio run exists.                     | Run the native MSVC release job and exact Studio checklist for each supported ABI series. |
 | `linux-arm64`   | `untested`              | No current three-file native candidate exists.                                                                                   | Do not publish a Studio compatibility claim.                                              |
 | `windows-arm64` | `untested`              | No current three-file native candidate exists.                                                                                   | Do not publish a Studio compatibility claim.                                              |

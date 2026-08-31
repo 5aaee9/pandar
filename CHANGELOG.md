@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Added ABI-series-specific support for Bambu Studio `02.08.02.61`, including its appended `PrintParams::queue_plate_id` layout and `bambu_network_sync_slot_mappings` export. Slot-mapping cloud synchronization remains an explicit unsupported operation; packaged and real-Studio validation are not yet claimed.
+
 ## [0.1.4] - 2026-08-11
 
 ### Fixed

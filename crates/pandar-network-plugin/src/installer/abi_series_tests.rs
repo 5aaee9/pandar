@@ -60,4 +60,14 @@ fn installed_studio_build_resolves_by_first_three_version_components() {
         installed_studio_abi_series(&data_dir).unwrap().id,
         "02.08.01"
     );
+
+    fs::write(
+        data_dir.join("BambuStudio.conf"),
+        r#"{"app":{"version":"02.08.02.61"}}"#,
+    )
+    .expect("write 2.8.2 config");
+    assert_eq!(
+        installed_studio_abi_series(&data_dir).unwrap().id,
+        "02.08.02"
+    );
 }
