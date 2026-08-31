@@ -1,10 +1,10 @@
 # Release Installation
 
-Release `v0.1.4` is published at <https://github.com/ProjectPandar/pandar/releases/tag/v0.1.4>. The tag also publishes these service artifacts:
+Release `v0.2.0` will be published at <https://github.com/ProjectPandar/pandar/releases/tag/v0.2.0>. The tag also publishes these service artifacts:
 
-- `ghcr.io/projectpandar/pandar/hub:v0.1.4`
-- `ghcr.io/projectpandar/pandar/web:v0.1.4`
-- Helm chart `0.1.4` at `oci://ghcr.io/projectpandar/pandar/chart/pandar`
+- `ghcr.io/projectpandar/pandar/hub:v0.2.0`
+- `ghcr.io/projectpandar/pandar/web:v0.2.0`
+- Helm chart `0.2.0` at `oci://ghcr.io/projectpandar/pandar/chart/pandar`
 
 ## Release Archive Selection
 

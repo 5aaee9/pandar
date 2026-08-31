@@ -6,9 +6,48 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-31
+
 ### Added
 
 - Added ABI-series-specific support for Bambu Studio `02.08.02.61`, including its appended `PrintParams::queue_plate_id` layout and `bambu_network_sync_slot_mappings` export. Slot-mapping cloud synchronization remains an explicit unsupported operation; packaged and real-Studio validation are not yet claimed.
+- Added authenticated Bambu Studio personal-preset synchronization and a versioned live printer-event stream with generation-fenced caching and recovery.
+- Added one generated OpenAPI Hub-client contract for Web and Android, canonical printer capability projections, and shared printer-operation and Agent wire models.
+- Added a durable artifact reservation, deletion, retry, and cleanup lifecycle with equivalent SQLite and PostgreSQL behavior.
+
+### Changed
+
+- Consolidated network-plugin runtime, freshness, account, firmware, and dispatch ownership behind Rust `PluginCore` operations while keeping the C++ layer limited to ABI, STL, callback, and thread adaptation.
+- Made Agent command transitions, Hub printer snapshots, cleanup planning, print execution input, and artifact persistence atomic around their owning domain boundaries.
+- Reworked Android around one reactive authenticated Hub session and one generation-fenced domain state owner; Web routes now use focused views and resource-owned query state.
+- Replaced resource-specific job-storage compatibility facades with the backend-neutral `ArtifactStorage` boundary and one opaque storage key.
+
+### Fixed
+
+- Fixed protected FTPS uploads on affected printers by reusing the control-channel TLS session for protected data connections while preserving complete causal errors.
+- Fixed BambuSource reader-thread self-close, file-transfer callback replacement races, recursive callback dispatch, and result-handle lifetime during foreign callbacks.
+- Fixed cross-replica command-result delivery, tenant-scoped event invalidation, concurrent last-admin demotion, stale Agent session transitions, and MQTT overflow recovery.
+- Fixed required-nullable Android wire presence, dashboard membership fail-closed behavior, redirected action feedback, repeated secret redaction, and healthy WebSocket reconnect backoff.
+
+### Security
+
+- Removed production artifact-path and compatibility fallbacks, retired plugin FFI surfaces, and duplicate low-level storage APIs.
+- Marked every pointer-validity-dependent Rust/C export unsafe with explicit ownership, callback, nested-view, and lifetime contracts.
+- Made release-version invariants, Android tests and lint, Nix auth smoke tests, pinned Studio contracts, module-size checks, and dual-backend parity durable CI gates.
+
+### Planned distribution
+
+- The release workflow will publish seven ABI-series-specific CLI, network plugin, and BambuSource archive sets with SHA-256 sidecars; Windows also publishes Studio hook bundles.
+- The tag will publish Hub and Web images at `ghcr.io/projectpandar/pandar/hub:v0.2.0` and `ghcr.io/projectpandar/pandar/web:v0.2.0`.
+- The tag will publish Helm chart `0.2.0` at `oci://ghcr.io/projectpandar/pandar/chart/pandar`.
+
+### Known limitations
+
+- Desktop archives remain unsigned. Verify the supplied SHA-256 sidecar; Windows SmartScreen and macOS Gatekeeper may warn.
+- Real-host installation and real Bambu Studio replacement evidence is not complete for every target and ABI series.
+- The planned container images target Linux amd64 only.
+- Native firmware and recovery ownership still requires one active Hub; the firmware package catalog is intentionally empty.
+- The Android client is built separately and is not attached to the GitHub Release.
 
 ## [0.1.4] - 2026-08-11
 
@@ -149,7 +188,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Native firmware and recovery ownership still requires one active Hub; the firmware package catalog is intentionally empty.
 - The Android client is built separately and will not be attached to the GitHub Release.
 
-[Unreleased]: https://github.com/ProjectPandar/pandar/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/ProjectPandar/pandar/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ProjectPandar/pandar/releases/tag/v0.2.0
 [0.1.4]: https://github.com/ProjectPandar/pandar/releases/tag/v0.1.4
 [0.1.3]: https://github.com/ProjectPandar/pandar/releases/tag/v0.1.3
 [0.1.2]: https://github.com/ProjectPandar/pandar/releases/tag/v0.1.2

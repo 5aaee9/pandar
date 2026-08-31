@@ -2840,7 +2840,7 @@ checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
 
 [[package]]
 name = "pandar-agent"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2871,7 +2871,7 @@ dependencies = [
 
 [[package]]
 name = "pandar-core"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2882,7 +2882,7 @@ dependencies = [
 
 [[package]]
 name = "pandar-hub"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -2922,7 +2922,7 @@ dependencies = [
 
 [[package]]
 name = "pandar-protocol"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "pandar-core",
  "prost",
@@ -2934,7 +2934,7 @@ dependencies = [
 
 [[package]]
 name = "pandar-scaled-artifact-smoke"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -124,7 +124,7 @@
 
       commonArgs = {
         src = rustSrc;
-        version = "0.1.4";
+        version = "0.2.0";
         strictDeps = true;
         SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
         NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
@@ -160,7 +160,7 @@
 
       pandar-hub = buildRustPackage "pandar-hub" "-p pandar-hub --bin pandar-hub";
       pandar-agent-unwrapped = buildRustPackage "pandar-agent-unwrapped" "-p pandar-agent --bin pandar-agent";
-      pandar-agent = pkgs.runCommand "pandar-agent-0.1.4" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
+      pandar-agent = pkgs.runCommand "pandar-agent-0.2.0" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
         mkdir -p "$out/bin"
         makeWrapper ${pandar-agent-unwrapped}/bin/pandar-agent "$out/bin/pandar-agent" \
           --set-default PANDAR_FFMPEG_PATH ${lib.getExe pkgs.ffmpeg} \
@@ -234,11 +234,11 @@
 
       pandar-auth = pkgs.buildNpmPackage {
         pname = "pandar-auth";
-        version = "0.1.4";
+        version = "0.2.0";
         src = frontendWorkspaceSource;
         npmWorkspace = "pandar-auth";
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-KgWmgnnruqrSfyfKZSbwJWpFH+mrI7Orr8Pwi0tI6ck=";
+        npmDepsHash = "sha256-a17kef++/aIyQxHFh33E/3uylSstAUrGD5OG4NQwDZQ=";
 
         nativeBuildInputs = [
           pkgs.makeWrapper
@@ -319,10 +319,10 @@
 
       pandar-web = pkgs.buildNpmPackage {
         pname = "pandar-web";
-        version = "0.1.4";
+        version = "0.2.0";
         src = frontendWorkspaceSource;
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-KgWmgnnruqrSfyfKZSbwJWpFH+mrI7Orr8Pwi0tI6ck=";
+        npmDepsHash = "sha256-a17kef++/aIyQxHFh33E/3uylSstAUrGD5OG4NQwDZQ=";
         npmBuildScript = "build:web";
 
         nativeBuildInputs = [
@@ -774,7 +774,7 @@
 
         pandar-fmt = craneLib.cargoFmt {
           src = rustSrc;
-          version = "0.1.4";
+          version = "0.2.0";
           pname = "pandar-fmt";
         };
       };
