@@ -9,7 +9,7 @@ use nozzle::{
 };
 
 use super::{
-    capabilities::{sdcard_available, studio_cfg, studio_fun},
+    capabilities::{sdcard_available, studio_cfg, studio_fun, studio_fun2},
     input::PrinterStatus,
     materials::{AmsPayload, virtual_slots},
     scalar::{JsonNumber, json_number_or_zero, packed_temperature, text, text_if_present},
@@ -20,6 +20,8 @@ pub(super) struct StudioTelemetry {
     #[serde(skip_serializing_if = "Option::is_none")]
     cfg: Option<String>,
     fun: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fun2: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     aux: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -110,6 +112,7 @@ impl From<&PrinterStatus> for StudioTelemetry {
                     .as_ref()
                     .is_some_and(|system| system.nozzle.info.iter().any(|nozzle| nozzle.id >= 16)),
             ),
+            fun2: studio_fun2(printer.fun2.as_deref()),
             aux: printer
                 .materials
                 .as_ref()

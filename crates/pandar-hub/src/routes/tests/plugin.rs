@@ -56,6 +56,7 @@ struct PluginPrinterListResponse {
 struct PluginPrinterResponse {
     dev_id: String,
     fun: String,
+    fun2: Option<String>,
     dev_name: String,
     name: String,
     dev_model_name: Option<String>,
@@ -424,4 +425,28 @@ fn sqlite_pool(state: &AppState) -> &sqlx::SqlitePool {
         panic!("expected SQLite database");
     };
     pool
+}
+
+async fn set_secondary_device_features(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: pandar_core::AgentId,
+    token: crate::sessions::SessionToken,
+    serial: &str,
+    features: Option<pandar_core::BambuDeviceFeatures>,
+) {
+    assert_eq!(
+        state
+            .printers()
+            .update_secondary_device_features_if_current(
+                tenant_id,
+                agent_id,
+                &token.persisted_id(),
+                serial,
+                features,
+            )
+            .await
+            .unwrap(),
+        crate::repositories::DeviceFeatureUpdateOutcome::Updated
+    );
 }

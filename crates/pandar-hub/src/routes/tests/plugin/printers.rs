@@ -387,3 +387,71 @@ async fn plugin_printer_fun_requires_current_capable_observation_session() {
     assert_eq!(fun["FUN-DISCONNECTED"], "0");
     assert_eq!(fun["FUN-INVALIDATED"], "0");
 }
+
+#[tokio::test]
+async fn plugin_printer_fun2_requires_current_capable_observation_session() {
+    let state = state().await;
+    let app = router(state.clone());
+    let tenant = state
+        .tenants()
+        .create("device-features-2", "Plugin Secondary Device Features")
+        .await
+        .unwrap();
+    let token =
+        plugin_studio_tenant_token(&state, &tenant.id.to_string(), "device-features-2").await;
+
+    let secondary = pandar_core::BambuDeviceFeatures::from_bits(0x8000_0000_0000_00A3);
+
+    let matching_agent =
+        feature_advertisement_printer(&state, tenant.id, "fun2-matching", "FUN2-MATCHING").await;
+    let matching_token = register_feature_session(&state, tenant.id, matching_agent, true).await;
+    set_secondary_device_features(
+        &state,
+        tenant.id,
+        matching_agent,
+        matching_token,
+        "FUN2-MATCHING",
+        Some(secondary),
+    )
+    .await;
+
+    let incapable_agent =
+        feature_advertisement_printer(&state, tenant.id, "fun2-incapable", "FUN2-INCAPABLE").await;
+    let incapable_token = register_feature_session(&state, tenant.id, incapable_agent, false).await;
+    set_secondary_device_features(
+        &state,
+        tenant.id,
+        incapable_agent,
+        incapable_token,
+        "FUN2-INCAPABLE",
+        Some(secondary),
+    )
+    .await;
+
+    let replaced_agent =
+        feature_advertisement_printer(&state, tenant.id, "fun2-replaced", "FUN2-REPLACED").await;
+    let old_token = register_feature_session(&state, tenant.id, replaced_agent, true).await;
+    set_secondary_device_features(
+        &state,
+        tenant.id,
+        replaced_agent,
+        old_token,
+        "FUN2-REPLACED",
+        Some(secondary),
+    )
+    .await;
+    register_feature_session(&state, tenant.id, replaced_agent, true).await;
+
+    let (status, body) =
+        request_as(app, Method::GET, "/api/v1/plugin/printers", None, &token).await;
+    assert_eq!(status, StatusCode::OK);
+    let fun2 = decode::<PluginPrinterListResponse>(body)
+        .devices
+        .into_iter()
+        .map(|device| (device.dev_id, device.fun2))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    assert_eq!(fun2["FUN2-MATCHING"].as_deref(), Some("80000000000000A3"));
+    assert_eq!(fun2["FUN2-INCAPABLE"], None);
+    assert_eq!(fun2["FUN2-REPLACED"], None);
+}

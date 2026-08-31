@@ -6,6 +6,8 @@ pub(super) struct PrinterStatus {
     #[serde(default)]
     pub(super) fun: Option<String>,
     #[serde(default)]
+    pub(super) fun2: Option<String>,
+    #[serde(default)]
     pub(super) gcode_state: Option<String>,
     #[serde(default)]
     pub(super) state: Option<String>,

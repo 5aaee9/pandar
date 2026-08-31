@@ -1,9 +1,11 @@
 #include <cassert>
+#include <cctype>
 #include <cstdint>
 #include <ctime>
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <stdexcept>
 #include <string>
 
 #include <nlohmann/json.hpp>
@@ -47,6 +49,7 @@ class MachineObject {
 public:
     bool check_enable_np(const json& print) const;
     int get_flag_bits(std::string str, int start, int count = 1) const;
+    uint32_t get_flag_bits_no_border(std::string str, int start_idx, int count = 1) const;
 
     void parse_camera(json print)
     {
@@ -82,6 +85,14 @@ public:
         }
     }
 
+    void parse_fun2(json print)
+    {
+#include "device_fun2_read.4384-4389.cpp"
+        if (!fun2.empty()) {
+#include "device_fun2_emmc.4393-4400.cpp"
+        }
+    }
+
     int sdcard_state() const { return m_storage->get_sdcard_state(); }
     bool camera_hidden() const
     {
@@ -89,6 +100,12 @@ public:
     }
     bool nozzle_rack_supported() const { return nozzle_system.supported(); }
     bool ext_change_assist_supported() const { return is_support_ext_change_assist; }
+    bool print_with_emmc_supported() const { return is_support_print_with_emmc; }
+    bool pa_mode_supported() const { return is_support_pa_mode; }
+    bool remote_dry_supported() const { return is_support_remote_dry; }
+    bool active_arc_fitting_supported() const { return is_support_active_arc_fitting; }
+    bool model_internal_storage_supported() const { return is_support_model_internal_storage; }
+    int ams_preload() const { return ams_preload_version; }
 
 private:
     DevStorage storage;
@@ -102,12 +119,21 @@ private:
     bool m_support_mqtt_bet_ctrl{false};
     bool m_has_timelapse_kit{false};
     bool is_support_ext_change_assist{false};
+    bool is_support_print_with_emmc{false};
+    bool is_support_pa_mode{false};
+    bool is_support_update_remain_hide_display{false};
+    bool is_support_remote_dry{false};
+    bool is_support_active_arc_fitting{false};
+    bool is_support_model_internal_storage{false};
+    bool is_support_check_track_switch_match_slice_printer{false};
+    int ams_preload_version{0};
     NozzleSystemProbe nozzle_system;
     NozzleSystemProbe* m_nozzle_system{&nozzle_system};
 };
 
 #include "device_check_enable.4265-4273.cpp"
 #include "device_flag_bits.4458-4469.cpp"
+#include "device_flag_bits_no_border.4471-4555.cpp"
 #include "dev_storage.7-16.cpp"
 
 class DevUtil {
@@ -231,6 +257,7 @@ int main(int argc, char** argv)
         machine.parse_wtm(print);
         machine.parse_ext_change_assist(print);
     }
+    machine.parse_fun2(print);
     Slic3r::DevConfig chamber(&machine);
     chamber.ParseChamberConfig(print);
     Slic3r::DevAxis axis;
@@ -261,6 +288,12 @@ int main(int argc, char** argv)
         {"nozzle_rack_supported", machine.nozzle_rack_supported()},
         {"ext_change_assist_supported", machine.ext_change_assist_supported()},
         {"connection_type", info.connection_type()},
+        {"emmc_print_supported", machine.print_with_emmc_supported()},
+        {"pa_mode_supported", machine.pa_mode_supported()},
+        {"remote_dry_supported", machine.remote_dry_supported()},
+        {"active_arc_fitting_supported", machine.active_arc_fitting_supported()},
+        {"model_internal_storage_supported", machine.model_internal_storage_supported()},
+        {"ams_preload_version", machine.ams_preload()},
     };
     std::cout << output.dump() << '\n';
     return 0;

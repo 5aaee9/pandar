@@ -20,6 +20,8 @@ const UNSUPPORTED_FUN_BITS: u64 = (1_u64 << 1)
 
 const NOZZLE_RACK_FUN_BIT: u64 = 1_u64 << 60;
 
+const BRTC_EMMC_PRINT_FUN2_BIT: u64 = 1;
+
 const UNSUPPORTED_CFG_BITS: u64 = (1_u64 << 38) | (1_u64 << 39) | (1_u64 << 42);
 
 pub(super) fn studio_fun(value: Option<&str>, nozzle_rack_ready: bool) -> String {
@@ -30,6 +32,12 @@ pub(super) fn studio_fun(value: Option<&str>, nozzle_rack_ready: bool) -> String
             NOZZLE_RACK_FUN_BIT
         };
     masked_hex(value.unwrap_or_default(), mask, false)
+}
+
+/// Studio derives eMMC printing from `print.fun2` bit 0 only; every unrelated
+/// `fun2` feature requires its own captured behavior before being advertised.
+pub(super) fn studio_fun2(value: Option<&str>) -> Option<String> {
+    value.map(|value| masked_hex(value, !BRTC_EMMC_PRINT_FUN2_BIT, false))
 }
 
 pub(super) fn studio_cfg(value: Option<&str>) -> Option<String> {

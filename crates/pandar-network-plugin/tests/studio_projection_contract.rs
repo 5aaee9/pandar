@@ -109,3 +109,43 @@ fn compiled_pinned_studio_consumer_observes_cloud_connection_type() {
     assert_eq!(telemetry["device"]["connection_type"], "cloud");
     assert_eq!(consumed["connection_type"], "cloud");
 }
+
+#[test]
+fn pinned_emmc_capability_is_visible_upstream_and_masked_to_bit_zero_by_the_plugin() {
+    let raw = r#"{"fun":"1","fun2":"80000000000000A3","cfg":"","aux":"0","stat":"0"}"#;
+
+    let upstream = compiler::run(raw);
+    assert_eq!(upstream["emmc_print_supported"], true);
+    assert_eq!(upstream["remote_dry_supported"], true);
+    assert_eq!(upstream["active_arc_fitting_supported"], false);
+    assert_eq!(upstream["pa_mode_supported"], false);
+    assert_eq!(upstream["model_internal_storage_supported"], false);
+    assert_eq!(upstream["ams_preload_version"], 0);
+
+    let (telemetry, projected) = projected(raw);
+    assert_eq!(telemetry["fun2"], "1");
+    assert_eq!(projected["emmc_print_supported"], true);
+    assert_eq!(projected["pa_mode_supported"], false);
+    assert_eq!(projected["remote_dry_supported"], false);
+    assert_eq!(projected["active_arc_fitting_supported"], false);
+    assert_eq!(projected["model_internal_storage_supported"], false);
+    assert_eq!(projected["ams_preload_version"], 0);
+}
+
+#[test]
+fn pinned_studio_consumer_fails_closed_without_an_emmc_observation() {
+    let (telemetry, consumed) =
+        projected(r#"{"fun":"FFFFFFFFFFFFFFFF","cfg":"","aux":"0","stat":"0"}"#);
+
+    assert!(telemetry.get("fun2").is_none());
+    assert_eq!(consumed["emmc_print_supported"], false);
+}
+
+#[test]
+fn projected_emmc_capability_reports_unset_bit_zero() {
+    let (telemetry, consumed) =
+        projected(r#"{"fun2":"80000000000000A0","cfg":"","aux":"0","stat":"0"}"#);
+
+    assert_eq!(telemetry["fun2"], "0");
+    assert_eq!(consumed["emmc_print_supported"], false);
+}

@@ -88,6 +88,27 @@ const SLICES: &[SourceSlice] = &[
         hash: "6a26fe6c3f3bb13d283842b0080c51b91cc5c3b3",
     },
     SourceSlice {
+        output: "device_fun2_read.4384-4389.cpp",
+        source: DEVICE_MANAGER,
+        first: 4384,
+        last: 4389,
+        hash: "60fefebe49b80d3bb6bc10654bce8fa9c02eeabf",
+    },
+    SourceSlice {
+        output: "device_fun2_emmc.4393-4400.cpp",
+        source: DEVICE_MANAGER,
+        first: 4393,
+        last: 4400,
+        hash: "50232a27822eae3272d72cffeb2e321b89d4f955",
+    },
+    SourceSlice {
+        output: "device_flag_bits_no_border.4471-4555.cpp",
+        source: DEVICE_MANAGER,
+        first: 4471,
+        last: 4555,
+        hash: "8685eda7967890b89a4dd68672670d77b5302187",
+    },
+    SourceSlice {
         output: "dev_config.11-67.cpp",
         source: DEV_CONFIG,
         first: 11,

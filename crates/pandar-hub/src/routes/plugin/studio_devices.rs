@@ -25,6 +25,8 @@ pub(crate) struct PluginPrinterListResponse {
 pub(in crate::routes) struct PluginPrinterResponse {
     dev_id: String,
     fun: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fun2: Option<String>,
     dev_name: String,
     name: String,
     dev_model_name: Option<String>,
@@ -188,6 +190,19 @@ fn studio_printer_record(
         })
         .and(printer.bambu_device_features)
         .map_or_else(|| "0".to_owned(), |features| features.to_hex());
+    // Secondary features (`print.fun2`) follow the same current-session trust
+    // fence as `fun`; the Studio projection is responsible for masking them.
+    let fun2 = session
+        .filter(|session| session.supports(AgentCapability::RequiredDeviceFeatures))
+        .filter(|session| {
+            printer.bambu_device_features2_session_id.as_deref()
+                == Some(session.persisted_id().as_str())
+        })
+        .and(
+            printer
+                .bambu_device_features2
+                .map(|features| features.to_hex()),
+        );
     let nozzle_system = (printer
         .model
         .as_deref()
@@ -212,6 +227,7 @@ fn studio_printer_record(
     PluginPrinterResponse {
         dev_id: printer.serial_number.clone(),
         fun,
+        fun2,
         dev_name: printer.name.clone(),
         name: printer.name,
         dev_model_name: studio_model_name,
