@@ -364,9 +364,14 @@ async fn postgres_bootstrap_tenant_admin_transaction_when_configured() {
         eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
         return;
     };
+    let spool_dir = tempfile::tempdir().unwrap();
     let state = AppState::from_database(
         database.clone(),
-        crate::jobs::JobStorageConfig::from_env().unwrap(),
+        crate::artifacts::FilesystemArtifactStorage::new(
+            spool_dir.path(),
+            crate::artifacts::DEFAULT_MAX_ARTIFACT_BYTES,
+        )
+        .unwrap(),
     )
     .await
     .unwrap();

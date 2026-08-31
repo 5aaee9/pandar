@@ -4,15 +4,14 @@ use std::{
 };
 
 use anyhow::{Context, bail};
-use pandar_core::TenantId;
 use tokio::{
     fs,
     io::{AsyncReadExt, AsyncWriteExt},
 };
 
 use super::{
-    ArtifactBody, ArtifactStorage, ArtifactStorageBackend, ArtifactStorageConfig,
-    ArtifactUploadBody, StoreArtifactInput, StoredArtifact, validate_max_artifact_bytes,
+    ArtifactBody, ArtifactStorage, ArtifactStorageBackend, StoreArtifactInput, StoredArtifact,
+    validate_max_artifact_bytes,
 };
 
 #[derive(Debug, Clone)]
@@ -29,49 +28,6 @@ impl FilesystemArtifactStorage {
             spool_dir: Arc::new(spool_dir.into()),
             max_artifact_bytes,
         })
-    }
-
-    pub fn from_env() -> anyhow::Result<Self> {
-        let config = ArtifactStorageConfig::from_env()?;
-        match config.backend {
-            ArtifactStorageBackend::Filesystem => Self::new(
-                config
-                    .spool_dir
-                    .expect("filesystem artifact storage requires a spool directory"),
-                config.max_artifact_bytes,
-            ),
-            ArtifactStorageBackend::S3 => {
-                bail!("PANDAR_ARTIFACT_STORAGE=filesystem is required for filesystem storage")
-            }
-        }
-    }
-
-    pub fn spool_dir(&self) -> &Path {
-        &self.spool_dir
-    }
-
-    pub async fn write_artifact(
-        &self,
-        tenant_id: TenantId,
-        artifact_id: &str,
-        filename: &str,
-        bytes: &[u8],
-    ) -> anyhow::Result<StoredArtifact> {
-        self.put_artifact(StoreArtifactInput {
-            tenant_id,
-            artifact_id,
-            filename,
-            body: ArtifactUploadBody::reader(std::io::Cursor::new(bytes.to_vec())),
-        })
-        .await
-    }
-
-    pub async fn remove_artifact(&self, storage_key: &str) -> anyhow::Result<()> {
-        self.delete_artifact(storage_key).await
-    }
-
-    pub async fn ensure_spool_dir(&self) -> anyhow::Result<()> {
-        self.check_ready().await
     }
 }
 
@@ -135,7 +91,6 @@ impl ArtifactStorage for FilesystemArtifactStorage {
         let storage_key = storage_key.to_string_lossy().into_owned();
         Ok(StoredArtifact {
             filename,
-            storage_path: storage_key.clone(),
             storage_key,
             size_bytes: size_bytes as u64,
             backend: ArtifactStorageBackend::Filesystem,

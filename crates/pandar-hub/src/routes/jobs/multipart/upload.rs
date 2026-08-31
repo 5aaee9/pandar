@@ -122,7 +122,7 @@ pub(super) async fn persist(
             filename: stored.filename,
             content_type,
             size_bytes: stored.size_bytes,
-            storage_path: stored.storage_path,
+            storage_path: stored.storage_key,
             metadata_json: artifact_metadata_json,
         },
         options: crate::repositories::PrintExecutionOptions {

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
+    artifacts::{DEFAULT_MAX_ARTIFACT_BYTES, FilesystemArtifactStorage},
     grpc::AgentControlService,
-    jobs::{DEFAULT_MAX_ARTIFACT_BYTES, JobStorageConfig},
     repositories::CreatePrintJob,
 };
 use pandar_core::AgentId;

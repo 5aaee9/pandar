@@ -231,12 +231,12 @@ async fn printer_events_websocket_accepts_browser_ticket_from_separate_sqlite_co
         "sqlite://{}",
         temp_dir.path().join("pandar-ticket-test.db").display()
     );
-    let issuer_storage = JobStorageConfig::new(
+    let issuer_storage = FilesystemArtifactStorage::new(
         temp_dir.path().join("issuer-spool"),
         DEFAULT_MAX_ARTIFACT_BYTES,
     )
     .unwrap();
-    let subscriber_storage = JobStorageConfig::new(
+    let subscriber_storage = FilesystemArtifactStorage::new(
         temp_dir.path().join("subscriber-spool"),
         DEFAULT_MAX_ARTIFACT_BYTES,
     )

@@ -184,8 +184,7 @@ impl ArtifactStorage for S3ArtifactStorage {
 
         Ok(StoredArtifact {
             filename,
-            storage_key: key.clone(),
-            storage_path: key,
+            storage_key: key,
             size_bytes,
             backend: ArtifactStorageBackend::S3,
         })

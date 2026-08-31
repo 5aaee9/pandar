@@ -51,7 +51,6 @@ pub enum ArtifactStorageBackend {
 pub struct StoredArtifact {
     pub filename: String,
     pub storage_key: String,
-    pub storage_path: String,
     pub size_bytes: u64,
     pub backend: ArtifactStorageBackend,
 }
@@ -182,6 +181,15 @@ fn validate_max_artifact_bytes(max_artifact_bytes: usize) -> anyhow::Result<()> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sanitize_filename_keeps_safe_ascii() {
+        assert_eq!(sanitize_filename("plate-1_file.3mf"), "plate-1_file.3mf");
+        assert_eq!(sanitize_filename("../bad name.3mf"), "bad_name.3mf");
+        assert_eq!(sanitize_filename("///"), "artifact.bin");
+        assert_eq!(sanitize_filename(""), "artifact.bin");
+        assert_eq!(sanitize_filename("@@@"), "___");
+    }
 
     struct FailingUploadReader {
         emitted_prefix: bool,
