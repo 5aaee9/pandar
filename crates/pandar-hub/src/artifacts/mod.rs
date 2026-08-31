@@ -14,7 +14,7 @@ pub mod lifecycle;
 pub(crate) mod metadata;
 mod s3;
 
-pub use app_state::{IntoArtifactStorage, JobStorageAlias};
+pub use app_state::IntoArtifactStorage;
 pub use filesystem::{FilesystemArtifactStorage, sanitize_filename};
 pub use s3::{S3ArtifactStorage, S3ArtifactStorageConfig};
 

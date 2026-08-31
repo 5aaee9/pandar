@@ -177,7 +177,7 @@ async fn job_create_rejects_empty_invalid_and_oversized_artifacts() {
         "artifact_invalid_upload"
     );
 
-    let oversized = vec![0_u8; state.job_storage().max_artifact_bytes() + 1];
+    let oversized = vec![0_u8; state.artifact_storage().max_artifact_bytes() + 1];
     let (status, body) = multipart_request_as(
         app,
         Method::POST,

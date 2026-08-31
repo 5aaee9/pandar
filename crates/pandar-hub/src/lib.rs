@@ -31,7 +31,7 @@ mod test_support;
 use std::{fmt, sync::Arc};
 
 use crate::{
-    artifacts::{ArtifactStorage, ArtifactStorageConfig, IntoArtifactStorage, JobStorageAlias},
+    artifacts::{ArtifactStorage, ArtifactStorageConfig, IntoArtifactStorage},
     camera_sessions::CameraSessionRegistry,
     config::{
         camera_max_streams_per_tenant_from_env, no_auth_from_env,
@@ -242,10 +242,6 @@ impl AppState {
 
     pub fn artifact_storage(&self) -> &dyn ArtifactStorage {
         &*self.artifact_storage
-    }
-
-    pub fn job_storage(&self) -> JobStorageAlias<'_> {
-        JobStorageAlias::new(self.artifact_storage())
     }
 
     pub fn external_auth(&self) -> Option<&JwtVerifier> {
