@@ -1,6 +1,6 @@
 # Release Installation
 
-Release `v0.2.0` will be published at <https://github.com/ProjectPandar/pandar/releases/tag/v0.2.0>. The tag also publishes these service artifacts:
+Release `v0.2.0` is published at <https://github.com/ProjectPandar/pandar/releases/tag/v0.2.0>. The tag also publishes these service artifacts:
 
 - `ghcr.io/projectpandar/pandar/hub:v0.2.0`
 - `ghcr.io/projectpandar/pandar/web:v0.2.0`
@@ -211,11 +211,11 @@ Use root-owned runtime `EnvironmentFile` paths outside `/nix/store` for every Ni
 Every supported Studio ABI series requires the network plugin and BambuSource companion before agent
 creation. Use the platform files from the archive matching the installed ABI series:
 
-| OS      | Network plugin                   | BambuSource companion          | Current validation                   |
-| ------- | -------------------------------- | ------------------------------ | ------------------------------------ |
-| Linux   | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    | next tagged archive remains untested |
-| Windows | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      | next tagged archive remains untested |
-| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | local arm64 validated; untagged      |
+| OS      | Network plugin                   | BambuSource companion          | Current validation                                     |
+| ------- | -------------------------------- | ------------------------------ | ------------------------------------------------------ |
+| Linux   | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    | `v0.2.0` package/ABI smoke passed; real Studio pending |
+| Windows | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      | `v0.2.0` package/ABI smoke passed; real Studio pending |
+| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | `v0.2.0` package/ABI smoke passed; real Studio pending |
 
 Install both from an unpacked release archive with the CLI:
 
@@ -424,14 +424,14 @@ Historical final13 PostgreSQL 16.14 harness `0c292295-f9ab-459b-89c2-ea74f2c9ff5
 `7e04ae355f7bca3fb409bbc700b5c8f160194c0d2f9ec82df823c859566a2db7`; source read-only and
 cleanup checks passed.
 
-| Target label    | Current operator status | Current ABI-series evidence                                                                                                      | Next action                                                                               |
-| --------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `linux-amd64`   | `untested`              | No current seven-series tagged package or real Studio run exists; final16 is historical Public Beta evidence only.               | Run the tag workflow and exact Studio checklist for each supported ABI series.            |
-| `windows-amd64` | `untested`              | The ABI-series hook/package contract is configured, but no current native package or real Studio run exists.                     | Run the native MSVC release job and exact Studio checklist for each supported ABI series. |
-| `linux-arm64`   | `untested`              | No current three-file native candidate exists.                                                                                   | Do not publish a Studio compatibility claim.                                              |
-| `windows-arm64` | `untested`              | No current three-file native candidate exists.                                                                                   | Do not publish a Studio compatibility claim.                                              |
-| `macos-amd64`   | `untested`              | The Apple Silicon/Rosetta release job is configured but has not run; no matching real Studio evidence exists.                    | Run the tag workflow and exact Studio checklist under Rosetta.                            |
-| `macos-arm64`   | `in_progress`           | Local native package/ABI/release-smoke and exact-version module load passed; no tagged artifact or authenticated session exists. | Run the tag workflow and authenticated checklist before claiming full compatibility.      |
+| Target label    | Current operator status | Current ABI-series evidence                                                                                                                                           | Next action                                                             |
+| --------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `linux-amd64`   | `in_progress`           | Every `v0.2.0` tagged archive passed native checksum, layout, CLI, and ABI smoke; no current real Studio run exists.                                                  | Run the exact Studio checklist for each installed ABI series.           |
+| `windows-amd64` | `in_progress`           | Every `v0.2.0` tagged desktop archive passed native MSVC package/ABI smoke; hook bundles passed checksum and exact-layout verification; real Studio remains untested. | Run the exact Windows Studio checklist for each installed ABI series.   |
+| `linux-arm64`   | `untested`              | No current three-file native candidate exists.                                                                                                                        | Do not publish a Studio compatibility claim.                            |
+| `windows-arm64` | `untested`              | No current three-file native candidate exists.                                                                                                                        | Do not publish a Studio compatibility claim.                            |
+| `macos-amd64`   | `in_progress`           | Every `v0.2.0` tagged archive passed package/ABI smoke under Rosetta; no matching current real Studio evidence exists.                                                | Run the exact Studio checklist under Rosetta.                           |
+| `macos-arm64`   | `in_progress`           | Every `v0.2.0` tagged archive passed native package/ABI smoke; authenticated real Studio evidence remains incomplete.                                                 | Run the authenticated checklist before claiming complete compatibility. |
 
 ## Operations Runbook
 

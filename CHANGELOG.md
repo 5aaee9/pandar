@@ -10,7 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- Added ABI-series-specific support for Bambu Studio `02.08.02.61`, including its appended `PrintParams::queue_plate_id` layout and `bambu_network_sync_slot_mappings` export. Slot-mapping cloud synchronization remains an explicit unsupported operation; packaged and real-Studio validation are not yet claimed.
+- Added ABI-series-specific support for Bambu Studio `02.08.02.61`, including its appended `PrintParams::queue_plate_id` layout and `bambu_network_sync_slot_mappings` export. Slot-mapping cloud synchronization remains an explicit unsupported operation; target-native package validation passed, while real-Studio validation remains separate and is not claimed.
 - Added authenticated Bambu Studio personal-preset synchronization and a versioned live printer-event stream with generation-fenced caching and recovery.
 - Added one generated OpenAPI Hub-client contract for Web and Android, canonical printer capability projections, and shared printer-operation and Agent wire models.
 - Added a durable artifact reservation, deletion, retry, and cleanup lifecycle with equivalent SQLite and PostgreSQL behavior.
@@ -35,17 +35,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Marked every pointer-validity-dependent Rust/C export unsafe with explicit ownership, callback, nested-view, and lifetime contracts.
 - Made release-version invariants, Android tests and lint, Nix auth smoke tests, pinned Studio contracts, module-size checks, and dual-backend parity durable CI gates.
 
-### Planned distribution
+### Distribution
 
-- The release workflow will publish seven ABI-series-specific CLI, network plugin, and BambuSource archive sets with SHA-256 sidecars; Windows also publishes Studio hook bundles.
-- The tag will publish Hub and Web images at `ghcr.io/projectpandar/pandar/hub:v0.2.0` and `ghcr.io/projectpandar/pandar/web:v0.2.0`.
-- The tag will publish Helm chart `0.2.0` at `oci://ghcr.io/projectpandar/pandar/chart/pandar`.
+- The release publishes seven ABI-series-specific CLI, network plugin, and BambuSource archive sets with SHA-256 sidecars; Windows also publishes Studio hook bundles.
+- Hub and Web images are published at `ghcr.io/projectpandar/pandar/hub:v0.2.0` and `ghcr.io/projectpandar/pandar/web:v0.2.0`.
+- Helm chart `0.2.0` is published at `oci://ghcr.io/projectpandar/pandar/chart/pandar`.
 
 ### Known limitations
 
 - Desktop archives remain unsigned. Verify the supplied SHA-256 sidecar; Windows SmartScreen and macOS Gatekeeper may warn.
 - Real-host installation and real Bambu Studio replacement evidence is not complete for every target and ABI series.
-- The planned container images target Linux amd64 only.
+- The container images target Linux amd64 only.
 - Native firmware and recovery ownership still requires one active Hub; the firmware package catalog is intentionally empty.
 - The Android client is built separately and is not attached to the GitHub Release.
 
