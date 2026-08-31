@@ -5,8 +5,8 @@
 //! operation reports the same stable `unsupported_file_transfer` error.
 
 use std::ffi::{c_char, c_int, c_void};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 
 const FT_OK: c_int = 0;
 const FT_EINVAL: c_int = -1;
@@ -46,13 +46,104 @@ struct Callback<F> {
 unsafe impl<F> Send for Callback<F> {}
 unsafe impl<F> Sync for Callback<F> {}
 
+struct CallbackSlot<F> {
+    current: Mutex<Option<Arc<CallbackRegistration<F>>>>,
+}
+
+struct CallbackRegistration<F> {
+    callback: Callback<F>,
+    active: Mutex<usize>,
+    quiescent: Condvar,
+}
+
+struct CallbackLease<F> {
+    registration: Arc<CallbackRegistration<F>>,
+}
+
+impl<F> CallbackSlot<F> {
+    fn new() -> Self {
+        Self {
+            current: Mutex::new(None),
+        }
+    }
+
+    fn replace(&self, callback: Option<Callback<F>>) {
+        let replacement = callback.map(|callback| {
+            Arc::new(CallbackRegistration {
+                callback,
+                active: Mutex::new(0),
+                quiescent: Condvar::new(),
+            })
+        });
+        let previous = {
+            let mut current = self
+                .current
+                .lock()
+                .expect("callback registration mutex poisoned");
+            std::mem::replace(&mut *current, replacement)
+        };
+        if let Some(previous) = previous {
+            let active = previous
+                .active
+                .lock()
+                .expect("callback activity mutex poisoned");
+            drop(
+                previous
+                    .quiescent
+                    .wait_while(active, |active| *active != 0)
+                    .expect("callback activity mutex poisoned"),
+            );
+        }
+    }
+
+    fn acquire(&self) -> Option<CallbackLease<F>> {
+        let registration = {
+            let current = self
+                .current
+                .lock()
+                .expect("callback registration mutex poisoned");
+            let registration = Arc::clone(current.as_ref()?);
+            let mut active = registration
+                .active
+                .lock()
+                .expect("callback activity mutex poisoned");
+            *active += 1;
+            drop(active);
+            registration
+        };
+        Some(CallbackLease { registration })
+    }
+}
+
+impl<F> CallbackLease<F> {
+    fn callback(&self) -> &Callback<F> {
+        &self.registration.callback
+    }
+}
+
+impl<F> Drop for CallbackLease<F> {
+    fn drop(&mut self) {
+        let mut active = self
+            .registration
+            .active
+            .lock()
+            .expect("callback activity mutex poisoned");
+        *active -= 1;
+        if *active == 0 {
+            self.registration.quiescent.notify_all();
+        }
+    }
+}
+
 struct FtTunnel {
     refs: AtomicUsize,
-    status_cb: Mutex<Option<Callback<FtTunnelStatusCb>>>,
+    status_cb: CallbackSlot<FtTunnelStatusCb>,
     closed: AtomicBool,
 }
 
 mod job;
+#[cfg(test)]
+mod tests;
 
 impl FtJobResult {
     const fn error(ec: c_int) -> Self {
@@ -132,7 +223,7 @@ pub unsafe extern "C" fn ft_tunnel_create(
     }
     let tunnel = Box::new(FtTunnel {
         refs: AtomicUsize::new(1),
-        status_cb: Mutex::new(None),
+        status_cb: CallbackSlot::new(),
         closed: AtomicBool::new(false),
     });
     // SAFETY: out is non-null (checked above).
@@ -179,14 +270,9 @@ pub unsafe extern "C" fn ft_tunnel_start_connect(
         cb(user, 1, FT_EIO, message.as_ptr());
     }
     // SAFETY: tunnel is retained for the duration of this call.
-    let status_cb = unsafe { &*tunnel }
-        .status_cb
-        .lock()
-        .expect("tunnel status callback mutex poisoned")
-        .as_ref()
-        .map(|callback| (callback.function, callback.user));
-    if let Some((status_cb, status_user)) = status_cb {
-        status_cb(status_user, 0, -1, FT_EIO, message.as_ptr());
+    if let Some(status_cb) = unsafe { &*tunnel }.status_cb.acquire() {
+        let callback = status_cb.callback();
+        (callback.function)(callback.user, 0, -1, FT_EIO, message.as_ptr());
     }
     // SAFETY: balances the retain above.
     unsafe { release(tunnel as *mut FtTunnel) };
@@ -201,9 +287,14 @@ pub unsafe extern "C" fn ft_tunnel_sync_connect(handle: *mut FtTunnelHandle) -> 
 }
 
 #[unsafe(no_mangle)]
+/// Replacing or clearing the callback waits for any invocation of the previous callback to return.
+/// A newly registered callback may run before this function returns. A status callback must not
+/// synchronously call or wait for this setter to replace its own registration.
+///
 /// # Safety
 /// `handle` must identify a live tunnel. When `cb` is present, it and `user` must remain valid and
 /// safe to invoke until replaced, cleared with `None`, or the final tunnel reference is released.
+/// Once this function returns, a replaced callback and its context are no longer in flight.
 pub unsafe extern "C" fn ft_tunnel_set_status_cb(
     handle: *mut FtTunnelHandle,
     cb: Option<FtTunnelStatusCb>,
@@ -213,11 +304,9 @@ pub unsafe extern "C" fn ft_tunnel_set_status_cb(
         return FT_EINVAL;
     }
     // SAFETY: see module-level note.
-    *unsafe { &*(handle as *const FtTunnel) }
+    unsafe { &*(handle as *const FtTunnel) }
         .status_cb
-        .lock()
-        .expect("tunnel status callback mutex poisoned") =
-        cb.map(|function| Callback { function, user });
+        .replace(cb.map(|function| Callback { function, user }));
     FT_OK
 }
 

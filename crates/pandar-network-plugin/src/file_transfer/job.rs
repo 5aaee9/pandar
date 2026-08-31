@@ -7,8 +7,8 @@ use super::*;
 
 struct FtJob {
     refs: AtomicUsize,
-    result_cb: Mutex<Option<Callback<FtJobResultCb>>>,
-    msg_cb: Mutex<Option<Callback<FtJobMsgCb>>>,
+    result_cb: CallbackSlot<FtJobResultCb>,
+    msg_cb: CallbackSlot<FtJobMsgCb>,
     cancelled: AtomicBool,
     state: Mutex<FtJobState>,
     finished: Condvar,
@@ -42,8 +42,8 @@ pub unsafe extern "C" fn ft_job_create(
     }
     let job = Box::new(FtJob {
         refs: AtomicUsize::new(1),
-        result_cb: Mutex::new(None),
-        msg_cb: Mutex::new(None),
+        result_cb: CallbackSlot::new(),
+        msg_cb: CallbackSlot::new(),
         cancelled: AtomicBool::new(false),
         state: Mutex::new(FtJobState {
             finished: false,
@@ -77,9 +77,14 @@ pub unsafe extern "C" fn ft_job_release(handle: *mut FtJobHandle) {
 }
 
 #[unsafe(no_mangle)]
+/// Replacing or clearing the callback waits for any invocation of the previous callback to return.
+/// A newly registered callback may run before this function returns. A result callback must not
+/// synchronously call or wait for this setter to replace its own registration.
+///
 /// # Safety
 /// `handle` must identify a live job. When `cb` is present, it and `user` must remain valid and
 /// safe to invoke until replaced, cleared with `None`, or the final job reference is released.
+/// Once this function returns, a replaced callback and its context are no longer in flight.
 pub unsafe extern "C" fn ft_job_set_result_cb(
     handle: *mut FtJobHandle,
     cb: Option<FtJobResultCb>,
@@ -89,11 +94,9 @@ pub unsafe extern "C" fn ft_job_set_result_cb(
         return FT_EINVAL;
     }
     // SAFETY: see module-level note.
-    *unsafe { &*(handle as *const FtJob) }
+    unsafe { &*(handle as *const FtJob) }
         .result_cb
-        .lock()
-        .expect("job result callback mutex poisoned") =
-        cb.map(|function| Callback { function, user });
+        .replace(cb.map(|function| Callback { function, user }));
     FT_OK
 }
 
@@ -142,23 +145,24 @@ pub unsafe extern "C" fn ft_tunnel_start_job(
     if tunnel.is_null() || job.is_null() {
         return FT_EINVAL;
     }
-    // SAFETY: see module-level note.
-    let job = unsafe { &*(job as *const FtJob) };
+    let job_ptr = job as *const FtJob;
+    // SAFETY: see module-level note. The retained reference keeps the callback
+    // registry alive through a callback-triggered release.
+    unsafe { retain(job_ptr) };
+    // SAFETY: the retained reference stays live through the matching release.
+    let job = unsafe { &*job_ptr };
     {
         let mut state = job.state.lock().expect("job state mutex poisoned");
         state.result = FtJobResult::error(FT_EIO);
         state.finished = true;
     }
     job.finished.notify_all();
-    let result_cb = job
-        .result_cb
-        .lock()
-        .expect("job result callback mutex poisoned")
-        .as_ref()
-        .map(|callback| (callback.function, callback.user));
-    if let Some((result_cb, result_user)) = result_cb {
-        result_cb(result_user, FtJobResult::error(FT_EIO));
+    if let Some(result_cb) = job.result_cb.acquire() {
+        let callback = result_cb.callback();
+        (callback.function)(callback.user, FtJobResult::error(FT_EIO));
     }
+    // SAFETY: balances the retain above.
+    unsafe { release(job_ptr.cast_mut()) };
     FT_OK
 }
 
@@ -189,11 +193,9 @@ pub unsafe extern "C" fn ft_job_set_msg_cb(
         return FT_EINVAL;
     }
     // SAFETY: see module-level note.
-    *unsafe { &*(handle as *const FtJob) }
+    unsafe { &*(handle as *const FtJob) }
         .msg_cb
-        .lock()
-        .expect("job message callback mutex poisoned") =
-        cb.map(|function| Callback { function, user });
+        .replace(cb.map(|function| Callback { function, user }));
     FT_OK
 }
 
