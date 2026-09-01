@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::{io::Write, path::PathBuf, time::Duration};
 
 use super::{
-    PluginHttpResult, RequestKind, invalid_input, network_error, normalize_hub_url, read_utf8,
-    result, runtime, stable_error_body,
+    PluginHttpResult, RequestKind, invalid_input, network_error, result, runtime, stable_error_body,
 };
 use crate::cancellation::RequestCancellation;
 
@@ -36,43 +35,6 @@ const PLUGIN_HTTP_MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 pub(super) fn calibration_mode(value: i32) -> Option<PrintCalibrationMode> {
     let value = u8::try_from(value).ok()?;
     PrintCalibrationMode::try_from(value).ok()
-}
-
-pub(super) unsafe fn get_json(
-    hub_url_ptr: *const u8,
-    hub_url_len: usize,
-    token_ptr: *const u8,
-    token_len: usize,
-    path: &str,
-    kind: RequestKind,
-) -> PluginHttpResult {
-    let Some(hub_url) = unsafe { read_utf8(hub_url_ptr, hub_url_len) }.and_then(normalize_hub_url)
-    else {
-        return invalid_input("invalid_hub_url");
-    };
-    let Some(token) =
-        unsafe { read_utf8(token_ptr, token_len) }.filter(|token| !token.trim().is_empty())
-    else {
-        return invalid_input("invalid_auth_token");
-    };
-    diagnostics::buffered(|writer| {
-        match runtime().block_on(async {
-            execute_request(
-                hub_client()
-                    .get(format!("{hub_url}{path}"))
-                    .bearer_auth(token),
-                None,
-            )
-            .await
-            .context("GET plugin request")
-        }) {
-            Ok(response) => response_result_with_writer(response, kind, writer),
-            Err(error) => {
-                write_network_error(writer, &error);
-                network_error()
-            }
-        }
-    })
 }
 
 pub(super) fn post_json(
@@ -175,7 +137,6 @@ async fn execute_request(
 fn post_request_context(kind: RequestKind) -> &'static str {
     match kind {
         RequestKind::TicketExchange => "POST plugin authentication request",
-        RequestKind::JobLookup => "POST plugin job lookup request",
         RequestKind::PrintSubmission => "POST plugin print submission request",
         RequestKind::PrinterOperation => "POST plugin printer operation request",
         RequestKind::H2cAutoNozzleMapping => "POST H2C auto nozzle mapping request",
@@ -360,8 +321,7 @@ pub(super) fn redact_hub_error(kind: RequestKind, http_code: u32, body: &str) ->
         (404, _)
             if matches!(
                 kind,
-                RequestKind::JobLookup
-                    | RequestKind::PrintSubmission
+                RequestKind::PrintSubmission
                     | RequestKind::PrinterOperation
                     | RequestKind::H2cAutoNozzleMapping
             ) =>

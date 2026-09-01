@@ -93,7 +93,7 @@ use serde::{Serialize, de::DeserializeOwned};
 pub(crate) use runtime::runtime;
 
 use http::{
-    AmsMapping, AmsMapping2, AmsMappingInfo, PrintSubmissionBody, calibration_mode, get_json,
+    AmsMapping, AmsMapping2, AmsMappingInfo, PrintSubmissionBody, calibration_mode,
     plugin_printer_operation_url, post_json, post_multipart_print,
 };
 
@@ -104,7 +104,6 @@ const NO_AUTH_CONNECT_FAILURE_STATUS: i32 = 2;
 #[derive(Clone, Copy)]
 enum RequestKind {
     TicketExchange,
-    JobLookup,
     PrintSubmission,
     PrinterOperation,
     H2cAutoNozzleMapping,
@@ -118,27 +117,6 @@ pub struct PluginHttpResult {
     pub body_ptr: *mut u8,
     pub body_len: usize,
     pub body_cap: usize,
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
-pub unsafe extern "C" fn pandar_plugin_get_jobs(
-    hub_url_ptr: *const u8,
-    hub_url_len: usize,
-    token_ptr: *const u8,
-    token_len: usize,
-) -> PluginHttpResult {
-    unsafe {
-        get_json(
-            hub_url_ptr,
-            hub_url_len,
-            token_ptr,
-            token_len,
-            "/api/v1/plugin/jobs",
-            RequestKind::JobLookup,
-        )
-    }
 }
 
 #[unsafe(no_mangle)]

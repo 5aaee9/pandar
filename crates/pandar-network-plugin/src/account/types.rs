@@ -240,9 +240,3 @@ pub(super) struct LocalServerBaseUrl {
 pub(super) struct LocalServerConfig {
     pub(super) hub_url: String,
 }
-
-pub(super) fn parse_profile(value: &str) -> anyhow::Result<Profile> {
-    serde_json::from_str::<ProfileInput>(value)
-        .context("decode typed account profile")?
-        .normalize()
-}

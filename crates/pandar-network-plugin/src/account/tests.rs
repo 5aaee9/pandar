@@ -1,7 +1,7 @@
+use super::runtime::canonical_hub_identity;
 use super::{
-    canonical_hub_identity, pandar_plugin_account_debug_consistent, pandar_plugin_account_persist,
-    persistence,
-    types::{PersistedLogin, Profile, ProfileInput, SessionKind, parse_profile},
+    pandar_plugin_account_debug_consistent, persistence,
+    types::{PersistedLogin, Profile, ProfileInput, SessionKind},
 };
 
 #[cfg(unix)]
@@ -37,86 +37,13 @@ fn profile_aliases_normalize_to_canonical_typed_shape() {
 
 #[test]
 fn minimal_profile_uses_user_id_as_the_studio_display_name() {
-    let profile =
-        parse_profile(r#"{"token":"next","user_id":"replacement-user"}"#).expect("minimal profile");
+    let input: ProfileInput =
+        serde_json::from_str(r#"{"token":"next","user_id":"replacement-user"}"#)
+            .expect("minimal profile");
+    let profile = input.normalize().expect("minimal profile");
 
     assert_eq!(profile.user_id, "replacement-user");
     assert_eq!(profile.user_name, "replacement-user");
-}
-
-#[test]
-fn empty_account_session_is_a_persistence_no_op() {
-    let directory = tempfile::tempdir().unwrap();
-    let config_dir = directory.path().to_str().unwrap().as_bytes();
-    let hub_url = b"http://127.0.0.1:8080";
-    let empty = b"";
-
-    let result = unsafe {
-        pandar_plugin_account_persist(
-            config_dir.as_ptr(),
-            config_dir.len(),
-            hub_url.as_ptr(),
-            hub_url.len(),
-            empty.as_ptr(),
-            empty.len(),
-            SessionKind::Authenticated as i32,
-            empty.as_ptr(),
-            empty.len(),
-        )
-    };
-    let status = result.status;
-    let http_code = result.http_code;
-    unsafe {
-        crate::pandar_plugin_free_with_capacity(
-            result.body_ptr.cast(),
-            result.body_len,
-            result.body_cap,
-        )
-    };
-
-    assert_eq!(status, 0);
-    assert_eq!(http_code, 200);
-    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
-}
-
-#[test]
-fn partially_empty_account_session_is_rejected() {
-    let directory = tempfile::tempdir().unwrap();
-    let config_dir = directory.path().to_str().unwrap().as_bytes();
-    let hub_url = b"http://127.0.0.1:8080";
-    let profile = br#"{"token":"ignored","user_id":"user-1"}"#;
-    let empty = b"";
-    let token = b"secret-token";
-
-    let persist = |token: &[u8], profile: &[u8]| {
-        let result = unsafe {
-            pandar_plugin_account_persist(
-                config_dir.as_ptr(),
-                config_dir.len(),
-                hub_url.as_ptr(),
-                hub_url.len(),
-                token.as_ptr(),
-                token.len(),
-                SessionKind::Authenticated as i32,
-                profile.as_ptr(),
-                profile.len(),
-            )
-        };
-        let status = result.status;
-        let http_code = result.http_code;
-        unsafe {
-            crate::pandar_plugin_free_with_capacity(
-                result.body_ptr.cast(),
-                result.body_len,
-                result.body_cap,
-            )
-        };
-        (status, http_code)
-    };
-
-    assert_eq!(persist(empty, profile), (1, 0));
-    assert_eq!(persist(token, empty), (1, 0));
-    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
 }
 
 #[test]

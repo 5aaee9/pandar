@@ -85,13 +85,6 @@ impl AccountLifecycleSession {
 }
 
 #[unsafe(no_mangle)]
-/// Returns one caller-owned session. The caller must eventually pass it exactly once to
-/// `pandar_plugin_account_session_destroy` after all callbacks and borrowers have finished.
-pub extern "C" fn pandar_plugin_account_session_create() -> *mut c_void {
-    Box::into_raw(Box::new(AccountLifecycleSession::new())).cast()
-}
-
-#[unsafe(no_mangle)]
 /// # Safety
 /// `session` and `result` must be live for the call. The HTTP body is borrowed for the call.
 pub unsafe extern "C" fn pandar_plugin_account_session_apply_lifecycle_result(
@@ -121,15 +114,6 @@ pub unsafe extern "C" fn pandar_plugin_account_session_apply_lifecycle_result(
             }
         };
         session.enqueue(AccountCallback::HttpError(lifecycle.http.http_code, body));
-    }
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// `session` must be null or returned by account session creation exactly once.
-pub unsafe extern "C" fn pandar_plugin_account_session_destroy(session: *mut c_void) {
-    if !session.is_null() {
-        drop(unsafe { Box::from_raw(session.cast::<AccountLifecycleSession>()) });
     }
 }
 

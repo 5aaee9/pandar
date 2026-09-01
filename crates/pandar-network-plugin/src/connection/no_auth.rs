@@ -43,6 +43,7 @@ impl Default for NoAuthRetry {
 }
 
 impl ConnectionSession {
+    #[cfg(test)]
     fn no_auth_retry_active(&self) -> bool {
         let state = self.state.lock().expect("connection state");
         if !state.token.trim().is_empty() {
@@ -169,6 +170,7 @@ pub unsafe extern "C" fn pandar_plugin_no_auth_retry_arm(
     0
 }
 
+#[cfg(test)]
 #[unsafe(no_mangle)]
 /// # Safety
 /// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.

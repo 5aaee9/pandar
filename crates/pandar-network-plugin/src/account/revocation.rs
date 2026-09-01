@@ -1,43 +1,11 @@
-use anyhow::{Context, ensure};
+use anyhow::Context;
 
 use crate::{
     PluginHttpResult, RequestKind, cancellation::RequestCancellation, http, normalize_hub_url,
     result,
 };
 
-use super::{
-    account_result, borrowed, canonical_hub_identity, diagnosed, persistence,
-    types::PendingRevocation,
-};
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
-pub unsafe extern "C" fn pandar_plugin_account_stage_revoke(
-    config_dir_ptr: *const u8,
-    config_dir_len: usize,
-    hub_url_ptr: *const u8,
-    hub_url_len: usize,
-    token_ptr: *const u8,
-    token_len: usize,
-) -> PluginHttpResult {
-    account_result((|| {
-        let config_dir = unsafe { borrowed(config_dir_ptr, config_dir_len) }?;
-        let hub_url = canonical_hub_identity(unsafe { borrowed(hub_url_ptr, hub_url_len) }?);
-        let token = unsafe { borrowed(token_ptr, token_len) }?;
-        ensure!(!hub_url.is_empty(), "pending revocation has no Hub URL");
-        ensure!(!token.trim().is_empty(), "pending revocation has no token");
-        persistence::enqueue_pending(
-            config_dir,
-            PendingRevocation {
-                hub_url,
-                token: token.to_owned(),
-            },
-        )?
-        .require_confirmed("durably stage plugin revocation")?;
-        Ok(())
-    })())
-}
+use super::{borrowed, diagnosed, persistence, types::PendingRevocation};
 
 #[unsafe(no_mangle)]
 /// # Safety
@@ -88,31 +56,6 @@ fn revoke_loaded(
             revoke_with_cancellation(config_dir, revocation, cancellation)
         }
     }
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
-pub unsafe extern "C" fn pandar_plugin_account_revoke_staged(
-    config_dir_ptr: *const u8,
-    config_dir_len: usize,
-    hub_url_ptr: *const u8,
-    hub_url_len: usize,
-    token_ptr: *const u8,
-    token_len: usize,
-) -> PluginHttpResult {
-    let work = (|| {
-        let config_dir = unsafe { borrowed(config_dir_ptr, config_dir_len) }?;
-        let revocation = PendingRevocation {
-            hub_url: canonical_hub_identity(unsafe { borrowed(hub_url_ptr, hub_url_len) }?),
-            token: unsafe { borrowed(token_ptr, token_len) }?.to_owned(),
-        };
-        if !persistence::load_pending(config_dir)?.contains(&revocation) {
-            return Ok(None);
-        }
-        revoke(config_dir, revocation)
-    })();
-    revocation_result(work)
 }
 
 pub(super) fn revoke(

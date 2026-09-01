@@ -138,6 +138,7 @@ fn matches_login(login: &PersistedLogin, revocation: &PendingRevocation) -> bool
     login.hub_url == revocation.hub_url && login.token == revocation.token
 }
 
+#[cfg(test)]
 pub(super) fn load_pending(config_dir: &str) -> anyhow::Result<Vec<PendingRevocation>> {
     let _process_guard = process_lock::acquire(config_dir)?;
     let _guard = PENDING_QUEUE_LOCK

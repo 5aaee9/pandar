@@ -71,14 +71,6 @@ fn printer_response_policy_owns_stale_dispositions() {
 #[test]
 fn account_policy_owns_state_changes_and_abi_status() {
     assert_eq!(
-        unsafe { pandar_plugin_account_change_action(b"{}".as_ptr(), 2) },
-        ACCOUNT_ACTION_LOGOUT
-    );
-    assert_eq!(
-        unsafe { pandar_plugin_account_change_action(b"{\"user_id\":\"u\"}".as_ptr(), 15) },
-        ACCOUNT_ACTION_LOGIN
-    );
-    assert_eq!(
         unsafe {
             login_observation::pandar_plugin_account_logout_action(1, false, 0, b"".as_ptr(), 0)
         },
@@ -113,22 +105,6 @@ fn account_policy_owns_state_changes_and_abi_status() {
             login_observation::pandar_plugin_account_logout_action(1, true, 0, [0xff].as_ptr(), 1)
         },
         ACCOUNT_ACTION_FAILURE
-    );
-    assert_eq!(pandar_plugin_account_mutation_status(true, true), 0);
-    assert_eq!(
-        pandar_plugin_account_mutation_status(true, false),
-        ABI_INVALID_RESULT
-    );
-    assert_eq!(
-        body(unsafe {
-            pandar_plugin_account_mutation_result(
-                false,
-                true,
-                br#"{"error":"decode_failed"}"#.as_ptr(),
-                25,
-            )
-        }),
-        (-19, 0, r#"{"error":"decode_failed"}"#.to_owned())
     );
     assert_eq!(
         unsafe {
@@ -179,14 +155,6 @@ fn account_policy_owns_state_changes_and_abi_status() {
     assert_eq!(refresh(7, 12, false, b"new"), ACCOUNT_ACTION_NONE);
     assert_eq!(refresh(7, 11, true, b"new"), ACCOUNT_ACTION_NONE);
     assert_eq!(refresh(7, 11, false, b""), ACCOUNT_ACTION_NONE);
-    assert_eq!(
-        body(pandar_plugin_account_stale_no_auth_result()),
-        (
-            ABI_INVALID_RESULT,
-            0,
-            r#"{"error":"stale_no_auth_session"}"#.to_owned()
-        )
-    );
 }
 
 #[test]

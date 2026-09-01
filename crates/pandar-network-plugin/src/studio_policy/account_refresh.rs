@@ -1,18 +1,8 @@
-use crate::{PluginHttpResult, read_utf8, result, stable_error_body};
+use crate::read_utf8;
 
 use super::{
-    ABI_INVALID_RESULT, ACCOUNT_ACTION_APPLY, ACCOUNT_ACTION_FAILURE, ACCOUNT_ACTION_LOGIN,
-    ACCOUNT_ACTION_NONE,
+    ACCOUNT_ACTION_APPLY, ACCOUNT_ACTION_FAILURE, ACCOUNT_ACTION_LOGIN, ACCOUNT_ACTION_NONE,
 };
-
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_account_stale_no_auth_result() -> PluginHttpResult {
-    result(
-        ABI_INVALID_RESULT,
-        0,
-        stable_error_body("stale_no_auth_session"),
-    )
-}
 
 #[unsafe(no_mangle)]
 /// # Safety
