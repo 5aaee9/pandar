@@ -43,62 +43,7 @@
       "duplicate_queued": "Duplicate queued",
       "printer_control_queued": "Printer control queued",
       "agent_not_connected": "Agent is not connected to this Hub process"
-    },
-    "commandResult": {
-      "printerControlCompleted": "Printer control completed",
-      "printerControlFailed": "Printer control failed",
-      "recoveryCommandSent": "Recovery command sent; waiting for printer status confirmation"
-    },
-    "notification": {
-      "liveTitle": "Live connection",
-      "liveUnavailable": "Live updates unavailable because no server-side auth token is configured.",
-      "liveRetryingUnavailable": "Live updates unavailable; retrying.",
-      "liveDisconnectedRetrying": "Live updates disconnected; retrying.",
-      "printerStateTitle": "Printer state",
-      "printerDetail": "{name} ({serial})",
-      "printFailedTitle": "Print failed",
-      "printCompleteTitle": "Print complete",
-      "jobDispatchDetail": "{filename} dispatch {status}",
-      "jobErrorFallback": "{filename}",
-      "errorsIncomplete": "Hub data is incomplete."
     }
-  },
-  "tenantSettings": {
-    "title": "Tenant settings",
-    "subtitleTenant": "{name} operational references",
-    "subtitleNone": "No tenant selected",
-    "meta": "No token values shown",
-    "groupTenant": "Tenant",
-    "id": "ID",
-    "slug": "Slug",
-    "created": "Created",
-    "groupAuth": "Authentication",
-    "source": "Source",
-    "provider": "Provider",
-    "cookieName": "Cookie name",
-    "secretValues": "Secret values",
-    "hidden": "Hidden",
-    "groupOps": "Operations",
-    "diagnosticsLabel": "Diagnostics",
-    "diagnosticsValue": "See the Diagnostics section",
-    "developerRef": "Developer reference",
-    "agentPairing": "Agent pairing",
-    "apiTokens": "Tenant tokens",
-    "linkedAgents": "Linked agents",
-    "noLinkedAgents": "No linked agents. Pair a local agent above to get started.",
-    "printerCompat": "Printer compatibility",
-    "noPrinters": "No reported printers",
-    "runDiagnostics": "Run diagnostics from the Diagnostics section",
-    "unknownModel": "Unknown model",
-    "tenant": "Tenant",
-    "webSocket": "WebSocket",
-    "lastEvent": "Last event",
-    "auth": "Auth",
-    "authValue": "{label} · cookie {cookie}",
-    "noTenant": "No tenant",
-    "notifications": "Notifications",
-    "noNotifications": "No live notifications",
-    "liveNotificationsAria": "Live notifications"
   },
   "recovery": {
     "state": {
@@ -112,11 +57,6 @@
       "mqttFailed": "Printer did not accept the start command",
       "queueFailed": "Could not queue the job at the hub",
       "waitingStart": "Waiting for the print to start"
-    },
-    "duration": {
-      "lessThanMinute": "less than a minute",
-      "minutes": "{count, plural, =1 {1 minute} other {# minutes}}",
-      "hours": "{count, plural, =1 {1 hour} other {# hours}}"
     }
   },
   "tokens": {
@@ -173,10 +113,20 @@
     "artifactSummary": "{name} · {plate} · {objects} · {filament}"
   },
   "attention": {
-    "agent": { "title": "Agent {status}", "label": "{name} is {status}" },
-    "printer": { "title": "Printer {status}", "label": "{name} is {status}" },
-    "jobPrintFailed": { "title": "Print failed" },
-    "jobDispatchFailed": { "title": "Dispatch failed" },
+    "agent": {
+      "title": "Agent {status}",
+      "label": "{name} is {status}"
+    },
+    "printer": {
+      "title": "Printer {status}",
+      "label": "{name} is {status}"
+    },
+    "jobPrintFailed": {
+      "title": "Print failed"
+    },
+    "jobDispatchFailed": {
+      "title": "Dispatch failed"
+    },
     "failureReason": "Reason: {reason}",
     "jobStalled": {
       "title": "Job stalled",
@@ -225,7 +175,6 @@
     "groupedByAgent": "Grouped by agent",
     "ariaFleet": "Fleet status",
     "ariaAttention": "Needs attention",
-    "ariaSections": "Sections",
     "action": {
       "refresh": "Refresh",
       "reprint": "Reprint",
@@ -233,7 +182,9 @@
       "view": "View"
     }
   },
-  "job": { "filename": "{filename}" },
+  "job": {
+    "filename": "{filename}"
+  },
   "jobFormat": {
     "layersNone": "Layers -",
     "layersOpenTotal": "Layers -/{total}",
@@ -278,26 +229,8 @@
     "stopAction": "Stop Printing",
     "printerOnly": "Use the printer screen to resolve this error."
   },
-  "nav": {
-    "printers": "Printers",
-    "jobs": "Print jobs",
-    "dispatch": "Dispatch",
-    "recovery": "Recovery",
-    "diagnostics": "Diagnostics",
-    "activity": "Live activity",
-    "admin": "Admin"
-  },
-  "header": {
-    "title": "Pandar Operations",
-    "inventoryFrom": "Tenant printer inventory from {apiUrl}",
-    "tenant": "Tenant",
-    "view": "View"
-  },
   "inventory": {
     "printersTitle": "Printer inventory",
-    "printersSubtitleTenant": "{name} ({slug})",
-    "printersSubtitleNone": "No tenant selected",
-    "printersMeta": "{count} reported",
     "noTenantTitle": "No tenants",
     "noTenantMessage": "Ask your administrator to create a tenant and assign you to it, then select it in the sidebar. Printers appear here once an agent reports them.",
     "noPrintersTitle": "No printers reported",
@@ -311,7 +244,6 @@
     "unknownModel": "Unknown model",
     "lastSeenOnline": "Online",
     "lastOnline": "Last online {relative}",
-    "managedBy": "Managed by",
     "statusLabel": "Status",
     "nozzleTemperature": "Nozzle",
     "setNozzleTemperature": "Set nozzle temperature",
@@ -458,7 +390,6 @@
     "filterStatusAria": "Filter by status",
     "jobsTitle": "Print jobs",
     "jobsSubtitle": "Queued, dispatched, and physical print history",
-    "jobsMeta": "{count} jobs",
     "newJob": "New print job",
     "clearJobs": "Clear jobs",
     "clearJobFilters": "Clear filters",
@@ -500,7 +431,6 @@
     "unknownPrinter": "Unknown printer",
     "details": "Details",
     "closeDialog": "Close",
-    "recoveryLabel": "Recovery:",
     "projectLabel": "Project:",
     "artifactLabel": "Artifact:",
     "materialLabel": "Material:",
@@ -573,7 +503,6 @@
     "selectedNozzle": "Selected nozzle",
     "leftAms": "Left AMS",
     "rightAms": "Right AMS",
-    "sharedAms": "Shared AMS",
     "ams": "AMS",
     "external": "External",
     "emptySlot": "Empty",
@@ -728,7 +657,6 @@
     "subtitleUnavailable": "{name} admin data is unavailable",
     "metaAdmin": "Admin",
     "metaRestricted": "Restricted",
-    "metaSecrets": "Secrets are not stored",
     "noTenantTitle": "No tenant selected",
     "noTenantMessage": "Select a tenant to manage users, tokens, and agent pairings.",
     "unavailableTitle": "Admin data unavailable",
@@ -762,7 +690,6 @@
     "expiredRelative": "Expired {relative}",
     "revoke": "Revoke",
     "tenantTokens": "Tenant tokens",
-    "tenantTokensMeta": "{count} tokens",
     "tenantTokensDescription": "Scoped credentials for plugins and automation",
     "tenantTokensSummary": "{active} active · {total} total",
     "noTokensTitle": "No tenant tokens",
@@ -903,7 +830,6 @@
     "createSubmit": "Create tenant",
     "joinTitle": "Join tenant",
     "joinMessage": "Open an invitation URL from a tenant admin, or paste the token on the join page.",
-    "openJoin": "Open join page",
     "accessAction": "Create or join tenant",
     "accessActionLabel": "Select tenant access action",
     "accessActionDescription": "Choose how this authenticated identity should get tenant access.",
@@ -921,9 +847,7 @@
     "mobileMeta": "Mobile auth",
     "externalUnavailableTitle": "External auth unavailable",
     "readinessCheckMessage": "Pandar could not confirm that external auth is ready. Open Diagnostics to check the hub, then retry from Studio.",
-    "mobileReadinessCheckMessage": "Pandar could not confirm that external auth is ready. Open Diagnostics to check the hub, then retry from Android.",
     "externalConfigMessage": "External auth is disabled on this hub. Configure an auth provider before creating Studio login tickets.",
-    "mobileExternalConfigMessage": "External auth is disabled on this hub. Configure an auth provider before creating Android login tickets.",
     "authUnavailableTitle": "Auth token unavailable",
     "authMessage": "Sign in to Pandar before creating a Studio login ticket.",
     "mobileAuthMessage": "Sign in to Pandar before creating an Android login ticket.",
@@ -940,7 +864,6 @@
     "singleTenantReady": "Using your only available tenant. Confirm the local callback before signing in Studio.",
     "mobileSingleTenantReady": "Using your only available tenant.",
     "callbackUrl": "Local callback URL",
-    "callbackDetected": "Detected from Studio",
     "callbackDefault": "Using default callback",
     "callbackHelp": "Usually detected from Studio; edit only if Studio is listening on a different local URL.",
     "ticketSummary": "This ticket signs Studio into the selected tenant and returns to the local callback above.",
@@ -996,8 +919,6 @@
     "accessLoadErrorDescription": "Workspace settings are still available. Refresh the page to retry the protected administration request.",
     "pairAgentTitle": "Enroll an agent",
     "pairAgentDescription": "Create a one-time pairing credential for a new local agent.",
-    "activityTitle": "Recent activity",
-    "activityDescription": "The latest security and administration events for this workspace.",
     "accountTitle": "Account",
     "accountDescription": "Review and end your current Pandar session.",
     "currentSession": "Current session",
@@ -1030,10 +951,7 @@
     "themeDescription": "Use your system theme or choose a fixed dashboard theme.",
     "themeSystem": "System",
     "themeLight": "Light",
-    "themeDark": "Dark",
-    "logoutTitle": "Session",
-    "logoutDescription": "Sign out through the configured identity provider.",
-    "logoutUnavailable": "Logout is unavailable because no external sign-out URL is configured."
+    "themeDark": "Dark"
   },
   "join": {
     "title": "Join tenant",

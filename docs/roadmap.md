@@ -39,6 +39,7 @@ Remaining acceptance work:
 
 ## Recently Completed
 
+- Removed 82 dead translation keys from the dashboard message bundles; no user-facing strings changed.
 - Fixed the create-invite dialog so a successfully submitted non-Viewer role remains selected after React resets the form.
 - Published `v0.2.0`, including the Bambu Studio `02.08.02` ABI series, generated Hub clients, personal-preset synchronization, the Studio printer-event stream, and the current release artifact matrix.
 - Completed the software scopes for BRTC/eMMC transport (#5), session-fenced Studio eMMC capability projection (#6), transport URL persistence, and bounded concurrent Hub snapshot application (#8).

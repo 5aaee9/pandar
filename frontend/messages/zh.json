@@ -43,62 +43,7 @@
       "duplicate_queued": "复制任务已入队",
       "printer_control_queued": "打印机控制已入队",
       "agent_not_connected": "Agent 未连接到当前 Hub 进程"
-    },
-    "commandResult": {
-      "printerControlCompleted": "打印机控制已完成",
-      "printerControlFailed": "打印机控制失败",
-      "recoveryCommandSent": "恢复指令已发送，等待打印机状态确认"
-    },
-    "notification": {
-      "liveTitle": "实时连接",
-      "liveUnavailable": "由于未配置服务端认证令牌，实时更新不可用。",
-      "liveRetryingUnavailable": "实时更新不可用，正在重试。",
-      "liveDisconnectedRetrying": "实时更新已断开，正在重试。",
-      "printerStateTitle": "打印机状态",
-      "printerDetail": "{name} ({serial})",
-      "printFailedTitle": "打印失败",
-      "printCompleteTitle": "打印完成",
-      "jobDispatchDetail": "{filename} 派发 {status}",
-      "jobErrorFallback": "{filename}",
-      "errorsIncomplete": "Hub 数据不完整。"
     }
-  },
-  "tenantSettings": {
-    "title": "租户设置",
-    "subtitleTenant": "{name} 运维参考",
-    "subtitleNone": "未选择租户",
-    "meta": "不显示令牌值",
-    "groupTenant": "租户",
-    "id": "ID",
-    "slug": "Slug",
-    "created": "创建时间",
-    "groupAuth": "身份认证",
-    "source": "来源",
-    "provider": "提供商",
-    "cookieName": "Cookie 名称",
-    "secretValues": "密钥值",
-    "hidden": "已隐藏",
-    "groupOps": "运维",
-    "diagnosticsLabel": "诊断",
-    "diagnosticsValue": "见“诊断”分区",
-    "developerRef": "开发者参考",
-    "agentPairing": "Agent 配对",
-    "apiTokens": "API 令牌",
-    "linkedAgents": "已连接 Agent",
-    "noLinkedAgents": "暂无已连接 Agent。请在上方配对本地 Agent。",
-    "printerCompat": "打印机兼容性",
-    "noPrinters": "暂无上报打印机",
-    "runDiagnostics": "请在“诊断”分区运行诊断",
-    "unknownModel": "未知型号",
-    "tenant": "租户",
-    "webSocket": "WebSocket",
-    "lastEvent": "最近事件",
-    "auth": "认证",
-    "authValue": "{label} · Cookie {cookie}",
-    "noTenant": "无租户",
-    "notifications": "通知",
-    "noNotifications": "暂无实时通知",
-    "liveNotificationsAria": "实时通知"
   },
   "recovery": {
     "state": {
@@ -112,11 +57,6 @@
       "mqttFailed": "打印机未接受启动指令",
       "queueFailed": "无法在 Hub 排队该任务",
       "waitingStart": "等待开始打印"
-    },
-    "duration": {
-      "lessThanMinute": "不到一分钟",
-      "minutes": "{count, plural, other {# 分钟}}",
-      "hours": "{count, plural, other {# 小时}}"
     }
   },
   "tokens": {
@@ -173,11 +113,21 @@
     "artifactSummary": "{name} · {plate} · {objects} · {filament}"
   },
   "attention": {
-    "agent": { "title": "Agent {status}", "label": "{name} 处于 {status}" },
-    "printer": { "title": "打印机 {status}", "label": "{name} 处于 {status}" },
-    "jobPrintFailed": { "title": "打印失败" },
-    "jobDispatchFailed": { "title": "派发失败" },
-    "failureReason": "\u539f\u56e0\uff1a{reason}",
+    "agent": {
+      "title": "Agent {status}",
+      "label": "{name} 处于 {status}"
+    },
+    "printer": {
+      "title": "打印机 {status}",
+      "label": "{name} 处于 {status}"
+    },
+    "jobPrintFailed": {
+      "title": "打印失败"
+    },
+    "jobDispatchFailed": {
+      "title": "派发失败"
+    },
+    "failureReason": "原因：{reason}",
     "jobStalled": {
       "title": "任务停滞",
       "label": "{filename} · 15 分钟内未开始打印"
@@ -198,7 +148,10 @@
         "title": "实时更新已断开",
         "detail": "正在重新连接——显示最近一次已知状态。"
       },
-      "nominal": { "title": "一切正常", "detail": "机队没有异常。" },
+      "nominal": {
+        "title": "一切正常",
+        "detail": "机队没有异常。"
+      },
       "needAttention": {
         "title": "{count, plural, other {# 项需要关注}}",
         "detailCritical": "检测到故障——请查看下方。",
@@ -222,7 +175,6 @@
     "groupedByAgent": "按 Agent 分组",
     "ariaFleet": "机队状态",
     "ariaAttention": "需要关注",
-    "ariaSections": "分区",
     "action": {
       "refresh": "刷新",
       "reprint": "重新打印",
@@ -230,7 +182,9 @@
       "view": "查看"
     }
   },
-  "job": { "filename": "{filename}" },
+  "job": {
+    "filename": "{filename}"
+  },
   "jobFormat": {
     "layersNone": "层数 -",
     "layersOpenTotal": "层数 -/{total}",
@@ -275,26 +229,8 @@
     "stopAction": "停止打印",
     "printerOnly": "请在打印机屏幕上处理此错误。"
   },
-  "nav": {
-    "printers": "打印机",
-    "jobs": "打印任务",
-    "dispatch": "派发",
-    "recovery": "恢复",
-    "diagnostics": "诊断",
-    "activity": "实时活动",
-    "admin": "管理"
-  },
-  "header": {
-    "title": "Pandar 运维控制台",
-    "inventoryFrom": "来自 {apiUrl} 的租户打印机清单",
-    "tenant": "租户",
-    "view": "查看"
-  },
   "inventory": {
     "printersTitle": "打印机清单",
-    "printersSubtitleTenant": "{name} ({slug})",
-    "printersSubtitleNone": "未选择租户",
-    "printersMeta": "已上报 {count} 台",
     "noTenantTitle": "无租户",
     "noTenantMessage": "请联系管理员创建租户并将您加入，然后在侧边栏中选择。Agent 上报打印机后会显示在此处。",
     "noPrintersTitle": "暂无打印机上报",
@@ -308,7 +244,6 @@
     "unknownModel": "未知型号",
     "lastSeenOnline": "在线",
     "lastOnline": "上次在线：{relative}",
-    "managedBy": "管理者",
     "statusLabel": "状态",
     "nozzleTemperature": "喷嘴",
     "setNozzleTemperature": "设定喷嘴温度",
@@ -455,7 +390,6 @@
     "filterStatusAria": "按状态筛选",
     "jobsTitle": "打印任务",
     "jobsSubtitle": "排队、派发与实际打印历史",
-    "jobsMeta": "{count} 个任务",
     "newJob": "新建打印任务",
     "clearJobs": "清除任务",
     "clearJobFilters": "清除筛选",
@@ -497,7 +431,6 @@
     "unknownPrinter": "未知打印机",
     "details": "详情",
     "closeDialog": "关闭",
-    "recoveryLabel": "恢复：",
     "projectLabel": "项目：",
     "artifactLabel": "产物：",
     "materialLabel": "耗材：",
@@ -570,7 +503,6 @@
     "selectedNozzle": "所选喷头",
     "leftAms": "左侧 AMS",
     "rightAms": "右侧 AMS",
-    "sharedAms": "共享 AMS",
     "ams": "AMS",
     "external": "外置",
     "emptySlot": "空槽",
@@ -725,7 +657,6 @@
     "subtitleUnavailable": "{name} 管理数据不可用",
     "metaAdmin": "管理",
     "metaRestricted": "受限",
-    "metaSecrets": "不存储密钥",
     "noTenantTitle": "未选择租户",
     "noTenantMessage": "请选择一个租户以管理用户、令牌和 Agent 配对。",
     "unavailableTitle": "管理数据不可用",
@@ -759,7 +690,6 @@
     "expiredRelative": "{relative}过期",
     "revoke": "吊销",
     "tenantTokens": "租户令牌",
-    "tenantTokensMeta": "{count} 个令牌",
     "tenantTokensDescription": "供插件与自动化使用的权限凭据",
     "tenantTokensSummary": "有效 {active} 个 · 共 {total} 个",
     "noTokensTitle": "无租户令牌",
@@ -900,7 +830,6 @@
     "createSubmit": "创建租户",
     "joinTitle": "加入租户",
     "joinMessage": "打开租户管理员提供的邀请 URL，或在加入页面粘贴令牌。",
-    "openJoin": "打开加入页面",
     "accessAction": "创建或加入租户",
     "accessActionLabel": "选择租户访问操作",
     "accessActionDescription": "选择此认证身份获取租户访问权限的方式。",
@@ -918,9 +847,7 @@
     "mobileMeta": "移动端认证",
     "externalUnavailableTitle": "外部认证不可用",
     "readinessCheckMessage": "Pandar 无法确认外部认证已就绪。请打开诊断检查 Hub，然后从 Studio 重试。",
-    "mobileReadinessCheckMessage": "Pandar 无法确认外部认证已就绪。请打开诊断检查 Hub，然后从 Android 重试。",
     "externalConfigMessage": "此 Hub 已禁用外部认证。创建 Studio 登录票据前，请先配置认证提供商。",
-    "mobileExternalConfigMessage": "此 Hub 已禁用外部认证。创建 Android 登录票据前，请先配置认证提供商。",
     "authUnavailableTitle": "认证令牌不可用",
     "authMessage": "创建 Studio 登录票据前，请先登录 Pandar。",
     "mobileAuthMessage": "创建 Android 登录票据前，请先登录 Pandar。",
@@ -937,7 +864,6 @@
     "singleTenantReady": "正在使用唯一可用租户。登录 Studio 前，请确认本地回调地址。",
     "mobileSingleTenantReady": "正在使用唯一可用租户。",
     "callbackUrl": "本地回调 URL",
-    "callbackDetected": "已从 Studio 检测",
     "callbackDefault": "使用默认回调",
     "callbackHelp": "通常会从 Studio 自动检测；仅在 Studio 监听其他本地 URL 时编辑。",
     "ticketSummary": "此票据会将 Studio 登录到所选租户，并返回上方本地回调地址。",
@@ -993,8 +919,6 @@
     "accessLoadErrorDescription": "其他工作区设置仍可使用。请刷新页面以重试受保护的管理请求。",
     "pairAgentTitle": "接入 Agent",
     "pairAgentDescription": "为新的本地 Agent 创建一次性配对凭据。",
-    "activityTitle": "近期活动",
-    "activityDescription": "此工作区最近的安全与管理事件。",
     "accountTitle": "账号",
     "accountDescription": "查看并结束当前 Pandar 会话。",
     "currentSession": "当前会话",
@@ -1027,10 +951,7 @@
     "themeDescription": "跟随系统主题，或为控制台选择固定主题。",
     "themeSystem": "系统",
     "themeLight": "浅色",
-    "themeDark": "深色",
-    "logoutTitle": "会话",
-    "logoutDescription": "通过已配置的身份提供商退出登录。",
-    "logoutUnavailable": "未配置外部退出登录 URL，因此无法退出登录。"
+    "themeDark": "深色"
   },
   "join": {
     "title": "加入租户",
