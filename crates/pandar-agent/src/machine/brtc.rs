@@ -1,15 +1,19 @@
-use std::{sync::Arc, time::Duration};
+use std::{pin::Pin, time::Duration};
 
 use anyhow::{Context, anyhow, bail};
 use md5::{Digest, Md5};
-use rustls::{ClientConfig, pki_types::ServerName};
+use openssl::ssl::{SslConnector, SslMethod, SslVerifyMode, SslVersion};
+use rustls::{
+    client::danger::ServerCertVerifier,
+    pki_types::{CertificateDer, ServerName as PkiServerName, UnixTime},
+};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
     time::timeout,
 };
-use tokio_rustls::{TlsConnector, client::TlsStream};
+use tokio_openssl::SslStream;
 
 use crate::machine::{BambuPrinterEndpoint, mqtt::BambuLanCertificateVerifier};
 
@@ -72,31 +76,41 @@ pub fn md5_upper(bytes: &[u8]) -> String {
 }
 
 struct BrtcSession {
-    stream: TlsStream<TcpStream>,
+    stream: SslStream<TcpStream>,
     frame_seq: u32,
     wire_seq: u32,
 }
 
 impl BrtcSession {
     async fn connect(endpoint: &BambuPrinterEndpoint) -> anyhow::Result<Self> {
-        let connector = TlsConnector::from(brtc_tls_config(&endpoint.serial));
-        Self::connect_on(endpoint, (endpoint.host.as_str(), BRTC_PORT), connector).await
+        let verifier = BambuLanCertificateVerifier::new(&endpoint.serial);
+        Self::connect_on(endpoint, (endpoint.host.as_str(), BRTC_PORT), &verifier).await
     }
 
     async fn connect_on(
         endpoint: &BambuPrinterEndpoint,
         address: (&str, u16),
-        connector: TlsConnector,
+        verifier: &BambuLanCertificateVerifier,
     ) -> anyhow::Result<Self> {
         let tcp = TcpStream::connect(address)
             .await
             .with_context(|| format!("connect Bambu BRTC tunnel to {}", endpoint.host))?;
-        let server_name = ServerName::try_from(endpoint.serial.clone())
-            .with_context(|| format!("build BRTC TLS server name for {}", endpoint.serial))?;
-        let stream = connector
-            .connect(server_name, tcp)
+        let connector = brtc_ssl_connector()?;
+        let mut config = connector
+            .configure()
+            .context("configure Bambu BRTC TLS session")?;
+        // Bambu tunnel certificates carry the printer serial as the common
+        // name, so the SNI name is the serial (same choice as the rustls
+        // client this replaces).
+        let ssl = config
+            .into_ssl(endpoint.serial.as_str())
+            .context("build Bambu BRTC TLS session")?;
+        let mut stream = SslStream::new(ssl, tcp)?;
+        Pin::new(&mut stream)
+            .connect()
             .await
             .with_context(|| format!("start Bambu BRTC TLS session with {}", endpoint.host))?;
+        verify_brtc_peer_certificate(&stream, verifier, endpoint)?;
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.subsec_nanos())
@@ -295,20 +309,68 @@ impl BrtcSession {
     }
 }
 
-fn brtc_tls_config(expected_serial: &str) -> Arc<ClientConfig> {
-    brtc_tls_config_with_verifier(Arc::new(BambuLanCertificateVerifier::new(expected_serial)))
+fn brtc_ssl_connector() -> anyhow::Result<SslConnector> {
+    let mut builder = SslConnector::builder(SslMethod::tls())?;
+    // Pandar protected-transport floor: printers negotiate TLS 1.2 on this
+    // tunnel today and newer stacks can pick TLS 1.3.
+    builder
+        .set_min_proto_version(Some(SslVersion::TLS1_2))
+        .context("set Bambu BRTC TLS minimum version")?;
+    // The default OpenSSL cipher list includes the static-RSA TLS 1.2 key
+    // exchange the printer's :6000 stack requires; rustls cannot offer it.
+    // Certificate trust is enforced after the handshake through the shared
+    // Bambu certificate verifier (same rules as the MQTT and FTPS tunnels).
+    builder.set_verify(SslVerifyMode::NONE);
+    Ok(builder.build())
 }
 
-fn brtc_tls_config_with_verifier(verifier: Arc<BambuLanCertificateVerifier>) -> Arc<ClientConfig> {
-    let mut config =
-        ClientConfig::builder_with_provider(rustls::crypto::aws_lc_rs::default_provider().into())
-            .with_safe_default_protocol_versions()
-            .expect("aws-lc-rs provider supports rustls safe default protocol versions")
-            .dangerous()
-            .with_custom_certificate_verifier(verifier)
-            .with_no_client_auth();
-    config.alpn_protocols = Vec::new();
-    Arc::new(config)
+/// Verifies the :6000 tunnel certificate with the same rules as every other
+/// Bambu transport: leaf CN equals the printer serial, then the pinned-leaf,
+/// legacy-V1, or CA-chain policy of `BambuLanCertificateVerifier`.
+fn verify_brtc_peer_certificate(
+    stream: &SslStream<TcpStream>,
+    verifier: &BambuLanCertificateVerifier,
+    endpoint: &BambuPrinterEndpoint,
+) -> anyhow::Result<()> {
+    let leaf = stream
+        .ssl()
+        .peer_certificate()
+        .with_context(|| {
+            format!(
+                "Bambu BRTC tunnel at {} presented no TLS certificate",
+                endpoint.host
+            )
+        })?
+        .to_der()
+        .context("encode Bambu BRTC tunnel leaf certificate")?;
+    let mut intermediates = Vec::new();
+    if let Some(chain) = stream.ssl().peer_cert_chain() {
+        for certificate in chain {
+            let der = certificate
+                .to_der()
+                .context("encode Bambu BRTC tunnel chain certificate")?;
+            if der != leaf {
+                intermediates.push(CertificateDer::from(der));
+            }
+        }
+    }
+    let server_name = PkiServerName::try_from(endpoint.serial.clone())
+        .context("build Bambu BRTC tunnel verification name")?;
+    verifier
+        .verify_server_cert(
+            &CertificateDer::from(leaf),
+            &intermediates,
+            &server_name,
+            &[],
+            UnixTime::now(),
+        )
+        .map_err(|error| {
+            anyhow!(
+                "verify Bambu BRTC tunnel TLS certificate for {}: {error}",
+                endpoint.host
+            )
+        })?;
+    Ok(())
 }
 
 #[cfg(test)]

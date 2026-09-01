@@ -115,6 +115,9 @@
       nativeBuildInputs = [
         pkgs.pkg-config
         pkgs.protobuf
+        # openssl-sys builds its vendored OpenSSL from source; the Configure
+        # script is a Perl program.
+        pkgs.perl
       ]
       ++ lib.optional (system == "aarch64-linux") pkgs.lld;
 

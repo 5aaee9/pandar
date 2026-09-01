@@ -1,8 +1,11 @@
 use serde::Serialize;
 
 use super::*;
+use openssl::ssl::{SslContext, SslMethod, SslVerifyMode, SslVersion};
+use openssl::x509::X509;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use sha2::{Digest, Sha256};
+use std::{sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 use tokio_rustls::server::TlsStream;
@@ -147,15 +150,16 @@ impl rustls::server::ResolvesServerCert for StaticPeerCertificate {
     }
 }
 
-/// Builds the production client config with a verifier that pins the test
-/// certificate, mirroring the deployed per-serial pin mechanism.
-fn test_brtc_client_config() -> Arc<ClientConfig> {
+/// Builds the production client verifier with a pin on the test certificate,
+/// mirroring the deployed per-serial pin mechanism.
+fn test_brtc_verifier() -> Arc<BambuLanCertificateVerifier> {
     let certificate =
         CertificateDer::from_pem_slice(include_bytes!("mqtt/tests/tls/bambu-v1-cert.pem"))
             .expect("test Bambu v1 certificate is valid PEM");
     let fingerprint: [u8; 32] = Sha256::digest(certificate.as_ref()).into();
-    brtc_tls_config_with_verifier(Arc::new(
-        BambuLanCertificateVerifier::with_trusted_leaf_sha256("test-bambu-v1", fingerprint),
+    Arc::new(BambuLanCertificateVerifier::with_trusted_leaf_sha256(
+        "test-bambu-v1",
+        fingerprint,
     ))
 }
 
@@ -310,12 +314,12 @@ async fn session_exchanges_full_brtc_emmc_upload_with_port_6000_peer() {
         model: Some("H2D".to_owned()),
         name: None,
     };
-    let connector = TlsConnector::from(test_brtc_client_config());
+    let verifier = test_brtc_verifier();
     let file: Vec<u8> = (0..3072_usize).map(|index| (index % 251) as u8).collect();
     let expected_uploaded = file.clone();
 
     let flow = async {
-        let mut session = BrtcSession::connect_on(&endpoint, ("127.0.0.1", BRTC_PORT), connector)
+        let mut session = BrtcSession::connect_on(&endpoint, ("127.0.0.1", BRTC_PORT), &verifier)
             .await
             .expect("BRTC session connects to the :6000 peer");
         let digest = session
@@ -370,4 +374,154 @@ fn expected_upload_chunk_request(
         },
     })
     .unwrap()
+}
+
+/// Blocking reader for the static-RSA test peer; mirrors `read_peer_frame`
+/// over OpenSSL's synchronous stream.
+fn read_rsa_peer_frame(
+    stream: &mut openssl::ssl::SslStream<std::net::TcpStream>,
+) -> std::io::Result<PeerFrame> {
+    use std::io::Read as _;
+    let mut header = [0_u8; 16];
+    stream.read_exact(&mut header)?;
+    let payload_len = u32::from_le_bytes(header[0..4].try_into().expect("payload length"));
+    let magic = u32::from_le_bytes(header[4..8].try_into().expect("frame magic"));
+    let mut payload = vec![0_u8; payload_len as usize];
+    if payload_len > 0 {
+        stream.read_exact(&mut payload)?;
+    }
+    Ok(PeerFrame { magic, payload })
+}
+
+fn send_rsa_peer_frame(
+    stream: &mut openssl::ssl::SslStream<std::net::TcpStream>,
+    magic: u32,
+    payload: &[u8],
+) -> std::io::Result<()> {
+    use std::io::Write as _;
+    let mut header = [0_u8; 16];
+    header[0..4].copy_from_slice(&(payload.len() as u32).to_le_bytes());
+    header[4..8].copy_from_slice(&magic.to_le_bytes());
+    header[8..12].copy_from_slice(&1_u32.to_le_bytes());
+    stream.write_all(&header)?;
+    stream.write_all(payload)?;
+    Ok(())
+}
+
+fn send_rsa_peer_json(
+    stream: &mut openssl::ssl::SslStream<std::net::TcpStream>,
+    value: serde_json::Value,
+) -> std::io::Result<()> {
+    let body = serde_json::to_vec(&value).expect("peer reply JSON");
+    send_rsa_peer_frame(stream, BRTC_CTRL_CLIENT_MAGIC, &body)
+}
+
+/// An OpenSSL :6000 peer restricted to the exact profile real printers use:
+/// TLS 1.2 only, with the static-RSA `AES256-GCM-SHA384` suite as the only
+/// offer. rustls clients cannot negotiate this profile at all.
+fn spawn_static_rsa_peer(
+    cert_der: &[u8],
+    key_pem: &[u8],
+) -> (std::sync::mpsc::Receiver<u16>, std::thread::JoinHandle<()>) {
+    let (bound_sender, bound_receiver) = std::sync::mpsc::channel();
+    let cert_owned = cert_der.to_vec();
+    let key_owned = key_pem.to_vec();
+    let handle = std::thread::spawn(move || {
+        let certificate = X509::from_pem(&cert_owned).expect("peer RSA suite loads test leaf");
+        let private_key = openssl::pkey::PKey::private_key_from_pem(&key_owned)
+            .expect("peer RSA suite loads test key");
+        let mut builder = SslContext::builder(SslMethod::tls()).expect("peer SSL context");
+        builder
+            .set_certificate(&certificate)
+            .expect("peer RSA suite sets test leaf");
+        builder
+            .set_private_key(&private_key)
+            .expect("peer RSA suite sets test key");
+        builder
+            .set_min_proto_version(Some(SslVersion::TLS1_2))
+            .expect("peer minimum version");
+        builder
+            .set_max_proto_version(Some(SslVersion::TLS1_2))
+            .expect("peer maximum version");
+        builder
+            .set_cipher_list(BRTC_STATIC_RSA_CIPHER_LIST)
+            .expect("static RSA cipher list");
+        builder.set_verify(SslVerifyMode::NONE);
+        let context = builder.build();
+
+        let listener = std::net::TcpListener::bind(("127.0.0.1", BRTC_STATIC_RSA_PORT))
+            .expect("bind static-RSA test peer");
+        let bound_addr = listener
+            .local_addr()
+            .expect("static-RSA test peer local address");
+        bound_sender
+            .send(bound_addr.port())
+            .expect("announce static-RSA peer port");
+        let (socket, _) = listener
+            .accept()
+            .expect("static-RSA peer accepts one session");
+        let ssl = openssl::ssl::Ssl::new(&context).expect("peer SSL handle");
+        let mut session = openssl::ssl::SslStream::new(ssl, socket)
+            .expect("peer ssl stream over accepted socket");
+        openssl::ssl::SslStream::accept(&mut session).expect("peer TLS handshake");
+        assert_eq!(
+            session.ssl().version_str(),
+            "TLSv1.2",
+            "machine profile is TLS 1.2 only"
+        );
+
+        let login = read_rsa_peer_frame(&mut session).expect("peer reads login");
+        assert_eq!(login.magic, BRTC_LOGIN_CLIENT_MAGIC);
+        assert_eq!(
+            login.payload,
+            format!("{}{}", padded_ascii("bblp", 8), padded_ascii("12345678", 8)).into_bytes()
+        );
+        let mut header = [0_u8; 16];
+        header[0..4].copy_from_slice(&0_u32.to_le_bytes());
+        header[4..8].copy_from_slice(&BRTC_LOGIN_SERVER_MAGIC.to_le_bytes());
+        header[8..12].copy_from_slice(&1_u32.to_le_bytes());
+        std::io::Write::write_all(&mut session, &header).expect("peer writes login ack");
+        std::io::Write::flush(&mut session).expect("peer flushes");
+
+        let setup = read_rsa_peer_frame(&mut session).expect("peer reads setup");
+        assert_eq!(setup.magic, BRTC_CTRL_CLIENT_MAGIC);
+        send_rsa_peer_json(
+            &mut session,
+            serde_json::json!({"mtype": BRTC_CTRL_SETUP_MTYPE, "result": 0}),
+        )
+        .expect("peer writes setup ack");
+
+        // The client drops the session after the BRTC handshake; read until EOF.
+        let _ = read_rsa_peer_frame(&mut session);
+    });
+    (bound_receiver, handle)
+}
+
+const BRTC_STATIC_RSA_PORT: u16 = 6001;
+const BRTC_STATIC_RSA_CIPHER_LIST: &str = "AES256-GCM-SHA384";
+
+#[tokio::test]
+async fn session_negotiates_static_rsa_tls12_with_machine_profile() {
+    let cert_der = include_bytes!("mqtt/tests/tls/bambu-v1-cert.pem") as &[u8];
+    let key_pem = include_bytes!("mqtt/tests/tls/bambu-v1-key.pem") as &[u8];
+    let (bound_receiver, peer) = spawn_static_rsa_peer(cert_der, key_pem);
+    let port = bound_receiver
+        .recv_timeout(Duration::from_secs(10))
+        .expect("static-RSA peer binds before the client connects");
+    let endpoint = BambuPrinterEndpoint {
+        host: "127.0.0.1".to_owned(),
+        serial: "test-bambu-v1".to_owned(),
+        access_code: "12345678".to_owned(),
+        model: Some("H2D".to_owned()),
+        name: None,
+    };
+    let verifier = test_brtc_verifier();
+    timeout(
+        Duration::from_secs(20),
+        BrtcSession::connect_on(&endpoint, ("127.0.0.1", port), &verifier),
+    )
+    .await
+    .expect("static-RSA machine profile connects inside 20 seconds")
+    .expect("client negotiates the static-RSA TLS 1.2 machine profile");
+    peer.join().expect("static-RSA peer conversation completes");
 }

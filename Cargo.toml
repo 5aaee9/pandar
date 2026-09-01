@@ -59,6 +59,8 @@ sha2 = "0.11.0"
 rumqttc = { package = "rumqttc-v4-next", version = "=0.33.3" }
 rust-embed = "8.11.0"
 rustls = "=0.23.43"
+openssl = { version = "0.10", features = ["vendored"] }
+tokio-openssl = "0.6"
 sea-orm = { version = "2.0.0-rc.41", default-features = false, features = ["macros", "runtime-tokio-rustls", "sqlx-sqlite", "sqlx-postgres", "with-json", "with-time"] }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls", "sqlite", "postgres", "migrate", "macros"] }
 suppaftp = { version = "10.0.2", default-features = false, features = ["tokio-rustls-aws-lc-rs", "deprecated"] }
