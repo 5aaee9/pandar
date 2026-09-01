@@ -28,7 +28,6 @@ use crate::machine::{
     mqtt::BambuLanCertificateVerifier,
 };
 
-#[allow(dead_code)]
 const DEFAULT_FTPS_TIMEOUT_SECONDS: u64 = 30;
 
 #[derive(Debug, Clone)]
@@ -90,13 +89,11 @@ impl FtpsMachineFileTransfer {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct FtpsProfile {
     pub(crate) cap_tls_1_2: bool,
 }
 
-#[allow(dead_code)]
 impl FtpsProfile {
     pub(crate) fn for_model(model: Option<&str>) -> Self {
         Self {
@@ -142,7 +139,6 @@ fn ftps_tls_config(
     Arc::new(config)
 }
 
-#[allow(dead_code)]
 fn bambu_lan_ftps_connector(profile: FtpsProfile, expected_serial: &str) -> AsyncRustlsConnector {
     tokio_rustls::TlsConnector::from(bambu_lan_ftps_tls_config(profile, expected_serial)).into()
 }
@@ -194,18 +190,16 @@ async fn upload_in_bambu_chunks(
     Ok(())
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) fn bambu_lan_ftps_tls_config_for_default_profile() -> Arc<ClientConfig> {
     bambu_lan_ftps_tls_config(FtpsProfile::for_model(None), "test-printer")
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 enum UploadVerification {
     Verified,
 }
 
-#[allow(dead_code)]
 fn verify_uploaded_size(
     expected: usize,
     actual: Option<usize>,
@@ -220,36 +214,6 @@ fn verify_uploaded_size(
             "uploaded size mismatch for {path}: server did not return SIZE"
         )),
     }
-}
-
-#[allow(dead_code)]
-async fn suppaftp_api_compile_proof(
-    host: String,
-    access_code: String,
-    connector: AsyncRustlsConnector,
-) -> suppaftp::FtpResult<()> {
-    let mut ftp = AsyncRustlsFtpStream::connect_secure_implicit(
-        (host.as_str(), BAMBU_FILE_TRANSFER_PORT),
-        connector,
-        host.as_str(),
-    )
-    .await?;
-    ftp.login(BAMBU_FILE_TRANSFER_USERNAME, access_code.as_str())
-        .await?;
-    ftp.custom_command("PBSZ 0", &[Status::CommandOk]).await?;
-    ftp.custom_command("PROT P", &[Status::CommandOk]).await?;
-    ftp.transfer_type(FileType::Binary).await?;
-
-    let mut data = ftp.put_with_stream("pandar-api-proof.3mf").await?;
-    for chunk in b"proof".chunks(BAMBU_FILE_TRANSFER_CHUNK_SIZE) {
-        data.write_all(chunk)
-            .await
-            .map_err(suppaftp::FtpError::ConnectionError)?;
-    }
-    ftp.finalize_put_stream(data).await?;
-    ftp.size("pandar-api-proof.3mf").await?;
-    ftp.rm("pandar-api-proof.3mf").await?;
-    Ok(())
 }
 
 #[async_trait]
