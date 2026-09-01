@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
+import { createJoinLink } from "./admin-actions";
 import type { JoinLink, Tenant } from "./dashboard-types";
 import { InvitesSection } from "./users-invites";
 
@@ -99,5 +100,32 @@ describe("InvitesSection", () => {
     expect(screen.getByText("7 days")).toBeVisible();
     expect(screen.getByText("30 days")).toBeVisible();
     expect(screen.getByLabelText("Max uses")).toHaveValue(1);
+  });
+
+  it("keeps the selected role checked after a successful create", async () => {
+    const event = userEvent.setup();
+    vi.mocked(createJoinLink).mockResolvedValue({
+      ok: true,
+      kind: "join_link",
+      joinLink: joinLink({ role: "tenant_admin" }),
+      token: "secret-token",
+      message: "Join link created",
+    });
+    renderSection([]);
+
+    await event.click(screen.getByRole("button", { name: "Create invite" }));
+    const adminRadio = await screen.findByRole("radio", {
+      name: /Tenant admin/,
+    });
+    await event.click(adminRadio);
+    expect(adminRadio).toBeChecked();
+
+    await event.click(screen.getByRole("button", { name: "Create link" }));
+
+    expect(await screen.findByText("Join link created")).toBeVisible();
+    expect(
+      screen.getByRole("radio", { name: /Tenant admin/ }),
+    ).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Viewer/ })).not.toBeChecked();
   });
 });

@@ -244,6 +244,8 @@ function CreateInviteForm({
   const tTokens = useTranslations("tokens");
   const queryClient = useQueryClient();
   const [state, formAction, pending] = useActionState(createJoinLink, null);
+  const [selectedRole, setSelectedRole] =
+    useState<(typeof roles)[number]>("viewer");
   const locked = pending || state?.ok === true;
 
   useMutationFeedback(state, {
@@ -272,8 +274,9 @@ function CreateInviteForm({
               >
                 <input
                   className="mt-0.5"
-                  defaultChecked={role === "viewer"}
+                  defaultChecked={selectedRole === role}
                   name="role"
+                  onChange={() => setSelectedRole(role)}
                   type="radio"
                   value={role}
                 />
