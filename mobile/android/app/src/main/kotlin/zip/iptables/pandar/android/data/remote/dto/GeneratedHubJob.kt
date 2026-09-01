@@ -104,7 +104,10 @@ data class JobPrintDto(
 data class JobCommandDto(
     val id: String,
     val kind: String,
-    val status: CommandStatusDto
+    val status: CommandStatusDto,
+    @SerialName("uploaded_url")
+    @Required
+    val uploadedUrl: String?
 )
 
 @Serializable

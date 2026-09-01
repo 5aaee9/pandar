@@ -51,6 +51,7 @@ function job({
       id: 'command-1',
       kind: 'print_project_file',
       status: commandStatus,
+      uploaded_url: 'brtc://emmc/part.3mf',
     },
     artifact: {
       id: 'artifact-1',

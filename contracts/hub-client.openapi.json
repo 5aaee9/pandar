@@ -2646,7 +2646,8 @@
         "required": [
           "id",
           "kind",
-          "status"
+          "status",
+          "uploaded_url"
         ],
         "properties": {
           "id": {
@@ -2657,6 +2658,12 @@
           },
           "status": {
             "$ref": "#/components/schemas/CommandStatus"
+          },
+          "uploaded_url": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "x-typescript-group": "job"

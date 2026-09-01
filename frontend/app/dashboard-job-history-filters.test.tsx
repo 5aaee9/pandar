@@ -56,6 +56,7 @@ function job(overrides: Partial<Job> = {}): Job {
       id: 'command-1',
       kind: 'print_project_file',
       status: 'succeeded',
+    uploaded_url: 'brtc://emmc/part.3mf',
     },
     artifact: {
       id: 'artifact-1',

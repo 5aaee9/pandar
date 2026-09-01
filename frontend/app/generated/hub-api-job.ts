@@ -55,6 +55,7 @@ export type JobCommand = {
   id: string;
   kind: string;
   status: CommandStatus;
+  uploaded_url: string | null;
 };
 
 export type JobArtifact = {

@@ -81,6 +81,7 @@ pub fn job_from_model_with_usage(
         ams_mapping_json: model.ams_mapping_json,
         ams_mapping2_json: model.ams_mapping2_json,
         ams_mapping_info_json: model.ams_mapping_info_json,
+        uploaded_url: model.uploaded_url,
         filament_usage,
         created_at: model.created_at,
         updated_at: model.updated_at,

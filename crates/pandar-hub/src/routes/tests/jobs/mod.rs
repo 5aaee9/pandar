@@ -73,6 +73,7 @@ struct JobCommandResponse {
     id: String,
     kind: String,
     status: String,
+    uploaded_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

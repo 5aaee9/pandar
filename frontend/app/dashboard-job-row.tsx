@@ -183,6 +183,13 @@ export function JobRow({
                 {job.print.active_file}
               </DetailItem>
             ) : null}
+            {job.command.uploaded_url ? (
+              <DetailItem label={t('uploadedUrlLabel')} wide>
+                <span className="break-all font-mono text-xs">
+                  {job.command.uploaded_url}
+                </span>
+              </DetailItem>
+            ) : null}
             {job.print.printer_state ? (
               <DetailItem label={t('stateLabel')}>
                 {job.print.printer_state}

@@ -503,6 +503,7 @@
     "materialLabel": "耗材：",
     "jobLabel": "任务：",
     "fileLabel": "文件：",
+    "uploadedUrlLabel": "上传地址：",
     "stateLabel": "状态：",
     "createdLabel": "创建：",
     "startedLabel": "开始：",

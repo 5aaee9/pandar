@@ -33,6 +33,7 @@ pub struct Model {
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
     pub ams_mapping_info_json: Option<String>,
+    pub uploaded_url: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

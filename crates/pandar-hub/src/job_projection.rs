@@ -48,6 +48,7 @@ struct EventJobCommand {
     id: String,
     kind: String,
     status: String,
+    uploaded_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,6 +108,7 @@ impl TryFrom<JobWithArtifact> for JobProjection {
                 id: job.command_id.to_string(),
                 kind: "print_project_file".to_owned(),
                 status: job.status.to_string(),
+                uploaded_url: job.uploaded_url.clone(),
             },
             artifact: EventJobArtifact::try_from(artifact)?,
             material: EventJobMaterial::try_from(&job)?,

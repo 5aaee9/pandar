@@ -506,6 +506,7 @@
     "materialLabel": "Material:",
     "jobLabel": "Job:",
     "fileLabel": "File:",
+    "uploadedUrlLabel": "Uploaded to:",
     "stateLabel": "State:",
     "createdLabel": "Created:",
     "startedLabel": "Started:",

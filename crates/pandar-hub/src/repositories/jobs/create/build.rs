@@ -62,6 +62,7 @@ pub(super) fn build_created_job(
             ams_mapping_json: options.ams_mapping_json,
             ams_mapping2_json: options.ams_mapping2_json,
             ams_mapping_info_json: options.ams_mapping_info_json,
+            uploaded_url: None,
             filament_usage: Vec::new(),
             created_at: now.clone(),
             updated_at: now,

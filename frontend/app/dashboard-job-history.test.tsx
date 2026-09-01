@@ -55,6 +55,7 @@ function job(overrides: Partial<Job> = {}): Job {
       id: 'command-1',
       kind: 'print_project_file',
       status: 'succeeded',
+    uploaded_url: 'brtc://emmc/part.3mf',
     },
     artifact: {
       id: 'artifact-1',
@@ -164,7 +165,12 @@ describe('JobHistory actions', () => {
             jobs={[
               job({
                 status: 'queued',
-                command: { id: 'command-1', kind: 'start_print', status: 'queued' },
+                command: {
+                  id: 'command-1',
+                  kind: 'start_print',
+                  status: 'queued',
+                  uploaded_url: null,
+                },
               }),
             ]}
             nowMs={0}
@@ -324,7 +330,7 @@ describe('JobHistory actions', () => {
         started_at: null,
         finished_at: null,
       },
-      command: { id: 'command-1', kind: 'print_project_file', status: 'failed' },
+      command: { id: 'command-1', kind: 'print_project_file', status: 'failed', uploaded_url: null },
     })
     const { rerender } = renderHistory({ jobs: [failedBeforePrint] })
 

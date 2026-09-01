@@ -65,6 +65,49 @@ pub(in crate::repositories::tests) async fn exercise_submission_id_correlation(
 }
 
 #[tokio::test]
+async fn successful_dispatch_persists_uploaded_url_for_projection() {
+    let (database, tenants, agents, _, _, jobs) = repositories().await;
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id =
+        crate::repositories::test_helpers::insert_printer_fixture(&database, tenant.id, agent.id)
+            .await
+            .unwrap();
+    let created = jobs
+        .create_print_job(create_input_with_filename(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            "uploaded-url-artifact",
+            "Untitled.gcode.3mf",
+        ))
+        .await
+        .unwrap();
+    succeed_dispatch(
+        &jobs,
+        &created,
+        tenant.id,
+        agent.id,
+        &printer_id,
+        SUBMISSION_ID,
+    )
+    .await;
+
+    let projected = crate::job_projection::JobProjection::try_from(
+        jobs.get_for_tenant(tenant.id, created.job.id)
+            .await
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    let projected = serde_json::to_value(&projected).unwrap();
+    assert_eq!(
+        projected["command"]["uploaded_url"],
+        serde_json::json!(format!("brtc://emmc/{}", created.artifact.filename))
+    );
+}
+
+#[tokio::test]
 async fn stale_submission_id_resumes_a_stalled_job() {
     let (database, tenants, agents, _, _, jobs) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();

@@ -81,6 +81,7 @@ describe("decodeHubResponse", () => {
             id: "command-1",
             kind: "print_project_file",
             status: "acknowledged",
+            uploaded_url: "brtc://emmc/part.3mf",
           },
           artifact: {
             id: "artifact-1",

@@ -225,6 +225,7 @@ fn job_from_parts_validates_required_fields_and_status() {
             ams_mapping2_json: None,
             ams_mapping_info_json: None,
             filament_usage: Vec::new(),
+            uploaded_url: None,
             created_at: created_at.clone(),
             updated_at: created_at.clone(),
         })
@@ -279,6 +280,7 @@ fn job_from_parts_rehydrates_print_state() {
         ams_mapping2_json: None,
         ams_mapping_info_json: None,
         filament_usage: Vec::new(),
+        uploaded_url: None,
         created_at: created_at.clone(),
         updated_at: created_at,
     })
@@ -328,6 +330,7 @@ fn job_from_parts_rejects_invalid_print_status() {
             ams_mapping2_json: None,
             ams_mapping_info_json: None,
             filament_usage: Vec::new(),
+            uploaded_url: None,
             created_at: created_at.clone(),
             updated_at: created_at,
         })

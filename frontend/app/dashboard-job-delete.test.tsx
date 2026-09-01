@@ -57,6 +57,7 @@ function job(overrides: Partial<Job> = {}): Job {
       id: 'command-1',
       kind: 'print_project_file',
       status: 'succeeded',
+    uploaded_url: 'brtc://emmc/part.3mf',
     },
     artifact: {
       id: 'artifact-1',
@@ -131,6 +132,7 @@ describe('JobHistory row actions', () => {
         id: 'command-1',
         kind: 'other',
         status: 'failed',
+      uploaded_url: 'brtc://emmc/part.3mf',
       },
     })
 
@@ -236,6 +238,7 @@ describe('JobHistory row actions', () => {
             id: 'command-1',
             kind: 'print_project_file',
             status: 'failed',
+          uploaded_url: 'brtc://emmc/part.3mf',
           },
         }),
       ],
@@ -273,6 +276,7 @@ describe('JobHistory row actions', () => {
             id: 'command-1',
             kind: 'print_project_file',
             status: 'failed',
+          uploaded_url: 'brtc://emmc/part.3mf',
           },
         }),
       ],
@@ -300,6 +304,7 @@ describe('JobHistory row actions', () => {
             id: 'command-1',
             kind: 'print_project_file',
             status: 'queued',
+          uploaded_url: 'brtc://emmc/part.3mf',
           },
         }),
       ],

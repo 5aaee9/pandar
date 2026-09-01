@@ -1,6 +1,10 @@
 use anyhow::Context;
 use pandar_core::{AgentId, CommandId, CommandRecord, CommandStatus, JobStatus, TenantId};
-use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
+use sea_orm::{
+    ActiveValue::{NotSet, Set},
+    ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
+};
+use serde::Deserialize;
 
 use crate::{
     entities::{commands, jobs},
@@ -17,6 +21,12 @@ pub struct PrintCommandTransition<'a> {
     pub result_json: Option<String>,
     pub allowed_statuses: &'a [CommandStatus],
     pub action: &'static str,
+}
+
+#[derive(Deserialize)]
+struct PrintProjectFileUploadedUrl {
+    #[serde(rename = "uploaded_url")]
+    uploaded_url: Option<String>,
 }
 
 pub async fn transition_print_command<C>(
@@ -77,10 +87,36 @@ async fn update_job_for_command<C>(
 where
     C: ConnectionTrait,
 {
+    // The successful print-project-file result carries the transport URL the
+    // agent published (brtc://emmc/... or the FTPS location); project it onto
+    // the job so dashboards can show where the artifact landed.
+    let uploaded_url = match (
+        &transition.command_status,
+        transition.result_json.as_deref(),
+    ) {
+        (CommandStatus::Succeeded, Some(result_json)) => {
+            match serde_json::from_str::<PrintProjectFileUploadedUrl>(result_json) {
+                Ok(parsed) => parsed.uploaded_url,
+                Err(error) => {
+                    tracing::warn!(
+                        error = %format!("{error:#}"),
+                        "failed to parse uploaded URL from print result"
+                    );
+                    None
+                }
+            }
+        }
+        _ => None,
+    };
+    let uploaded_url_value = match uploaded_url {
+        Some(url) => Set(Some(url)),
+        None => NotSet,
+    };
     let result = jobs::Entity::update_many()
         .set(jobs::ActiveModel {
             status: Set(transition.job_status.as_str().to_owned()),
             error: Set(transition.error.clone()),
+            uploaded_url: uploaded_url_value,
             updated_at: Set(pandar_core::created_at_now()),
             ..Default::default()
         })
