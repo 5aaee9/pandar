@@ -17,13 +17,15 @@ pub(super) struct MqttEventLoopPump {
 }
 
 struct MqttReportQueue {
+    serial: String,
     reports: Mutex<VecDeque<anyhow::Result<Value>>>,
     ready: Notify,
 }
 
 impl MqttReportQueue {
-    fn new() -> Self {
+    fn new(serial: String) -> Self {
         Self {
+            serial,
             reports: Mutex::new(VecDeque::with_capacity(MQTT_REPORT_QUEUE_CAPACITY)),
             ready: Notify::new(),
         }
@@ -36,13 +38,18 @@ impl MqttReportQueue {
             // loss later frames cannot repair; surface the loss instead of
             // silently dropping entries so the consumer fails and requests a
             // fresh pushall resync.
+            let dropped = reports.len();
             tracing::warn!(
+                serial = %self.serial,
+                dropped,
                 capacity = MQTT_REPORT_QUEUE_CAPACITY,
                 "MQTT report queue overflow; failing the report consumer for resync"
             );
             reports.clear();
             reports.push_back(Err(anyhow::anyhow!(
-                "MQTT report queue overflowed its capacity of {MQTT_REPORT_QUEUE_CAPACITY}"
+                "MQTT report queue for {} overflowed its capacity of {MQTT_REPORT_QUEUE_CAPACITY}; \
+                 dropped {dropped} buffered reports",
+                self.serial
             )));
         }
         reports.push_back(report);
@@ -73,8 +80,8 @@ impl MqttReportQueue {
 }
 
 impl MqttEventLoopPump {
-    pub(super) fn spawn(event_loop: EventLoop) -> Self {
-        let reports = Arc::new(MqttReportQueue::new());
+    pub(super) fn spawn(event_loop: EventLoop, serial: String) -> Self {
+        let reports = Arc::new(MqttReportQueue::new(serial));
         let task = tokio::spawn(run_event_loop(event_loop, Arc::clone(&reports)));
         Self { task, reports }
     }
@@ -122,7 +129,7 @@ mod tests {
 
     #[tokio::test]
     async fn report_queue_overflow_surfaces_an_error_instead_of_dropping_entries() {
-        let reports = MqttReportQueue::new();
+        let reports = MqttReportQueue::new("SERIAL-OVERFLOW".to_owned());
         for sequence in 0..MQTT_REPORT_QUEUE_CAPACITY {
             reports
                 .push(Ok(serde_json::json!({"sequence": sequence})))
@@ -140,10 +147,46 @@ mod tests {
             .await
             .expect_err("overflow must fail the consumer for resync");
         assert!(error.to_string().contains("overflow"), "{error:#}");
+        assert!(error.to_string().contains("SERIAL-OVERFLOW"), "{error:#}");
 
         assert_eq!(
             reports.next().await.unwrap()["sequence"],
             MQTT_REPORT_QUEUE_CAPACITY
+        );
+    }
+
+    #[test]
+    fn report_queue_overflow_warning_names_the_printer() {
+        let (logs, ()) = crate::test_tracing::capture_logs(|| {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    let reports = MqttReportQueue::new("SERIAL-NAMED".to_owned());
+                    for sequence in 0..MQTT_REPORT_QUEUE_CAPACITY {
+                        reports
+                            .push(Ok(serde_json::json!({"sequence": sequence})))
+                            .await;
+                    }
+
+                    reports
+                        .push(Ok(serde_json::json!({
+                            "sequence": MQTT_REPORT_QUEUE_CAPACITY
+                        })))
+                        .await;
+                });
+        });
+
+        let contents = logs.contents();
+        assert!(
+            contents.contains("MQTT report queue overflow"),
+            "{contents}"
+        );
+        assert!(contents.contains("SERIAL-NAMED"), "{contents}");
+        assert!(
+            contents.contains(&format!("dropped={MQTT_REPORT_QUEUE_CAPACITY}")),
+            "{contents}"
         );
     }
 }

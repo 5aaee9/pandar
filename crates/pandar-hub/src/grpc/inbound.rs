@@ -1,5 +1,5 @@
 use pandar_core::{AgentId, TenantId};
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinSet};
 use tokio_stream::{Stream, StreamExt};
 use tonic::Status;
 
@@ -8,7 +8,7 @@ use crate::{
     grpc::commands::repository_status,
     grpc::print_reports::handle_print_report,
     grpc::printer_materials::handle_materials_snapshot,
-    grpc::printer_snapshots::handle_snapshot,
+    grpc::printer_snapshots::{apply_snapshot, handle_snapshot, parse_snapshot},
     repositories::RepositoryError,
     sessions::{AgentSession, SessionToken, live_commands::fail_pending_live_commands},
 };
@@ -24,6 +24,11 @@ mod printer_device_features;
 pub(super) use commands::{handle_ack, handle_result};
 use commands::{handle_command_ack, handle_command_result};
 
+/// Printer snapshots apply off the serial inbound loop so a slow snapshot
+/// cannot starve the events behind it; the bound keeps a saturated handler
+/// applying backpressure to the agent stream instead of spawning unboundedly.
+const MAX_CONCURRENT_SNAPSHOT_APPLICATIONS: usize = 8;
+
 pub(super) fn spawn_inbound_handler(
     state: AppState,
     tenant_id: TenantId,
@@ -33,6 +38,7 @@ pub(super) fn spawn_inbound_handler(
     status_sender: mpsc::Sender<Status>,
 ) {
     tokio::spawn(async move {
+        let mut snapshot_tasks = JoinSet::new();
         while let Some(event) = inbound.next().await {
             let event = match event {
                 Ok(event) => event,
@@ -45,10 +51,65 @@ pub(super) fn spawn_inbound_handler(
                 }
             };
 
-            if let Err(err) = handle_event(&state, tenant_id, agent_id, token, event).await {
+            if let Err(err) = validate_event_identity(&event, tenant_id, agent_id) {
                 tracing::error!(error = ?err, "failed to handle agent event");
                 let _ = status_sender.send(err).await;
                 break;
+            }
+
+            let AgentEvent {
+                tenant_id: event_tenant_id,
+                agent_id: event_agent_id,
+                event_id,
+                event: kind,
+            } = event;
+            let Some(agent_event::Event::PrinterSnapshot(snapshot)) = kind else {
+                let event = AgentEvent {
+                    tenant_id: event_tenant_id,
+                    agent_id: event_agent_id,
+                    event_id,
+                    event: kind,
+                };
+                if let Err(err) = handle_event(&state, tenant_id, agent_id, token, event).await {
+                    tracing::error!(error = ?err, "failed to handle agent event");
+                    let _ = status_sender.send(err).await;
+                    break;
+                }
+                continue;
+            };
+
+            // Snapshot payload validation stays on the serial loop so a
+            // malformed snapshot keeps failing the stream fast; the database
+            // transaction and event fanout apply concurrently.
+            let parsed = match parse_snapshot(snapshot) {
+                Ok(parsed) => parsed,
+                Err(err) => {
+                    tracing::error!(error = ?err, "failed to handle agent event");
+                    let _ = status_sender.send(err).await;
+                    break;
+                }
+            };
+            while snapshot_tasks.len() >= MAX_CONCURRENT_SNAPSHOT_APPLICATIONS {
+                if snapshot_tasks.join_next().await.is_none() {
+                    break;
+                }
+            }
+            let task_state = state.clone();
+            snapshot_tasks.spawn(async move {
+                if let Err(err) =
+                    apply_snapshot(&task_state, tenant_id, agent_id, token, parsed).await
+                {
+                    tracing::error!(
+                        error = ?err,
+                        "failed to apply agent printer snapshot"
+                    );
+                }
+            });
+        }
+
+        while let Some(result) = snapshot_tasks.join_next().await {
+            if let Err(err) = result {
+                tracing::error!(error = ?err, "agent printer snapshot task failed to join");
             }
         }
 
@@ -96,12 +157,10 @@ pub(super) async fn disconnect_session(
     state.sessions().remove_if_current(agent_id, token).await
 }
 
-pub(super) async fn handle_event(
-    state: &AppState,
+fn validate_event_identity(
+    event: &AgentEvent,
     tenant_id: TenantId,
     agent_id: AgentId,
-    token: SessionToken,
-    event: AgentEvent,
 ) -> Result<(), Status> {
     let event_tenant_id = TenantId::parse(&event.tenant_id)
         .map_err(|_| Status::invalid_argument("tenant_id must be a UUID"))?;
@@ -112,6 +171,17 @@ pub(super) async fn handle_event(
             "event identity does not match authenticated session",
         ));
     }
+    Ok(())
+}
+
+pub(super) async fn handle_event(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    token: SessionToken,
+    event: AgentEvent,
+) -> Result<(), Status> {
+    validate_event_identity(&event, tenant_id, agent_id)?;
 
     match event.event {
         Some(agent_event::Event::Heartbeat(heartbeat)) => {

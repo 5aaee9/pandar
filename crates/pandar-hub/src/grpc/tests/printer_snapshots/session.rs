@@ -286,6 +286,69 @@ async fn replacement_session_blocks_old_snapshot_commit() {
 }
 
 #[tokio::test]
+async fn slow_snapshot_fanout_does_not_block_subsequent_snapshot_on_the_stream() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let (_stream, sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+    let mut pause = crate::grpc::printer_snapshots::snapshot_fanout_pause::install("SN-SLOW");
+
+    sender
+        .send(Ok(snapshot_event(
+            tenant_id,
+            agent_id,
+            snapshot("SN-SLOW", "Slow Printer", "X1C", "printing"),
+        )))
+        .await
+        .unwrap();
+    pause.wait_until_reached().await;
+
+    // The first snapshot has committed its aggregate and is now stuck in the
+    // event fanout; a subsequent snapshot on the same stream must still apply.
+    sender
+        .send(Ok(snapshot_event(
+            tenant_id,
+            agent_id,
+            snapshot("SN-FAST", "Fast Printer", "P1S", "idle"),
+        )))
+        .await
+        .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let printers = state.printers().list_for_tenant(tenant_id).await.unwrap();
+            if printers
+                .iter()
+                .any(|printer| printer.serial_number == "SN-FAST")
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("subsequent snapshot must apply while the first snapshot fanout is paused");
+
+    // The paused snapshot's current-session aggregate committed atomically
+    // before its fanout stalled.
+    let printers = state.printers().list_for_tenant(tenant_id).await.unwrap();
+    assert!(
+        printers
+            .iter()
+            .any(|printer| printer.serial_number == "SN-SLOW" && printer.status == "printing")
+    );
+
+    pause.resume();
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    let printers = state.printers().list_for_tenant(tenant_id).await.unwrap();
+    assert_eq!(printers.len(), 2);
+    assert!(
+        state.sessions().get(agent_id).await.is_some(),
+        "the stream must survive concurrent snapshot application"
+    );
+}
+
+#[tokio::test]
 async fn replacement_waits_for_snapshot_that_already_owns_transition_lease() {
     let state = fixture_state().await;
     let (tenant_id, agent_id) = tenant_agent(&state).await;

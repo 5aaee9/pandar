@@ -1,7 +1,7 @@
 use pandar_core::{
-    AgentId, BambuNozzleDevice, BambuNozzleHolder, BambuNozzleInfo, BambuNozzleSystem,
-    PrinterCoolingFan, PrinterCoolingFanKind, PrinterCoolingMode, PrinterCoolingSystem,
-    StudioFiniteF64, TenantId, valid_physical_nozzle_id,
+    AgentId, BambuDeviceFeatures, BambuNozzleDevice, BambuNozzleHolder, BambuNozzleInfo,
+    BambuNozzleSystem, PrinterCoolingFan, PrinterCoolingFanKind, PrinterCoolingMode,
+    PrinterCoolingSystem, StudioFiniteF64, TenantId, valid_physical_nozzle_id,
 };
 use tonic::Status;
 
@@ -13,6 +13,12 @@ use crate::{
 };
 use pandar_protocol::agent::v1::PrinterSnapshot;
 
+pub(super) struct ParsedPrinterSnapshot {
+    upsert: PrinterSnapshotUpsert,
+    device_features: Option<BambuDeviceFeatures>,
+    device_features2: Option<BambuDeviceFeatures>,
+}
+
 pub async fn handle_snapshot(
     state: &AppState,
     tenant_id: TenantId,
@@ -20,6 +26,11 @@ pub async fn handle_snapshot(
     token: SessionToken,
     snapshot: PrinterSnapshot,
 ) -> Result<(), Status> {
+    let parsed = parse_snapshot(snapshot)?;
+    apply_snapshot(state, tenant_id, agent_id, token, parsed).await
+}
+
+pub(super) fn parse_snapshot(snapshot: PrinterSnapshot) -> Result<ParsedPrinterSnapshot, Status> {
     let serial_number = required(&snapshot.serial, "serial must not be blank")?;
     let name = required(&snapshot.name, "name must not be blank")?;
     let status = trim_optional(snapshot.state);
@@ -37,7 +48,7 @@ pub async fn handle_snapshot(
         .transpose()?;
     let observed_at = pandar_core::created_at_now();
 
-    let snapshot = PrinterSnapshotUpsert {
+    let upsert = PrinterSnapshotUpsert {
         serial_number,
         host: trim_optional(snapshot.host),
         access_code: trim_optional(snapshot.access_code),
@@ -71,6 +82,27 @@ pub async fn handle_snapshot(
         connection_authoritative: snapshot.connection_authoritative,
         telemetry_authoritative: snapshot.telemetry_authoritative,
     };
+    Ok(ParsedPrinterSnapshot {
+        upsert,
+        device_features,
+        device_features2,
+    })
+}
+
+pub(super) async fn apply_snapshot(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    token: SessionToken,
+    parsed: ParsedPrinterSnapshot,
+) -> Result<(), Status> {
+    let ParsedPrinterSnapshot {
+        upsert,
+        device_features,
+        device_features2,
+    } = parsed;
+    #[cfg(test)]
+    let fanout_serial = upsert.serial_number.clone();
     let _lease = state
         .sessions()
         .transition_lease_for_session(agent_id, token)
@@ -84,7 +116,7 @@ pub async fn handle_snapshot(
             tenant_id,
             agent_id,
             &token.persisted_id(),
-            snapshot,
+            upsert,
             device_features,
             device_features2,
         )
@@ -94,6 +126,12 @@ pub async fn handle_snapshot(
         Err(RepositoryError::AgentSessionNotCurrent) => return Ok(()),
         Err(err) => return Err(repository_status(err)),
     };
+    // The current-session aggregate is committed; release the transition lease
+    // so concurrent snapshot applications on the same agent stream only
+    // serialize on the database fence, not on the event fanout below.
+    drop(_lease);
+    #[cfg(test)]
+    snapshot_fanout_pause::wait(&fanout_serial).await;
     let printer_id = printer.id;
     let printer = state
         .printers()
@@ -267,5 +305,86 @@ fn repository_status(err: RepositoryError) -> Status {
             tracing::error!(error = %format!("{err:#}"), "unexpected printer snapshot error");
             Status::internal("unexpected printer snapshot error")
         }
+    }
+}
+
+/// Test hook pausing the post-commit snapshot fanout for one printer serial so
+/// tests can prove a slow fanout no longer blocks later events on the stream.
+#[cfg(test)]
+pub(crate) mod snapshot_fanout_pause {
+    use std::{
+        collections::HashMap,
+        sync::{Mutex, OnceLock},
+        time::Duration,
+    };
+
+    use tokio::sync::oneshot;
+
+    const WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+
+    struct PausePoint {
+        reached: oneshot::Sender<()>,
+        resume: oneshot::Receiver<()>,
+    }
+
+    pub(crate) struct FanoutPause {
+        reached: oneshot::Receiver<()>,
+        resume: Option<oneshot::Sender<()>>,
+    }
+
+    pub(crate) fn install(serial: &str) -> FanoutPause {
+        let (reached_sender, reached_receiver) = oneshot::channel();
+        let (resume_sender, resume_receiver) = oneshot::channel();
+        let previous = pauses()
+            .lock()
+            .expect("snapshot fanout pause mutex should not be poisoned")
+            .insert(
+                serial.to_owned(),
+                PausePoint {
+                    reached: reached_sender,
+                    resume: resume_receiver,
+                },
+            );
+        assert!(
+            previous.is_none(),
+            "snapshot fanout pause already installed"
+        );
+        FanoutPause {
+            reached: reached_receiver,
+            resume: Some(resume_sender),
+        }
+    }
+
+    impl FanoutPause {
+        pub(crate) async fn wait_until_reached(&mut self) {
+            tokio::time::timeout(WAIT_TIMEOUT, &mut self.reached)
+                .await
+                .expect("timed out waiting for snapshot fanout pause")
+                .expect("snapshot fanout pause was dropped before being reached");
+        }
+
+        pub(crate) fn resume(mut self) {
+            let _ = self
+                .resume
+                .take()
+                .expect("snapshot fanout resume sender must be present")
+                .send(());
+        }
+    }
+
+    pub(crate) async fn wait(serial: &str) {
+        let pause = pauses()
+            .lock()
+            .expect("snapshot fanout pause mutex should not be poisoned")
+            .remove(serial);
+        if let Some(pause) = pause {
+            let _ = pause.reached.send(());
+            let _ = pause.resume.await;
+        }
+    }
+
+    fn pauses() -> &'static Mutex<HashMap<String, PausePoint>> {
+        static PAUSES: OnceLock<Mutex<HashMap<String, PausePoint>>> = OnceLock::new();
+        PAUSES.get_or_init(|| Mutex::new(HashMap::new()))
     }
 }

@@ -83,7 +83,10 @@ impl RumqttcBambuMqttTransport {
         let (client, event_loop) = AsyncClient::builder(options).capacity(10).build();
         Self {
             client,
-            pump: Arc::new(MqttEventLoopPump::spawn(event_loop)),
+            pump: Arc::new(MqttEventLoopPump::spawn(
+                event_loop,
+                endpoint_serial.clone(),
+            )),
             endpoint_serial,
             host,
             mqtt_serial,
