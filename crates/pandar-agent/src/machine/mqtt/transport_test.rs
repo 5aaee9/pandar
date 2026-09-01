@@ -39,6 +39,7 @@ async fn publish_reaches_broker_without_calling_next_report() {
         "SERIAL".to_owned(),
         address.ip().to_string(),
         Arc::new(OnceCell::new_with(Some("SERIAL".to_owned()))),
+        OverflowPolicy::DropOldest,
     );
     transport
         .publish(PublishedMqttCommand {
@@ -87,6 +88,7 @@ async fn queued_reports_do_not_block_publish_event_loop() {
         "SERIAL".to_owned(),
         address.ip().to_string(),
         Arc::new(OnceCell::new_with(Some("SERIAL".to_owned()))),
+        OverflowPolicy::DropOldest,
     );
     reports_ready.await.unwrap();
     tokio::time::timeout(
@@ -135,6 +137,7 @@ async fn report_precedes_connection_error_with_source_chain() {
         "SERIAL".to_owned(),
         address.ip().to_string(),
         Arc::new(OnceCell::new_with(Some("SERIAL".to_owned()))),
+        OverflowPolicy::DropOldest,
     );
 
     let report = transport

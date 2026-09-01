@@ -18,7 +18,7 @@ use super::{
 mod pump;
 mod tls;
 
-use pump::MqttEventLoopPump;
+use pump::{MqttEventLoopPump, OverflowPolicy};
 pub(crate) use tls::{BambuLanCertificateVerifier, bambu_mqtt_serial_from_certificate};
 
 #[derive(Debug)]
@@ -55,14 +55,18 @@ pub struct RumqttcBambuMqttTransport {
 
 impl RumqttcBambuMqttTransport {
     pub fn connect(endpoint: &BambuPrinterEndpoint) -> Self {
-        Self::connect_with_client_role(endpoint, "command")
+        Self::connect_with_client_role(endpoint, "command", OverflowPolicy::DropOldest)
     }
 
     pub fn connect_for_reports(endpoint: &BambuPrinterEndpoint) -> Self {
-        Self::connect_with_client_role(endpoint, "reports")
+        Self::connect_with_client_role(endpoint, "reports", OverflowPolicy::FailConsumer)
     }
 
-    fn connect_with_client_role(endpoint: &BambuPrinterEndpoint, role: &str) -> Self {
+    fn connect_with_client_role(
+        endpoint: &BambuPrinterEndpoint,
+        role: &str,
+        overflow_policy: OverflowPolicy,
+    ) -> Self {
         let suffix = mqtt_session_client_suffix(role);
         let options = bambu_lan_mqtt_options(endpoint, Some(&suffix));
 
@@ -71,6 +75,7 @@ impl RumqttcBambuMqttTransport {
             endpoint.serial.clone(),
             endpoint.host.clone(),
             Arc::new(OnceCell::new()),
+            overflow_policy,
         )
     }
 
@@ -79,6 +84,7 @@ impl RumqttcBambuMqttTransport {
         endpoint_serial: String,
         host: String,
         mqtt_serial: Arc<OnceCell<String>>,
+        overflow_policy: OverflowPolicy,
     ) -> Self {
         let (client, event_loop) = AsyncClient::builder(options).capacity(10).build();
         Self {
@@ -86,6 +92,7 @@ impl RumqttcBambuMqttTransport {
             pump: Arc::new(MqttEventLoopPump::spawn(
                 event_loop,
                 endpoint_serial.clone(),
+                overflow_policy,
             )),
             endpoint_serial,
             host,

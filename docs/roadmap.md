@@ -29,10 +29,12 @@ The software scope is complete:
 - Command results, print reports, and other non-snapshot events retain their ordered fail-fast behavior.
 - Hermetic regressions cover warning attribution, slow snapshot fanout, and current-session fencing.
 
+Live deployment follow-up: with the concurrent Hub and attributed warnings deployed, every printer still overflowed on a ~45 s cycle while job reports flowed normally — the attributed serials plus zero report-consumer restarts identified the actual source as each printer's command-role MQTT connection, which subscribes to `device/{serial}/report` during operations and never unsubscribes, leaving a queue nobody reads. The prescribed firmware transition-mutex audit was performed and cleared (those locks are only held across channel sends while the shared channel drains). The pump overflow policy is now per role: report-role connections keep the fail-the-consumer-for-resync contract, while command-role queues shed the oldest entry on overflow so a fresh command response is never discarded.
+
 Remaining acceptance work:
 
 - After deploying the current Hub and Agent, run a sustained print on one printer with the other linked printers idle.
-- Confirm the Agent records zero pump-overflow warnings. If any remain, audit and remove the per-printer firmware transition-mutex blocking point.
+- Confirm the Agent records zero pump-overflow warnings.
 - Record the live result in issues #7 and #8 before closing #8.
 
 ## Recently Completed
