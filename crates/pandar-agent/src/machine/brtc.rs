@@ -96,7 +96,7 @@ impl BrtcSession {
             .await
             .with_context(|| format!("connect Bambu BRTC tunnel to {}", endpoint.host))?;
         let connector = brtc_ssl_connector()?;
-        let mut config = connector
+        let config = connector
             .configure()
             .context("configure Bambu BRTC TLS session")?;
         // Bambu tunnel certificates carry the printer serial as the common
