@@ -15,11 +15,6 @@ struct AgentPairingRequest {
     name: &'static str,
 }
 
-#[derive(serde::Serialize)]
-struct TokenCreateRequest {
-    name: &'static str,
-}
-
 fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
     decode_json(value)
 }
@@ -95,28 +90,6 @@ async fn operator_and_viewer_cannot_use_provisioning_routes() {
             assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
         }
     }
-
-    for (method, uri, body) in [
-        (
-            Method::GET,
-            format!("/api/v1/tenants/{tenant_id}/users/{target_user_id}/api-tokens"),
-            None,
-        ),
-        (
-            Method::POST,
-            format!("/api/v1/tenants/{tenant_id}/users/{target_user_id}/api-tokens"),
-            request_body(TokenCreateRequest { name: "blocked" }),
-        ),
-        (
-            Method::DELETE,
-            format!("/api/v1/tenants/{tenant_id}/api-tokens/missing-token"),
-            None,
-        ),
-    ] {
-        let (status, body) = request_as(app.clone(), method, &uri, body, &viewer_token).await;
-        assert_eq!(status, StatusCode::GONE);
-        assert_eq!(decode::<ErrorResponse>(body).error, "api_tokens_retired");
-    }
 }
 
 #[tokio::test]
@@ -129,16 +102,6 @@ async fn tenant_admin_cannot_manage_other_tenant_users() {
     let tenant_b_id = tenant_b.id.to_string();
     let admin_a_token = auth_token_for_role(&state, &tenant_a_id, admin(), "admin-a-token").await;
     let admin_b_token = auth_token_for_role(&state, &tenant_b_id, admin(), "admin-b-token").await;
-    let user_b = state
-        .auth()
-        .create_user(
-            tenant_b.id,
-            "operator-b@example.test",
-            "Operator B",
-            crate::repositories::UserRole::Operator,
-        )
-        .await
-        .unwrap();
     for (method, uri, body) in [(
         Method::GET,
         format!("/api/v1/tenants/{tenant_b_id}/users"),
@@ -158,31 +121,6 @@ async fn tenant_admin_cannot_manage_other_tenant_users() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-
-    for (method, uri) in [
-        (
-            Method::POST,
-            format!(
-                "/api/v1/tenants/{tenant_b_id}/users/{}/api-tokens",
-                user_b.id
-            ),
-        ),
-        (
-            Method::DELETE,
-            format!("/api/v1/tenants/{tenant_b_id}/api-tokens/missing-token"),
-        ),
-    ] {
-        let (status, body) = request_as(
-            app.clone(),
-            method,
-            &uri,
-            request_body(TokenCreateRequest { name: "retired" }),
-            &admin_a_token,
-        )
-        .await;
-        assert_eq!(status, StatusCode::GONE);
-        assert_eq!(decode::<ErrorResponse>(body).error, "api_tokens_retired");
-    }
 }
 
 #[tokio::test]
@@ -197,15 +135,4 @@ async fn tenant_admin_gets_not_found_for_missing_user_nested_lists() {
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(decode::<ErrorResponse>(body).error, "user_not_found");
     }
-
-    let (status, body) = request_as(
-        app,
-        Method::GET,
-        &format!("/api/v1/tenants/{tenant_id}/users/{missing_user_id}/api-tokens"),
-        None,
-        &admin_token,
-    )
-    .await;
-    assert_eq!(status, StatusCode::GONE);
-    assert_eq!(decode::<ErrorResponse>(body).error, "api_tokens_retired");
 }

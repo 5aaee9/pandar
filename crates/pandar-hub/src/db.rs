@@ -158,8 +158,6 @@ impl Database {
 pub enum UniqueConstraint {
     TenantSlug,
     AgentName,
-    ApiTokenName,
-    ApiTokenHash,
     TenantTokenHash,
     PluginLoginTicketHash,
     JoinLinkTokenHash,
@@ -176,11 +174,6 @@ impl UniqueConstraint {
         match self {
             Self::TenantSlug => ("tenants.slug", "tenants_slug_key"),
             Self::AgentName => ("agents.tenant_id, agents.name", "agents_tenant_id_name_key"),
-            Self::ApiTokenName => (
-                "api_tokens.tenant_id, api_tokens.name",
-                "api_tokens_tenant_id_name_key",
-            ),
-            Self::ApiTokenHash => ("api_tokens.token_hash", "api_tokens_token_hash_key"),
             Self::TenantTokenHash => ("tenant_tokens.token_hash", "tenant_tokens_token_hash_key"),
             Self::PluginLoginTicketHash => (
                 "plugin_login_tickets.ticket_hash",
@@ -345,8 +338,6 @@ mod tests {
         let constraints = [
             UniqueConstraint::TenantSlug,
             UniqueConstraint::AgentName,
-            UniqueConstraint::ApiTokenName,
-            UniqueConstraint::ApiTokenHash,
             UniqueConstraint::TenantTokenHash,
             UniqueConstraint::PluginLoginTicketHash,
             UniqueConstraint::JoinLinkTokenHash,

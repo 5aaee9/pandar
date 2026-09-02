@@ -4,8 +4,8 @@ use serde::{Deserialize, de::DeserializeOwned};
 use super::*;
 use crate::entities::{audit_events, tenant_tokens};
 use requests::{
-    agent_name_body, retired_api_token_body, tenant_token_create_body,
-    tenant_token_create_without_scopes_body, tenant_token_rotate_body,
+    agent_name_body, tenant_token_create_body, tenant_token_create_without_scopes_body,
+    tenant_token_rotate_body,
 };
 
 mod requests;
@@ -556,56 +556,5 @@ async fn expired_and_revoked_tenant_tokens_are_rejected() {
         .await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
         assert_eq!(decode::<ErrorResponse>(body).error, "invalid_auth_token");
-    }
-}
-
-#[tokio::test]
-async fn retired_api_token_routes_always_return_gone() {
-    let state = state().await;
-    let app = router(state.clone());
-    let tenant = state.tenants().create("retired", "Retired").await.unwrap();
-    let user = state
-        .auth()
-        .create_user(
-            tenant.id,
-            "retired@example.test",
-            "Retired",
-            crate::repositories::UserRole::TenantAdmin,
-        )
-        .await
-        .unwrap();
-    let token = state
-        .auth()
-        .create_api_token(tenant.id, &user.id, "retired", "retired-secret")
-        .await
-        .unwrap();
-
-    for (method, uri, bearer) in [
-        (
-            Method::GET,
-            format!("/api/v1/tenants/{}/users/{}/api-tokens", tenant.id, user.id),
-            None,
-        ),
-        (
-            Method::POST,
-            format!("/api/v1/tenants/{}/users/{}/api-tokens", tenant.id, user.id),
-            Some("malformed"),
-        ),
-        (
-            Method::DELETE,
-            format!("/api/v1/tenants/{}/api-tokens/{}", tenant.id, token.id),
-            Some("retired-secret"),
-        ),
-    ] {
-        let (status, body) = request_with_token(
-            app.clone(),
-            method,
-            &uri,
-            retired_api_token_body("ignored"),
-            bearer,
-        )
-        .await;
-        assert_eq!(status, StatusCode::GONE);
-        assert_eq!(decode::<ErrorResponse>(body).error, "api_tokens_retired");
     }
 }

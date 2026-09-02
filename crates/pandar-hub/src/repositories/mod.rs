@@ -20,7 +20,7 @@ pub use audit::{
 #[cfg(test)]
 pub(crate) use auth::no_auth_session_test_pause;
 pub use auth::{
-    AcceptedJoinLink, ApiToken, AuthRepository, AuthenticatedPrincipal, AuthenticatedTenantToken,
+    AcceptedJoinLink, AuthRepository, AuthenticatedPrincipal, AuthenticatedTenantToken,
     AuthenticatedUser, ExternalIdentityProfile, ExternalMembership, JoinLink,
     JoinLinkWithPlaintext, NoAuthPluginSession, NoAuthPluginSessionOutcome, PluginLoginTicket,
     PluginLoginTicketExchange, PluginLoginTicketWithPlaintext, TenantToken, TenantTokenScope,
@@ -74,10 +74,6 @@ pub enum RepositoryError {
     DuplicateTenantSlug,
     #[error("agent name already exists for tenant")]
     DuplicateAgentName,
-    #[error("api token name already exists for tenant")]
-    DuplicateApiTokenName,
-    #[error("api token hash already exists")]
-    DuplicateApiTokenHash,
     #[error("tenant token hash already exists")]
     DuplicateTenantTokenHash,
     #[error("plugin login ticket hash already exists")]
@@ -96,8 +92,6 @@ pub enum RepositoryError {
     MissingUser,
     #[error("cannot remove the last tenant admin")]
     LastTenantAdmin,
-    #[error("api token not found")]
-    MissingApiToken,
     #[error("tenant token not found")]
     MissingTenantToken,
     #[error("plugin login ticket not found")]

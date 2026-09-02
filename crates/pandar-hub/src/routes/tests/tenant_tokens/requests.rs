@@ -24,11 +24,6 @@ struct AgentNameRequest<'a> {
     name: &'a str,
 }
 
-#[derive(Serialize)]
-struct RetiredApiTokenRequest<'a> {
-    name: &'a str,
-}
-
 pub(super) fn tenant_token_create_body(
     name: &str,
     scopes: &[&str],
@@ -57,8 +52,4 @@ pub(super) fn tenant_token_rotate_body(expires_at: Option<&str>) -> Option<Value
 
 pub(super) fn agent_name_body(name: &str) -> Option<Value> {
     Some(serde_json::to_value(AgentNameRequest { name }).unwrap())
-}
-
-pub(super) fn retired_api_token_body(name: &str) -> Option<Value> {
-    Some(serde_json::to_value(RetiredApiTokenRequest { name }).unwrap())
 }

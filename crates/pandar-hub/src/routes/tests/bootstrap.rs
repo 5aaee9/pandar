@@ -338,23 +338,13 @@ async fn bootstrap_tenant_admin_rolls_back_on_late_failure() {
         .create("existing", "Existing")
         .await
         .unwrap();
-    let user = state
-        .auth()
-        .create_user(
-            tenant.id,
-            "existing@example.test",
-            "Existing Admin",
-            admin(),
-        )
-        .await
-        .unwrap();
-    let before = rollback_counts(&state, tenant.id, &user.id).await;
+    let before = rollback_counts(&state, tenant.id).await;
     let err = duplicate_slug_bootstrap(&state, "existing").await;
     assert!(matches!(
         err,
         crate::repositories::RepositoryError::DuplicateTenantSlug
     ));
-    assert_eq!(rollback_counts(&state, tenant.id, &user.id).await, before);
+    assert_eq!(rollback_counts(&state, tenant.id).await, before);
     assert_no_tenant_slug(&state, "rolled-back").await;
 }
 
@@ -452,22 +442,12 @@ async fn duplicate_slug_bootstrap(
         .unwrap_err()
 }
 
-async fn rollback_counts(
-    state: &AppState,
-    tenant_id: TenantId,
-    user_id: &str,
-) -> (i64, usize, usize, usize) {
+async fn rollback_counts(state: &AppState, tenant_id: TenantId) -> (i64, usize, usize) {
     (
         state.tenants().count().await.unwrap(),
         state
             .auth()
             .list_users_for_tenant(tenant_id)
-            .await
-            .unwrap()
-            .len(),
-        state
-            .auth()
-            .list_api_tokens_for_user(tenant_id, user_id)
             .await
             .unwrap()
             .len(),

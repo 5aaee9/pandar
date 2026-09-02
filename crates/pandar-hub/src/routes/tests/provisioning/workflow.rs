@@ -1,7 +1,5 @@
 use super::*;
-use requests::{
-    agent_name_value, retired_api_token_value, tenant_token_create_value, user_role_value,
-};
+use requests::{agent_name_value, tenant_token_create_value, user_role_value};
 use serde::{Deserialize, de::DeserializeOwned};
 
 mod requests;
@@ -302,15 +300,4 @@ async fn provisioning_mutations_reject_empty_required_strings() {
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(decode::<ErrorResponse>(body).error, "bad_request");
     }
-
-    let (status, body) = request_as(
-        app,
-        Method::POST,
-        &format!("/api/v1/tenants/{tenant_id}/users/{}/api-tokens", user.id),
-        Some(retired_api_token_value("")),
-        &admin_token,
-    )
-    .await;
-    assert_eq!(status, StatusCode::GONE);
-    assert_eq!(decode::<ErrorResponse>(body).error, "api_tokens_retired");
 }

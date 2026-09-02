@@ -1,5 +1,4 @@
 mod agents;
-mod tokens;
 mod users;
 
 use serde::Serialize;
@@ -10,7 +9,6 @@ use crate::{
 };
 
 pub(super) use agents::{create_agent_pairing, revoke_agent_credential, rotate_agent_credential};
-pub(super) use tokens::{create_api_token, list_api_tokens, revoke_api_token};
 pub(super) use users::{list_user_identities, list_users, remove_user, update_user_role};
 
 #[derive(Debug, Serialize)]

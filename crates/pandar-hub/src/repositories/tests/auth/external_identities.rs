@@ -26,7 +26,6 @@ async fn external_identity_resolves_tenant_user_role() {
 
     assert_eq!(identity.tenant_id, tenant.id);
     assert_eq!(identity.user_id, user.id);
-    assert_eq!(authenticated.token_id, identity.id);
     assert_eq!(authenticated.user.id, user.id);
     assert_eq!(authenticated.user.role, UserRole::Viewer);
 }

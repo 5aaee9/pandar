@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     db::{Database, UniqueConstraint, is_foreign_key_violation, is_unique_violation},
-    entities::{api_tokens, users as user_entities},
+    entities::users as user_entities,
     repositories::{RepositoryError, RepositoryResult},
 };
 
@@ -18,7 +18,6 @@ mod onboarding;
 mod plugin_tickets;
 pub(crate) mod secrets;
 mod tenant_tokens;
-mod tokens;
 mod users;
 
 pub use identities::UserIdentity;
@@ -84,26 +83,14 @@ pub struct User {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ApiToken {
-    pub id: String,
-    pub tenant_id: TenantId,
-    pub user_id: String,
-    pub name: String,
-    pub created_at: String,
-    pub last_used_at: Option<String>,
-    pub revoked_at: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthenticatedUser {
-    pub token_id: String,
     pub user: User,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuthenticatedPrincipal {
     User(AuthenticatedUser),
-    TenantToken(AuthenticatedTenantToken),
+    TenantToken(Box<AuthenticatedTenantToken>),
     NoAuth { tenant_id: TenantId },
 }
 
@@ -141,67 +128,6 @@ impl AuthRepository {
         .await?;
         Ok(user)
     }
-
-    pub async fn create_api_token(
-        &self,
-        tenant_id: TenantId,
-        user_id: &str,
-        name: impl Into<String>,
-        plaintext_token: &str,
-    ) -> RepositoryResult<ApiToken> {
-        let token = ApiToken {
-            id: uuid::Uuid::new_v4().to_string(),
-            tenant_id,
-            user_id: user_id.to_owned(),
-            name: name.into(),
-            created_at: created_at_now(),
-            last_used_at: None,
-            revoked_at: None,
-        };
-        let token_hash = hash_token(plaintext_token);
-
-        insert_api_token(
-            &self.database.sea_orm_connection(),
-            &token,
-            &token_hash,
-            "failed to insert api token",
-        )
-        .await?;
-        Ok(token)
-    }
-
-    pub async fn authenticate_bearer(
-        &self,
-        plaintext_token: &str,
-    ) -> RepositoryResult<Option<AuthenticatedUser>> {
-        let token_hash = hash_token(plaintext_token);
-        let connection = self.database.sea_orm_connection();
-        let Some(token) = api_tokens::Entity::find()
-            .filter(api_tokens::Column::TokenHash.eq(token_hash))
-            .filter(api_tokens::Column::RevokedAt.is_null())
-            .one(&connection)
-            .await
-            .context("failed to authenticate bearer token")?
-        else {
-            return Ok(None);
-        };
-        let Some(user) = user_entities::Entity::find_by_id(token.user_id.clone())
-            .filter(user_entities::Column::TenantId.eq(token.tenant_id.clone()))
-            .one(&connection)
-            .await
-            .context("failed to load authenticated bearer user")?
-        else {
-            return Ok(None);
-        };
-        let mut active: api_tokens::ActiveModel = token.clone().into();
-        active.last_used_at = Set(Some(created_at_now()));
-        active
-            .update(&connection)
-            .await
-            .context("failed to update bearer token last_used_at")?;
-
-        authenticated_from_models(token, user).map(Some)
-    }
 }
 
 pub(crate) fn hash_token(token: &str) -> String {
@@ -227,6 +153,10 @@ pub(super) fn user_from_row(
         role: UserRole::parse(&role)?,
         created_at,
     })
+}
+
+pub(super) fn authenticated_from_user(user: User) -> RepositoryResult<AuthenticatedUser> {
+    Ok(AuthenticatedUser { user })
 }
 
 pub(super) fn user_from_model(model: user_entities::Model) -> RepositoryResult<User> {
@@ -292,40 +222,6 @@ where
         .ok_or(RepositoryError::MissingUser)
 }
 
-pub(super) async fn insert_api_token<C>(
-    connection: &C,
-    token: &ApiToken,
-    token_hash: &str,
-    context: &'static str,
-) -> RepositoryResult<()>
-where
-    C: ConnectionTrait,
-{
-    ensure_user_exists(
-        connection,
-        token.tenant_id,
-        &token.user_id,
-        "failed to check api token owner",
-    )
-    .await?;
-
-    let result = api_token_model(token, token_hash)
-        .insert(connection)
-        .await
-        .map(|_| ());
-    match result {
-        Ok(()) => Ok(()),
-        Err(err) if is_unique_violation(&err, UniqueConstraint::ApiTokenName) => {
-            Err(RepositoryError::DuplicateApiTokenName)
-        }
-        Err(err) if is_unique_violation(&err, UniqueConstraint::ApiTokenHash) => {
-            Err(RepositoryError::DuplicateApiTokenHash)
-        }
-        Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingUser),
-        Err(err) => Err(anyhow::Error::new(err).context(context).into()),
-    }
-}
-
 fn user_model(user: &User) -> user_entities::ActiveModel {
     user_entities::ActiveModel {
         id: Set(user.id.clone()),
@@ -335,27 +231,4 @@ fn user_model(user: &User) -> user_entities::ActiveModel {
         role: Set(user.role.as_str().to_owned()),
         created_at: Set(user.created_at.clone()),
     }
-}
-
-fn api_token_model(token: &ApiToken, token_hash: &str) -> api_tokens::ActiveModel {
-    api_tokens::ActiveModel {
-        id: Set(token.id.clone()),
-        tenant_id: Set(token.tenant_id.to_string()),
-        user_id: Set(token.user_id.clone()),
-        name: Set(token.name.clone()),
-        token_hash: Set(token_hash.to_owned()),
-        created_at: Set(token.created_at.clone()),
-        last_used_at: Set(token.last_used_at.clone()),
-        revoked_at: Set(token.revoked_at.clone()),
-    }
-}
-
-pub(super) fn authenticated_from_models(
-    token: api_tokens::Model,
-    user: user_entities::Model,
-) -> RepositoryResult<AuthenticatedUser> {
-    Ok(AuthenticatedUser {
-        token_id: token.id,
-        user: user_from_model(user)?,
-    })
 }

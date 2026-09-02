@@ -10,7 +10,7 @@ use crate::{
     entities::{user_identities, users},
     repositories::{
         AuthRepository, AuthenticatedUser, RepositoryError, RepositoryResult,
-        auth::{authenticated_from_models, ensure_user_exists},
+        auth::{authenticated_from_user, ensure_user_exists, user_from_model},
     },
 };
 
@@ -75,7 +75,7 @@ impl AuthRepository {
         else {
             return Ok(None);
         };
-        authenticated_from_models(identity_token(identity), user).map(Some)
+        authenticated_from_user(user_from_model(user)?).map(Some)
     }
 
     pub async fn list_external_identities_for_tenant(
@@ -197,18 +197,5 @@ fn identity_model(identity: &UserIdentity) -> user_identities::ActiveModel {
         provider: Set(identity.provider.clone()),
         subject: Set(identity.subject.clone()),
         created_at: Set(identity.created_at.clone()),
-    }
-}
-
-fn identity_token(identity: user_identities::Model) -> crate::entities::api_tokens::Model {
-    crate::entities::api_tokens::Model {
-        id: identity.id,
-        tenant_id: identity.tenant_id,
-        user_id: identity.user_id,
-        name: identity.provider,
-        token_hash: identity.subject,
-        created_at: identity.created_at,
-        last_used_at: None,
-        revoked_at: None,
     }
 }

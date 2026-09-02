@@ -70,12 +70,6 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::DuplicateAgentName => {
                 Self::new(StatusCode::CONFLICT, "agent_name_exists")
             }
-            RepositoryError::DuplicateApiTokenName => {
-                Self::new(StatusCode::CONFLICT, "api_token_name_exists")
-            }
-            RepositoryError::DuplicateApiTokenHash => {
-                Self::new(StatusCode::CONFLICT, "api_token_hash_exists")
-            }
             RepositoryError::DuplicateTenantTokenHash => {
                 Self::new(StatusCode::CONFLICT, "tenant_token_hash_exists")
             }
@@ -99,9 +93,6 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::MissingUser => Self::new(StatusCode::NOT_FOUND, "user_not_found"),
             RepositoryError::LastTenantAdmin => {
                 Self::new(StatusCode::CONFLICT, "last_tenant_admin")
-            }
-            RepositoryError::MissingApiToken => {
-                Self::new(StatusCode::NOT_FOUND, "api_token_not_found")
             }
             RepositoryError::MissingTenantToken => {
                 Self::new(StatusCode::NOT_FOUND, "tenant_token_not_found")

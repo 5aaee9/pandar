@@ -39,6 +39,7 @@ Remaining acceptance work:
 
 ## Recently Completed
 
+- Dropped the retired user API-token feature end to end: a new shared migration deletes the `api_tokens` table, the 410-tombstone provisioning routes are removed, and the dead repository, entity, and `authenticate_bearer` paths are gone. External-identity sign-in now builds `AuthenticatedUser` directly; tenant tokens, bootstrap, and the mobile/plugin client contracts are unchanged.
 - Removed 23 retired `pandar_plugin_*` FFI exports from the network plugin (superseded account load/persist/clear wrappers, hub-action and ticket-admission policy probes, and the legacy plugin-jobs HTTP path). The shipped plugin export table shrank while every Studio-loaded `bambu_network_*` symbol and all shim→Rust contracts are unchanged; the redaction-policy tests moved onto the live print-submission path.
 - Deleted two unused type re-export shim files from the dashboard; consumers already import the same aliases from `dashboard-types` and the generated Hub client.
 - Removed the obsolete `suppaftp_api_compile_proof` helper and stale `allow(dead_code)` markers from the agent FTPS module; the test-only TLS config helper is now compiled for tests only.

@@ -89,14 +89,6 @@ pub fn router(state: AppState) -> Router {
             get(provisioning::list_user_identities),
         )
         .route(
-            "/api/v1/tenants/{tenant_id}/users/{user_id}/api-tokens",
-            get(provisioning::list_api_tokens).post(provisioning::create_api_token),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/api-tokens/{token_id}",
-            axum::routing::delete(provisioning::revoke_api_token),
-        )
-        .route(
             "/api/v1/tenants/{tenant_id}/tenant-tokens",
             get(tenant_tokens::list_tenant_tokens).post(tenant_tokens::create_tenant_token),
         )

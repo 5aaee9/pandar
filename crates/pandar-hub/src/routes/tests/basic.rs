@@ -119,30 +119,10 @@ fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
 }
 
 #[tokio::test]
-async fn retired_api_token_auth_is_rejected_when_external_auth_is_configured() {
+async fn unknown_bearer_token_is_rejected_when_external_auth_is_configured() {
     let state = state().await;
     let app = router(external_auth_state(state.clone()));
     let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
-    let user = state
-        .auth()
-        .create_user(
-            tenant.id,
-            "api-token-user@example.test",
-            "API Token User",
-            crate::repositories::UserRole::Viewer,
-        )
-        .await
-        .unwrap();
-    state
-        .auth()
-        .create_api_token(
-            tenant.id,
-            &user.id,
-            "retired-api-token",
-            "retired-api-token",
-        )
-        .await
-        .unwrap();
 
     let (status, body) = request_as(
         app,

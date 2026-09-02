@@ -322,7 +322,7 @@ pub(super) async fn authorize_principal(
 
     let authenticated =
         if let Some(authenticated) = state.auth().authenticate_tenant_token(token).await? {
-            AuthenticatedPrincipal::TenantToken(authenticated)
+            AuthenticatedPrincipal::TenantToken(Box::new(authenticated))
         } else if let Some(verifier) = state.external_auth() {
             let verified = verifier.verify(token).await.map_err(|err| {
                 let error = anyhow::Error::from(err);

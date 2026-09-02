@@ -18,11 +18,6 @@ struct AgentNameRequest<'a> {
     name: &'a str,
 }
 
-#[derive(Serialize)]
-struct RetiredApiTokenRequest<'a> {
-    name: &'a str,
-}
-
 pub(super) fn user_role_value(role: &str) -> Value {
     serde_json::to_value(UserRoleRequest { role }).unwrap()
 }
@@ -42,8 +37,4 @@ pub(super) fn tenant_token_create_value(
 
 pub(super) fn agent_name_value(name: &str) -> Value {
     serde_json::to_value(AgentNameRequest { name }).unwrap()
-}
-
-pub(super) fn retired_api_token_value(name: &str) -> Value {
-    serde_json::to_value(RetiredApiTokenRequest { name }).unwrap()
 }
