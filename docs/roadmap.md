@@ -39,6 +39,8 @@ Remaining acceptance work:
 
 ## Recently Completed
 
+- Removed the stale nested Frontend package-manager files (`frontend/package-lock.json`, `frontend/pnpm-lock.yaml`, and `frontend/pnpm-workspace.yaml`); no CI, Docker, Nix, or script consumer referenced them and they still resolved superseded dependencies, so the root npm workspace lock is the only dependency resolution source.
+
 - Removed two orphaned `pandar-auth` smoke scripts (`smoke-email-env.mjs`, `smoke-dashboard-token-redirect.mjs`) that no nix check, CI job, or npm script referenced; their contracts live in the nix jwt smoke check and the passkey sign-in vitest suite. Also removed the unused `--chart-1..5` palette family from the dashboard theme and the matching rows in the design-token documentation.
 - Removed four dead-code candidates from the simplification audit: the unused `spawn_control_plane` wrapper (production only uses `spawn_control_plane_ready`), the orphaned Android `LoginViewModel` superseded by the hub-browser login flow, four unused dashboard type declarations (`Summary`, `UserIdentityList`, `PrinterEvent`, `RuntimeNotification` plus its now-unreferenced local `TextKey` copy), and the unreferenced `PLUGIN_NAME` constant from the network plugin.
 - Removed the dead `AppState` constructor chain: `connect_with_config` and `connect_with_auth_config` had no callers, so `connect` now reads its environment configuration and reaches `connect_with_config_values` directly.
