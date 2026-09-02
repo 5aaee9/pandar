@@ -39,6 +39,7 @@ Remaining acceptance work:
 
 ## Recently Completed
 
+- Consolidated the duplicated historical Public Beta final11–final16 evidence narratives in `docs/development.md` and `docs/release-installation.md` (about 300 lines of repeated archives, hashes, run ids, and disclaimers) into short pointers; `docs/compatibility/release-artifacts.md` and the Studio plugin compatibility documents remain the single evidence owners.
 - Removed the stale nested Frontend package-manager files (`frontend/package-lock.json`, `frontend/pnpm-lock.yaml`, and `frontend/pnpm-workspace.yaml`); no CI, Docker, Nix, or script consumer referenced them and they still resolved superseded dependencies, so the root npm workspace lock is the only dependency resolution source.
 
 - Removed two orphaned `pandar-auth` smoke scripts (`smoke-email-env.mjs`, `smoke-dashboard-token-redirect.mjs`) that no nix check, CI job, or npm script referenced; their contracts live in the nix jwt smoke check and the passkey sign-in vitest suite. Also removed the unused `--chart-1..5` palette family from the dashboard theme and the matching rows in the design-token documentation.

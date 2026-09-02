@@ -289,154 +289,10 @@ Plugin credentials are revocable tenant-owned credentials. They do not carry `ag
 23 has automated ABI/status/command/print-task probes and a manual smoke runbook, but real exact-Studio
 compatibility claims follow the per-platform evidence in `docs/compatibility/bambu-studio-plugin.md`.
 
-The historical Public Beta final16 Linux candidate froze source `HEAD`
-`2ba0d1f2755501ea9e7d4babcf176db40638f643` as `pandar-bambu-final16-019f7b10.tar.gz`: 2,793,904
-bytes, archive SHA-256 `24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039`,
-and canonical source-tree SHA-256
-`c62c92167f466a915400953ec2d0e126bc34b3c6509a747ddee17dce8d52bf30`. The preceding pre-fix
-freeze whose SHA-256 begins `6318d190` and ends `ab473` was rejected by P1 review and is not a
-candidate.
-
-Final16 Ubuntu 22.04 Nextest run `c9c96abe-5b80-4478-be33-9ceffef62a53` passed 1,808/1,808
-executed tests with one configured skip. Fmt, strict workspace Clippy, module-size checks, ABI tool
-22/22, release-smoke 25/25, packaged tasks 18/18, the 109-network plus 21-File-Transfer export
-contract, and 21 File Transfer entrypoints x 256 ASan/LSan cycles passed. Disposable PostgreSQL
-16.14 run `b73d7ce9-d3ab-424b-8d65-b4736e59f24b` passed 7/7 with zero skips; its dedicated
-container, network, and volume were removed and their absence was verified.
-
-The exact final16 Linux archive `pandar-final16-linux-amd64-019f7b10.tar.gz` is 24,891,706 bytes
-with SHA-256 `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3` and sidecar
-SHA-256 `bde03e9633839432063d93768e10b0caf845755d216a653e20fa11d1461296f8`. Its only members
-are `pandar`, `libpandar_network_plugin.so`, and `libpandar_bambu_source.so`, with respective
-SHA-256 values `b1762bfccdfc1f658147b19b23d7016707b5414d14f74be518e0b5663ddb1b22`,
-`3bcce9085205d6af67dc9671cf58cd6f9fb694d5a587b43d160dc8b6a9b0712f`, and
-`88d34358be39ed3d239aeb317df8f34a92d4652877e86a9849c66e32347c1df2`. The native evidence
-archive and sidecar SHA-256 values are
-`fe35290675aac4e6ce323a8ebc75bde1c34d373b1df7506f7f8a65b69ffea950` and
-`00a560832428e045affad08617646f7e3d322e07c4849d20e5912be6d545595b`.
-
-The final16 official Bambu Studio `02.08.01.55` AppImage, SHA-256
-`e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`, made exactly one
-model-task request, received one HTTP 200 response, and produced the ordered lifecycle `request
-started` -> `response accepted` -> `callback started` -> `callback returned` exactly once. Its
-evidence-manifest SHA-256 is
-`c6ba9b6282581119d3baec720e26990ad63efc20eb394b0c71dced89081d5fd9`. This controlled gate
-uses a synthetic persisted session and loopback mock; it is not real authentication, Hub, Agent,
-database, printer, hardware, print, or firmware evidence. No GitHub Action or Windows Studio process
-was used.
-
-Historical final14 Linux evidence freezes source `HEAD`
-`2ba0d1f2755501ea9e7d4babcf176db40638f643` as `pandar-bambu-final14-019f7b10.tar.gz`: 2,782,539
-bytes and 1,548 regular members, archive SHA-256
-`c422d80d89052732db6b8ae87b68fd1e4145c64f588d8382deafef3345d86681`, member-list SHA-256
-`5b32472c9372a992c23315d9b33691a0f269248b65db312590ed00556e21aac0`, canonical tree SHA-256
-`43a4a577fb90327dad9e59bcb89dc1e91352bad83f27786a32cae34cb62136e5`, and freeze-evidence
-SHA-256 `70d545770086c6acde271d3181508adf4f0d91fc8213771363ec78b2792f5ec3`. Determinism passed;
-unsafe-member, duplicate, case-collision, reparse-point, membership-diff, and content-diff counts were
-zero. Pre-freeze Web 38 files/327 tests, Auth 3 files/9 tests, both typechecks and production builds,
-zero-warning Web lint, and the Better Auth callback smoke passed.
-
-Historical final14 Ubuntu 22.04 Nextest run `d2231751-1284-46b0-aee6-2e041ca1a203` passed
-1,781/1,781 with one separately reported skip in 812.413 seconds. Fmt, strict Clippy, module-size 2/2,
-release-smoke-tool 21/21, the 109-network plus 21-File-Transfer contract in all five native modes,
-and 21 File Transfer entrypoints x 256 ASan/LSan cycles passed. Its Linux archive
-`pandar-final14-linux-amd64-019f7b10.tar.gz` is 24,854,111 bytes with SHA-256
-`4e91f2457197532102544b02d4edac5354dc2982ec55fa707a057cbcba518b68`; its evidence bundle
-SHA-256 is `db6a464ce6b9b4b5e4689e1f0f21962dd097349056e78beb57a8779e1352cb02`.
-The strict Clippy command exited successfully with Rust `-D warnings`; its captured build log still
-contains C++ missing-field-initializer diagnostics and a dependency future-incompatibility warning, so
-that final14 gate is not described as warning-free.
-
-Historical final14 official-AppImage attempt 1 loaded both candidate libraries 4/4 and retained
-Studio PID `137`/start ticks `193373032` across two offline failures and one successful development
-no-auth commit. Undefined-symbol, `dlopen`, certificate, and missing-library counts were zero. Redacted
-evidence `pandar-final14-appimage-redacted-evidence-019f7b10.tar.gz` is 10,603 bytes with 23 members
-and SHA-256 `7eac6abbc7364928147d60dd1c583d084c02debf1552734bc82a4dec59c941be`.
-It explicitly records `authenticated_session_claim=false`; authenticated Studio, real Windows Studio,
-macOS, model-task `get_subtask`, hardware actions, and live firmware were not covered by final14.
-
-The historical final13 immutable input is `pandar-bambu-final13-019f7b10.tar.gz` at source `HEAD`
-`2ba0d1f2755501ea9e7d4babcf176db40638f643`: 2,751,227 bytes and 1,543 regular members, archive
-SHA-256 `71080abb1e7392b0440a179b5bca9fd80638de74a614105b8dc11a0f70959c34`, member-list SHA-256
-`87a6ad1dfaa404731ed30d7e265303cca64fc4278a478f9c12192c09373eb880`, source-tree SHA-256
-`db0b7c3385c29ff0cdee1930a66f554a6845b58907373ef543563b829c245761`, and freeze-evidence
-SHA-256 `4d132e16f91365795f54c97f608483c34b55726c5f614f5bb8ffaac2ede1fb7f`. Determinism passed and
-all unsafe/duplicate/case/reparse/diff counts were zero. Pre-freeze plugin run
-`da32fbc4-f37e-4198-af5e-c35f73512dcb` passed 368/368 with one separately reported skip.
-
-Final13 Windows clean run `90cb6a69-08a5-4421-a661-58e696c374a3` passed 1,778/1,778 with one
-separately reported skip in 1,050.084 seconds; the firmware probe passed in 28.858 seconds. Fmt,
-zero-warning strict Clippy, module-size 2/2, both standalone tools 21/21, and frontend 37 files/324
-tests plus typecheck, zero-warning lint, and production build passed. `npm ci` recorded six audit
-vulnerabilities (three moderate and three high); retain that as dependency-audit evidence rather than
-relabeling it a Studio-parity failure. Clean evidence SHA-256 is
-`c1ac8807a427ae4b7003681e9ad343d668dab1d6aa7c143d14bc699fe58b7b89`.
-
-Historical final13 PostgreSQL 16.14 harness `0c292295-f9ab-459b-89c2-ea74f2c9ff56` ran
-`24b49c19-cd07-42b5-a5a3-6d220345bd7e` and `1f4b8458-6397-4c0b-8ab3-23d37779c68a`; each passed
-55/55 with 831 filtered and zero runtime skip markers. Per-run log SHA-256 values are
-`b123f495e09de3c57c2c175000a37cc1fa7395dd0a9c52f1c2f72426c2f4dc08` and
-`b3e233f50fe1be9df43867e34307fd6193f09a2dc00940318bdfb8827f0a8d54`; normalized evidence SHA-256 is
-`7e04ae355f7bca3fb409bbc700b5c8f160194c0d2f9ec82df823c859566a2db7`; source read-only and
-cleanup checks passed.
-
-The final13 Windows archive `pandar-final13-windows-amd64-019f7b10.tar.gz` is 21,285,752 bytes with
-SHA-256 `6c50e77a0b4008ce46d86de51411117061c5118e18849ca1fb94f4a3f319db64`; native evidence
-SHA-256 is `3dab4bffa359e4c46eec77cbfb278ce3a1497f806a1d80343a1735b5a68f025b`. The MSVC candidate
-passed exact three-file layout, packaged CLI execution, all five ABI modes, the 109-network plus
-21-File-Transfer contract, 21/21 ABI and packaged-smoke checks, and companion sentinel/no-`Bambu_*`
-inspection. `dumpbin` reported 271 total plugin exports. Six pre-product manifest-harness calibration
-attempts are retained as infrastructure-only history. Build, ABI, and smoke runs were
-`0430ad0e-7f96-41c5-b9aa-1c6fd690fd16`, `2f27f859-b795-4420-b04a-30410ae7bcbc`, and
-`65ffc0b0-e17e-45da-bd3a-3375f5d88de1`. Real Windows Studio remains untested.
-
-Final13 Linux attempt 2 passed the full native/ASan gate. Nextest run
-`6ec3a215-9430-4ad2-adc7-f692ca156333` passed 1,779/1,779 with one separately reported skip; all five
-ABI modes, the exact three-file package, runtime audit, and 21 File Transfer entrypoints x 256
-ASan/LSan cycles passed. Archive and evidence-bundle SHA-256 values are
-`4166e6012e6c1bf7cdf056ba3bfb28f0fbc9d216c31e5ed2e8620adb8b5fcccc` and
-`aa7478fe0f74debcc5f3d1f5ec53a2222d726beafe5224935aa3382c24f6097a`. Attempt 1 run
-`c8a134c4-e775-4f37-b6ed-74ccb1b79123` remains non-promotable outer-harness history. Final13
-exact-AppImage attempt 8 passed the official Ubuntu 22.04 `02.08.01.55` module-load and same-process
-development no-auth recovery gate. The AppImage and redacted evidence SHA-256 values are
-`e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995` and
-`a4453c8dce3829cc1a84a372a772b516812fe1564b310e61db9e9009a11cf9d2`. Studio PID `137`/ticks
-`192688662` remained unchanged across two offline failures and one success/commit; both libraries
-mapped 4/4, active/total token count was `1/1`, create/revoke/discard counts were `1/0/0`, and loader/
-certificate error counts were zero. The final implementation review returned `APPROVE` with no
-Blocking, Important, or Minor finding; the final evidence-document review completed after correcting
-its sole Minor terminology finding.
-
-The historical final12 build input is `pandar-bambu-final12-019f7b10.tar.gz` at source HEAD
-`2ba0d1f2755501ea9e7d4babcf176db40638f643`: 2,740,698 bytes and 1,543 regular members, archive
-SHA-256 `17371828ef7a26cace73cfbed321d094bf38323670e8fa6ccf69d6cbfd4b7eee`, canonical member-list
-SHA-256 `87a6ad1dfaa404731ed30d7e265303cca64fc4278a478f9c12192c09373eb880`, and source-tree/manifest
-SHA-256 `5aa0038dbc3f0962cc172646876263b0db04e1e6df5fbe571553af1967f242a6`.
-
-The frozen final12 disposable PostgreSQL 16.14 validation used harness run
-`3e00d36c-7fb9-47d3-b71b-d9735ebe0eae` and Nextest run
-`0b708279-6183-4477-9f78-31add8d7f423`; 55/55 focused cases passed, 831 tests were filtered out,
-and the evidence contained zero skip markers. Its evidence SHA-256 is
-`d7f002f5be8708844cce406895503ef7056b634bf04aad068722eb25ef15247e`. The final12 Windows
-amd64 archive `pandar-final12-windows-amd64-019f7b10.tar.gz` has SHA-256
-`b4f6913eef7c1d09da9377fbce36b0ab759add25caac2baa0604c07a595440cb`; its native evidence
-SHA-256 is `11c38eb3c198cd07b2f96abbfbf70792b078170389e8869b230badbb98a404d2`. The native MSVC
-candidate passed exact three-file layout, packaged CLI execution, 109 network plus 21 File Transfer
-exports, all five ABI modes, companion PE/sentinel checks, and the 21-case packaged release smoke.
-Real Windows Studio remains untested.
-
-The final12 Windows clean gate passed, but subsequent Linux validation exposed the background-
-refresh/firmware-callback race, so all final12 results are retained only as historical regression
-evidence. The prior final11 clean run `c6a28ae0-1489-4b08-afda-7497be5668cf` (workspace Nextest
-1,749/1,749 plus frontend 37 files/324 tests, typecheck, lint, and production build) is historical too.
-The historical final11 Ubuntu 22.04 archive SHA-256 is
-`7b7ac417e1c781fbb682552676822457cac6f57a1eb1dd288f2d851f1181a0c6`; it passed workspace
-Nextest 1,750/1,750, the full ABI/release-smoke path, and 21 File Transfer entrypoints x 256
-ASan/LSan ownership cycles. All three historical Linux files require at most `GLIBC_2.34`; none is the
-current candidate. Final16 remains historical Public Beta Linux native/ASan evidence with the narrow
-exact-AppImage model-task request/response/callback evidence described above. Stable `02.07.01.62`
-Linux and authenticated Studio through Hub and Agent, real Windows Studio, printer hardware, print
-actions, and live firmware remain untested.
+Historical Public Beta freeze, archive, and test-run evidence (final11 through final16),
+including the exact immutable inputs, native archives, member-list and evidence SHA-256 values,
+disposable PostgreSQL runs, and which candidates were superseded, is recorded in
+`docs/compatibility/release-artifacts.md`. None of those packages is a current candidate.
 
 Studio's `dev_id` is resolved to an authorized Hub printer, but only the Hub printer id crosses the
 HTTP boundary. Hub owns stable Studio submission/task ids, durable job/command state, plate and
@@ -504,44 +360,11 @@ Typical Studio data/plugin locations:
   module-load evidence exists; distribution signing/notarization and macOS x86_64 Studio loading
   remain separate release gates.
 
-The historical Public Beta final16 official-AppImage gate used AppImage SHA-256
-`e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`, made exactly one
-model-task request, received exactly one HTTP 200, and completed one ordered four-event lifecycle
-through callback return. Its evidence-manifest SHA-256 is
-`c6ba9b6282581119d3baec720e26990ad63efc20eb394b0c71dced89081d5fd9`. It used a synthetic
-persisted session and loopback mock, not real authentication, Hub, Agent, database, printer, hardware,
-print, or firmware. No GitHub Action or Windows Studio process was used.
-The redacted bundle `pandar-final16-real-studio-evidence-019f7b10.tar.gz` is 245,225 bytes with
-SHA-256 `f07c369ad9e0354ef40142294d9385e9c454fd534a04badce4be000f49c06eca`; a second
-independent generation matched byte-for-byte. It contains only safe `evidence/` and `outer/`
-artifacts, with no runner or mock implementation and no synthetic token contents.
-Its `.sha256` sidecar has SHA-256
-`30c6e5d43b74f9770d19638b86cefddd96d4d861c16155c74d30b488adf7f1b6`, and
-`sha256sum --check` passed.
-
-Historical final14 official-AppImage attempt 1 mapped both passed-package libraries 4/4 and retained
-Studio PID `137`/start ticks `193373032` while two proven pre-delivery failures were followed by one
-successful development no-auth commit. Redacted evidence SHA-256 is
-`7eac6abbc7364928147d60dd1c583d084c02debf1552734bc82a4dec59c941be`; its 23 members contain
-only hashes and redacted summaries. The run captured no login content, raw database, or key and used no
-Setup Wizard interaction, UI injection, authenticated account, Agent, printer, hardware, or firmware.
-
-The historical final13 official AppImage attempt 8 mapped both passed-package libraries 4/4 and retained
-Studio PID `137`/start ticks `192688662` while two proven pre-delivery failures were followed by one
-successful development no-auth commit. Redacted evidence SHA-256 is
-`a4453c8dce3829cc1a84a372a772b516812fe1564b310e61db9e9009a11cf9d2`; the login content, raw
-runner state, and database files were not retrieved. No Setup Wizard interaction, UI injection,
-authenticated account, Agent, printer, hardware action, or firmware action occurred.
-
-An earlier exact Linux packaged-library load passed but was superseded. The historical final11 official AppImage
-run mapped both Ubuntu 22.04 libraries and kept the same Studio process alive across two proven
-pre-delivery connection failures; after Hub became ready, retry produced one successful no-auth
-response, one committed active plugin session, and one create audit with no duplicate or discarded
-credential. The evidence file SHA-256 is
-`cc8a0ef1f16bfc3a109345f9ada4e15096ca5fcf6f6b50c82387cce53aee55dd`. Its authenticated
-desktop-session checklist, Windows real Studio, macOS, and live printer actions remain separate
-evidence gates. A development no-auth or no-print Studio result must not be presented as external
-sign-in, print, cancel, command, or hardware validation.
+The historical final11 through final16 exact-AppImage module-load and development no-auth
+recovery evidence, including the redacted evidence bundles and their SHA-256 values, is retained
+in `docs/compatibility/bambu-studio-plugin.md` and
+`docs/compatibility/bambu-studio-plugin-smoke.md`. It is not authenticated Studio, print, cancel,
+command, hardware, or firmware validation.
 
 ## Authentication And Provisioning
 
