@@ -1,14 +1,22 @@
 use anyhow::Context;
+#[cfg(test)]
+use pandar_core::CommandId;
+#[cfg(test)]
+use pandar_core::JobStatus;
 use pandar_core::PrintCalibrationMode;
-use pandar_core::{AgentId, CommandId, Job, JobArtifact, JobId, JobStatus, TenantId};
+use pandar_core::{AgentId, Job, JobArtifact, JobId, TenantId};
+#[cfg(test)]
+use sea_orm::ActiveValue::Set;
 #[cfg(test)]
 use sea_orm::PaginatorTrait;
-use sea_orm::{ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
+#[cfg(test)]
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
 mod artifacts;
 mod audit;
 mod cancel;
 mod clear;
+#[cfg(test)]
 mod command_transitions;
 mod create;
 pub(crate) mod hydration;
@@ -22,9 +30,10 @@ mod studio_tasks;
 pub(crate) mod transitions;
 mod write_transaction;
 
+#[cfg(test)]
+use crate::entities::jobs;
 use crate::{
     db::Database,
-    entities::jobs,
     printer_secrets::PrinterAccessCodeCipher,
     repositories::{AuditActor, RepositoryResult},
 };
@@ -33,6 +42,7 @@ pub use artifacts::AgentArtifactAccess;
 pub use clear::ClearJobsOutcome;
 pub use print_reports::{AppliedPrintReport, ApplyPrintReport, PrintReportDiagnostic};
 pub use quota::ArtifactQuotaLimits;
+#[cfg(test)]
 use rows::job_from_model_loading_usage;
 #[cfg(test)]
 pub(crate) use studio_tasks::test_pause as studio_task_test_pause;
@@ -207,6 +217,7 @@ impl JobRepository {
             .await
     }
 
+    #[cfg(test)]
     pub async fn mark_for_command(
         &self,
         command_id: CommandId,
@@ -234,6 +245,7 @@ impl JobRepository {
         self.get_by_command(command_id).await
     }
 
+    #[cfg(test)]
     async fn get_by_command(&self, command_id: CommandId) -> RepositoryResult<Option<Job>> {
         let Some(job) = jobs::Entity::find()
             .filter(jobs::Column::CommandId.eq(command_id.to_string()))

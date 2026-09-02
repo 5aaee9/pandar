@@ -37,13 +37,6 @@ impl<'a> CurrentAgentSession<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
-struct CommandSession<'a> {
-    tenant_id: TenantId,
-    agent_id: AgentId,
-    session_id: Option<&'a str>,
-}
-
 async fn mark_sent_and_job(
     state: &AppState,
     command: CommandRecord,
@@ -63,56 +56,9 @@ async fn mark_sent_and_job(
     .map_err(repository_status)
 }
 
-pub async fn handle_ack_and_job(
-    state: &AppState,
-    tenant_id: TenantId,
-    agent_id: AgentId,
-    command_id: CommandId,
-    accepted: bool,
-    error: String,
-    link_printer_access_code: Option<&str>,
-) -> Result<(), Status> {
-    handle_ack_and_job_with_session(
-        state,
-        CommandSession {
-            tenant_id,
-            agent_id,
-            session_id: None,
-        },
-        command_id,
-        accepted,
-        error,
-        link_printer_access_code,
-    )
-    .await
-}
-
 pub(crate) async fn handle_current_session_ack_and_job(
     state: &AppState,
     session: CurrentAgentSession<'_>,
-    command_id: CommandId,
-    accepted: bool,
-    error: String,
-    link_printer_access_code: Option<&str>,
-) -> Result<(), Status> {
-    handle_ack_and_job_with_session(
-        state,
-        CommandSession {
-            tenant_id: session.tenant_id,
-            agent_id: session.agent_id,
-            session_id: Some(session.session_id),
-        },
-        command_id,
-        accepted,
-        error,
-        link_printer_access_code,
-    )
-    .await
-}
-
-async fn handle_ack_and_job_with_session(
-    state: &AppState,
-    session: CommandSession<'_>,
     command_id: CommandId,
     accepted: bool,
     error: String,
@@ -124,105 +70,76 @@ async fn handle_ack_and_job_with_session(
         .await
         .map_err(repository_status)?;
     let error = redact_command_error(&command.kind, &error, link_printer_access_code);
-    if let Some(session_id) = session.session_id {
-        let action = if accepted {
-            CurrentSessionCommandAction::Acknowledge
-        } else {
-            CurrentSessionCommandAction::Fail {
-                error,
-                result_json: None,
-            }
-        };
-        transition_current_session_command(
-            state.database(),
-            session.tenant_id,
-            session.agent_id,
-            session_id,
-            command_id,
-            action,
-        )
-        .await
-        .map_err(repository_status)?;
-        return Ok(());
-    }
-    if accepted {
-        if command.kind == "print_project_file" {
-            state
-                .jobs()
-                .mark_print_acknowledged(command_id, session.tenant_id, session.agent_id)
-                .await
-                .map_err(repository_status)?;
-        } else {
-            state
-                .commands()
-                .mark_acknowledged(command_id, session.tenant_id, session.agent_id)
-                .await
-                .map_err(repository_status)?;
-        }
+    let action = if accepted {
+        CurrentSessionCommandAction::Acknowledge
     } else {
-        if command.kind == "print_project_file" {
-            state
-                .jobs()
-                .mark_print_failed(command_id, session.tenant_id, session.agent_id, error)
-                .await
-                .map_err(repository_status)?;
-        } else {
-            state
-                .commands()
-                .mark_failed(command_id, session.tenant_id, session.agent_id, error)
-                .await
-                .map_err(repository_status)?;
+        CurrentSessionCommandAction::Fail {
+            error,
+            result_json: None,
         }
-    }
+    };
+    transition_current_session_command(
+        state.database(),
+        session.tenant_id,
+        session.agent_id,
+        session.session_id,
+        command_id,
+        action,
+    )
+    .await
+    .map_err(repository_status)?;
     Ok(())
 }
 
-pub async fn handle_result_and_job(
+#[cfg(test)]
+pub async fn handle_ack_and_job(
     state: &AppState,
     tenant_id: TenantId,
     agent_id: AgentId,
     command_id: CommandId,
-    result: CommandResult,
+    accepted: bool,
+    error: String,
     link_printer_access_code: Option<&str>,
-) -> Result<Option<CommandRecord>, Status> {
-    handle_result_and_job_with_session(
-        state,
-        CommandSession {
-            tenant_id,
-            agent_id,
-            session_id: None,
-        },
-        command_id,
-        result,
-        link_printer_access_code,
-    )
-    .await
+) -> Result<(), Status> {
+    let command = state
+        .commands()
+        .load_owned(command_id, tenant_id, agent_id)
+        .await
+        .map_err(repository_status)?;
+    let error = redact_command_error(&command.kind, &error, link_printer_access_code);
+    if accepted {
+        if command.kind == "print_project_file" {
+            state
+                .jobs()
+                .mark_print_acknowledged(command_id, tenant_id, agent_id)
+                .await
+                .map_err(repository_status)?;
+        } else {
+            state
+                .commands()
+                .mark_acknowledged(command_id, tenant_id, agent_id)
+                .await
+                .map_err(repository_status)?;
+        }
+    } else if command.kind == "print_project_file" {
+        state
+            .jobs()
+            .mark_print_failed(command_id, tenant_id, agent_id, error)
+            .await
+            .map_err(repository_status)?;
+    } else {
+        state
+            .commands()
+            .mark_failed(command_id, tenant_id, agent_id, error)
+            .await
+            .map_err(repository_status)?;
+    }
+    Ok(())
 }
 
 pub(crate) async fn handle_current_session_result_and_job(
     state: &AppState,
     session: CurrentAgentSession<'_>,
-    command_id: CommandId,
-    result: CommandResult,
-    link_printer_access_code: Option<&str>,
-) -> Result<Option<CommandRecord>, Status> {
-    handle_result_and_job_with_session(
-        state,
-        CommandSession {
-            tenant_id: session.tenant_id,
-            agent_id: session.agent_id,
-            session_id: Some(session.session_id),
-        },
-        command_id,
-        result,
-        link_printer_access_code,
-    )
-    .await
-}
-
-async fn handle_result_and_job_with_session(
-    state: &AppState,
-    session: CommandSession<'_>,
     command_id: CommandId,
     result: CommandResult,
     link_printer_access_code: Option<&str>,
@@ -234,51 +151,66 @@ async fn handle_result_and_job_with_session(
         .map_err(repository_status)?;
     let success = result.success;
     let error = redact_command_error(&command.kind, &result.error, link_printer_access_code);
-    let result_json = if !success && command.kind == "print_project_file" {
-        print_transfer_failure_result_json(result.result_json, &error)?
+    let result_json = redacted_result_json(
+        &command.kind,
+        result.result_json,
+        success,
+        &error,
+        link_printer_access_code,
+    )?;
+    let action = if success {
+        CurrentSessionCommandAction::Succeed { result_json }
     } else {
-        optional_result_json(&command.kind, result.result_json, link_printer_access_code)
+        CurrentSessionCommandAction::Fail { error, result_json }
     };
-    if let Some(session_id) = session.session_id {
-        let action = if success {
-            CurrentSessionCommandAction::Succeed { result_json }
-        } else {
-            CurrentSessionCommandAction::Fail { error, result_json }
-        };
-        let command = transition_current_session_command(
-            state.database(),
-            session.tenant_id,
-            session.agent_id,
-            session_id,
-            command_id,
-            action,
-        )
+    let command = transition_current_session_command(
+        state.database(),
+        session.tenant_id,
+        session.agent_id,
+        session.session_id,
+        command_id,
+        action,
+    )
+    .await
+    .map_err(repository_status)?;
+    Ok((command.kind != "print_project_file").then_some(command))
+}
+
+#[cfg(test)]
+pub async fn handle_result_and_job(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    command_id: CommandId,
+    result: CommandResult,
+    link_printer_access_code: Option<&str>,
+) -> Result<Option<CommandRecord>, Status> {
+    let command = state
+        .commands()
+        .load_owned(command_id, tenant_id, agent_id)
         .await
         .map_err(repository_status)?;
-        return Ok((command.kind != "print_project_file").then_some(command));
-    }
+    let success = result.success;
+    let error = redact_command_error(&command.kind, &result.error, link_printer_access_code);
+    let result_json = redacted_result_json(
+        &command.kind,
+        result.result_json,
+        success,
+        &error,
+        link_printer_access_code,
+    )?;
     if success {
         if command.kind == "print_project_file" {
             state
                 .jobs()
-                .mark_print_succeeded_with_result(
-                    command_id,
-                    session.tenant_id,
-                    session.agent_id,
-                    result_json,
-                )
+                .mark_print_succeeded_with_result(command_id, tenant_id, agent_id, result_json)
                 .await
                 .map_err(repository_status)?;
             Ok(None)
         } else {
             let command = state
                 .commands()
-                .mark_succeeded_with_result(
-                    command_id,
-                    session.tenant_id,
-                    session.agent_id,
-                    result_json,
-                )
+                .mark_succeeded_with_result(command_id, tenant_id, agent_id, result_json)
                 .await
                 .map_err(repository_status)?;
             Ok(Some(command))
@@ -286,29 +218,35 @@ async fn handle_result_and_job_with_session(
     } else if command.kind == "print_project_file" {
         state
             .jobs()
-            .mark_print_failed_with_result(
-                command_id,
-                session.tenant_id,
-                session.agent_id,
-                error,
-                result_json,
-            )
+            .mark_print_failed_with_result(command_id, tenant_id, agent_id, error, result_json)
             .await
             .map_err(repository_status)?;
         Ok(None)
     } else {
         let command = state
             .commands()
-            .mark_failed_with_result(
-                command_id,
-                session.tenant_id,
-                session.agent_id,
-                error,
-                result_json,
-            )
+            .mark_failed_with_result(command_id, tenant_id, agent_id, error, result_json)
             .await
             .map_err(repository_status)?;
         Ok(Some(command))
+    }
+}
+
+fn redacted_result_json(
+    kind: &str,
+    result_json: String,
+    success: bool,
+    error: &str,
+    link_printer_access_code: Option<&str>,
+) -> Result<Option<String>, Status> {
+    if !success && kind == "print_project_file" {
+        print_transfer_failure_result_json(result_json, error)
+    } else {
+        Ok(optional_result_json(
+            kind,
+            result_json,
+            link_printer_access_code,
+        ))
     }
 }
 

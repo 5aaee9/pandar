@@ -1,12 +1,13 @@
-use pandar_core::{AgentId, CommandId, CommandStatus, TenantId};
+use pandar_core::{AgentId, CommandId, CommandRecord, CommandStatus, TenantId};
 use tonic::{Code, Status};
 
+#[cfg(test)]
+use crate::grpc::commands::handle_result_and_job;
 use crate::{
     AppState,
     grpc::commands::{
         CurrentAgentSession, handle_current_session_ack_and_job,
-        handle_current_session_result_and_job, handle_result_and_job, parse_command_id,
-        repository_status,
+        handle_current_session_result_and_job, parse_command_id, repository_status,
     },
     printer_events::{PrinterEvent, PrinterEventCommand},
     repositories::{PrinterOperationKind, PrinterOperationPayload},
@@ -14,6 +15,7 @@ use crate::{
 };
 use pandar_protocol::agent::v1::{CommandAck, CommandResult};
 
+#[cfg(test)]
 #[cfg(test)]
 use crate::grpc::commands::handle_ack_and_job;
 
@@ -147,8 +149,7 @@ pub(super) async fn handle_command_result(
             match handle_result_for_command(
                 state,
                 tenant_id,
-                agent_id,
-                Some(current_session),
+                current_session,
                 command_id,
                 result,
                 claim.access_code(),
@@ -186,8 +187,7 @@ pub(super) async fn handle_command_result(
                     handle_result_for_command(
                         state,
                         tenant_id,
-                        agent_id,
-                        Some(current_session),
+                        current_session,
                         command_id,
                         result,
                         None,
@@ -275,39 +275,37 @@ pub(in crate::grpc) async fn handle_result(
     result: CommandResult,
 ) -> Result<CommandId, Status> {
     let command_id = parse_command_id(&result.command_id)?;
-    handle_result_for_command(state, tenant_id, agent_id, None, command_id, result, None).await?;
+    let command =
+        handle_result_and_job(state, tenant_id, agent_id, command_id, result, None).await?;
+    publish_command_result(state, tenant_id, command).await;
     Ok(command_id)
 }
 
 async fn handle_result_for_command(
     state: &AppState,
     tenant_id: TenantId,
-    agent_id: AgentId,
-    session: Option<CurrentAgentSession<'_>>,
+    session: CurrentAgentSession<'_>,
     command_id: CommandId,
     result: CommandResult,
     link_printer_access_code: Option<&str>,
 ) -> Result<(), Status> {
-    let command = if let Some(session) = session {
-        handle_current_session_result_and_job(
-            state,
-            session,
-            command_id,
-            result,
-            link_printer_access_code,
-        )
-        .await?
-    } else {
-        handle_result_and_job(
-            state,
-            tenant_id,
-            agent_id,
-            command_id,
-            result,
-            link_printer_access_code,
-        )
-        .await?
-    };
+    let command = handle_current_session_result_and_job(
+        state,
+        session,
+        command_id,
+        result,
+        link_printer_access_code,
+    )
+    .await?;
+    publish_command_result(state, tenant_id, command).await;
+    Ok(())
+}
+
+async fn publish_command_result(
+    state: &AppState,
+    tenant_id: TenantId,
+    command: Option<CommandRecord>,
+) {
     if let Some(command) = command {
         state
             .publish_printer_event(
@@ -318,7 +316,6 @@ async fn handle_result_for_command(
             )
             .await;
     }
-    Ok(())
 }
 
 async fn link_printer_command_is_terminal(

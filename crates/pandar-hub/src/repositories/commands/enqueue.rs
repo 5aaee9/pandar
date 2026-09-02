@@ -1,9 +1,12 @@
 use anyhow::Context;
-use pandar_core::{AgentId, CommandId, CommandRecord, TenantId};
+#[cfg(test)]
+use pandar_core::AgentId;
+use pandar_core::{CommandId, CommandRecord, TenantId};
 use sea_orm::EntityTrait;
 
+#[cfg(test)]
+use super::{DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload};
 use super::{
-    DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
     ReloadPrinterConnectionPayload, command_from_model, inserts, inserts::InsertCommand, ownership,
 };
 use crate::{
@@ -45,6 +48,7 @@ pub async fn reload_printer_connection(
         .ok_or(RepositoryError::MissingCommand)
 }
 
+#[cfg(test)]
 pub async fn refresh_printers(
     database: &Database,
     tenant_id: TenantId,
@@ -74,6 +78,7 @@ pub async fn refresh_printers(
         .ok_or(RepositoryError::MissingCommand)
 }
 
+#[cfg(test)]
 pub async fn print_project_file(
     database: &Database,
     tenant_id: TenantId,
@@ -108,6 +113,7 @@ pub async fn print_project_file(
         .ok_or(RepositoryError::MissingCommand)
 }
 
+#[cfg(test)]
 pub async fn discover_printers(
     database: &Database,
     tenant_id: TenantId,
@@ -140,6 +146,7 @@ pub async fn discover_printers(
         .ok_or(RepositoryError::MissingCommand)
 }
 
+#[cfg(test)]
 pub async fn diagnose_printer(
     database: &Database,
     tenant_id: TenantId,

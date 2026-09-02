@@ -39,6 +39,7 @@ Remaining acceptance work:
 
 ## Recently Completed
 
+- Collapsed the command-transition test seam: all test-only unfenced command/job status mutators (mark_sent, mark_acknowledged, mark_succeeded, the print-command variants, mark_for_command, and the plain enqueue wrappers) are now compiled for tests only, the session-less ack/result entries are explicit test fixtures, and `CommandRepository::mark_failed` is the single documented unfenced transition reserved for hub-side terminal sweeps. Production transitions were already fully session-fenced; the shared UPDATE cores are unchanged.
 - Dropped the retired user API-token feature end to end: a new shared migration deletes the `api_tokens` table, the 410-tombstone provisioning routes are removed, and the dead repository, entity, and `authenticate_bearer` paths are gone. External-identity sign-in now builds `AuthenticatedUser` directly; tenant tokens, bootstrap, and the mobile/plugin client contracts are unchanged.
 - Removed 23 retired `pandar_plugin_*` FFI exports from the network plugin (superseded account load/persist/clear wrappers, hub-action and ticket-admission policy probes, and the legacy plugin-jobs HTTP path). The shipped plugin export table shrank while every Studio-loaded `bambu_network_*` symbol and all shim→Rust contracts are unchanged; the redaction-policy tests moved onto the live print-submission path.
 - Deleted two unused type re-export shim files from the dashboard; consumers already import the same aliases from `dashboard-types` and the generated Hub client.

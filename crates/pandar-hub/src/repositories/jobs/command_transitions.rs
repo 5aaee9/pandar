@@ -6,6 +6,7 @@ use super::{JobRepository, transitions};
 use crate::repositories::RepositoryResult;
 
 impl JobRepository {
+    #[cfg(test)]
     pub async fn mark_print_sent(
         &self,
         command_id: CommandId,
@@ -26,6 +27,7 @@ impl JobRepository {
         .await
     }
 
+    #[cfg(test)]
     pub async fn mark_print_acknowledged(
         &self,
         command_id: CommandId,
@@ -46,6 +48,7 @@ impl JobRepository {
         .await
     }
 
+    #[cfg(test)]
     pub async fn mark_print_failed(
         &self,
         command_id: CommandId,
@@ -57,6 +60,7 @@ impl JobRepository {
             .await
     }
 
+    #[cfg(test)]
     pub async fn mark_print_failed_with_result(
         &self,
         command_id: CommandId,
@@ -79,6 +83,7 @@ impl JobRepository {
         .await
     }
 
+    #[cfg(test)]
     pub async fn mark_print_succeeded(
         &self,
         command_id: CommandId,
@@ -99,6 +104,7 @@ impl JobRepository {
         .await
     }
 
+    #[cfg(test)]
     pub async fn mark_print_succeeded_with_result(
         &self,
         command_id: CommandId,

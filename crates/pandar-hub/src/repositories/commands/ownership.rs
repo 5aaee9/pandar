@@ -59,6 +59,7 @@ where
     Ok(())
 }
 
+#[cfg(test)]
 pub async fn printer_serial_for_agent(
     database: &Database,
     tenant_id: TenantId,

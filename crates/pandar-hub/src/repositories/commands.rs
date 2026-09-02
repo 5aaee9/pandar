@@ -18,7 +18,9 @@ pub use firmware::{
     FirmwareRefreshPayload,
 };
 use rows::command_from_model;
-use transitions::{CommandTransition, TerminalCommandTransition, invalid_transition};
+#[cfg(test)]
+use transitions::CommandTransition;
+use transitions::{TerminalCommandTransition, invalid_transition};
 pub use types::{
     DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload, PrintProjectFilePayload,
     RefreshPrinterMaterialsPayload, ReloadPrinterConnectionPayload,
@@ -58,6 +60,7 @@ impl CommandRepository {
         Ok(count.try_into().expect("command count should fit in i64"))
     }
 
+    #[cfg(test)]
     pub async fn enqueue_refresh_printers(
         &self,
         tenant_id: TenantId,
@@ -166,6 +169,7 @@ impl CommandRepository {
         .await
     }
 
+    #[cfg(test)]
     pub async fn enqueue_print_project_file(
         &self,
         tenant_id: TenantId,
@@ -176,6 +180,7 @@ impl CommandRepository {
         enqueue::print_project_file(&self.database, tenant_id, agent_id, printer_id, payload).await
     }
 
+    #[cfg(test)]
     pub async fn enqueue_discover_printers(
         &self,
         tenant_id: TenantId,
@@ -185,6 +190,7 @@ impl CommandRepository {
         enqueue::discover_printers(&self.database, tenant_id, agent_id, payload).await
     }
 
+    #[cfg(test)]
     pub async fn enqueue_diagnose_printer(
         &self,
         tenant_id: TenantId,
@@ -212,6 +218,7 @@ impl CommandRepository {
             .transpose()
     }
 
+    #[cfg(test)]
     pub async fn mark_sent(
         &self,
         command_id: CommandId,
@@ -230,6 +237,7 @@ impl CommandRepository {
         .await
     }
 
+    #[cfg(test)]
     pub async fn mark_acknowledged(
         &self,
         command_id: CommandId,
@@ -248,6 +256,7 @@ impl CommandRepository {
         .await
     }
 
+    #[cfg(test)]
     pub async fn mark_succeeded(
         &self,
         command_id: CommandId,
@@ -258,6 +267,7 @@ impl CommandRepository {
             .await
     }
 
+    #[cfg(test)]
     pub async fn mark_succeeded_with_result(
         &self,
         command_id: CommandId,
@@ -277,6 +287,14 @@ impl CommandRepository {
         .await
     }
 
+    /// Marks a command failed without a session fence. Only hub-side terminal
+    /// sweeps may use this: h2c response timeouts, live-dispatch failures
+    /// (link-printer and printer operations, including the link-printer
+    /// dispatch-failure fallback), and pending live-command cleanup after a
+    /// session is removed, where the dispatching session can no longer be
+    /// current and the command still must reach a terminal state.
+    /// Agent-driven acks and results go through
+    /// `transition_current_session_command` instead.
     pub async fn mark_failed(
         &self,
         command_id: CommandId,
@@ -327,6 +345,7 @@ impl CommandRepository {
         .await
     }
 
+    #[cfg(test)]
     async fn guard_transition(
         &self,
         transition: CommandTransition<'_>,

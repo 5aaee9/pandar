@@ -28,6 +28,7 @@ pub struct StatusTransition<'a> {
     pub allowed_statuses: &'a [CommandStatus],
 }
 
+#[cfg(test)]
 pub(super) struct CommandTransition<'a> {
     pub(super) command_id: CommandId,
     pub(super) tenant_id: TenantId,
