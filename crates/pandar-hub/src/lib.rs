@@ -92,22 +92,7 @@ impl fmt::Debug for AppState {
 impl AppState {
     pub async fn connect(database_url: impl Into<String>) -> anyhow::Result<Self> {
         let artifact_storage = ArtifactStorageConfig::from_env()?.build().await?;
-        Self::connect_with_config(database_url, artifact_storage).await
-    }
-
-    pub async fn connect_with_config(
-        database_url: impl Into<String>,
-        artifact_storage: impl IntoArtifactStorage,
-    ) -> anyhow::Result<Self> {
         let external_auth = ExternalAuthConfig::from_env()?.map(JwtVerifier::remote);
-        Self::connect_with_auth_config(database_url, artifact_storage, external_auth).await
-    }
-
-    pub async fn connect_with_auth_config(
-        database_url: impl Into<String>,
-        artifact_storage: impl IntoArtifactStorage,
-        external_auth: Option<JwtVerifier>,
-    ) -> anyhow::Result<Self> {
         let control_plane = std::env::var("PANDAR_CONTROL_PLANE").ok();
         let nats_url = std::env::var("PANDAR_NATS_URL").ok();
         let nats_subject = std::env::var("PANDAR_NATS_SUBJECT").ok();
