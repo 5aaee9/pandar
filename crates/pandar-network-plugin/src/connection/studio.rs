@@ -23,17 +23,6 @@ pub(super) const LOCAL_MESSAGE_LISTENER: i32 = 2;
 pub(super) const PRINTER_CONNECTED_LISTENER: i32 = 3;
 pub(super) const LOCAL_CONNECTED_LISTENER: i32 = 4;
 
-pub type StudioPayloadVisitor = extern "C" fn(
-    *mut std::ffi::c_void,
-    *const u8,
-    usize,
-    *const u8,
-    usize,
-    *const u8,
-    usize,
-    *const u8,
-    usize,
-);
 pub type StudioHeartbeatVisitor = extern "C" fn(*mut std::ffi::c_void, i32, *const u8, usize, u64);
 pub type StudioWorkVisitor =
     extern "C" fn(*mut std::ffi::c_void, i32, i32, u64, u64, *const u8, usize, *const u8, usize);
@@ -101,8 +90,6 @@ struct ListenerMask {
 pub(crate) struct StudioPayload {
     pub(crate) dev_id: String,
     pub(crate) body: String,
-    pub(crate) printer_id: String,
-    pub(crate) model: String,
 }
 
 pub(crate) struct StudioRequestSnapshot {

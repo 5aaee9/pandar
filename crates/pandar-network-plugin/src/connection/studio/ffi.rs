@@ -9,37 +9,6 @@ unsafe fn session(
     unsafe { crate::connection::ffi::session(session_ptr) }
 }
 
-fn invalid_delivery(status: i32) -> PluginStudioDeliveryResult {
-    PluginStudioDeliveryResult {
-        status,
-        ticket: 0,
-        local_generation: 0,
-        account_epoch: 0,
-        cache_generation: 0,
-    }
-}
-
-fn visit_payload(
-    payload: Option<StudioPayload>,
-    context: *mut c_void,
-    visitor: Option<StudioPayloadVisitor>,
-) {
-    let (Some(payload), Some(visitor)) = (payload, visitor) else {
-        return;
-    };
-    visitor(
-        context,
-        payload.dev_id.as_ptr(),
-        payload.dev_id.len(),
-        payload.body.as_ptr(),
-        payload.body.len(),
-        payload.printer_id.as_ptr(),
-        payload.printer_id.len(),
-        payload.model.as_ptr(),
-        payload.model.len(),
-    );
-}
-
 #[unsafe(no_mangle)]
 /// # Safety
 /// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
@@ -203,98 +172,6 @@ pub unsafe extern "C" fn pandar_plugin_studio_heartbeat_plan(
 #[unsafe(no_mangle)]
 /// # Safety
 /// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
-pub unsafe extern "C" fn pandar_plugin_studio_prepare_connected(
-    session_ptr: *mut c_void,
-    dev_id_ptr: *const u8,
-    dev_id_len: usize,
-    now_ms: u64,
-    context: *mut c_void,
-    visitor: Option<StudioPayloadVisitor>,
-) -> PluginStudioDeliveryResult {
-    let Some(session) = (unsafe { session(session_ptr) }) else {
-        return invalid_delivery(-1);
-    };
-    let Some(dev_id) = (unsafe { read_utf8(dev_id_ptr, dev_id_len) }) else {
-        return invalid_delivery(-2);
-    };
-    let (delivery, payload) = session.studio_prepare_connected(dev_id, now_ms);
-    visit_payload(payload, context, visitor);
-    delivery
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
-pub unsafe extern "C" fn pandar_plugin_studio_prepare_message(
-    session_ptr: *mut c_void,
-    tunnel: i32,
-    dev_id_ptr: *const u8,
-    dev_id_len: usize,
-    local_generation: u64,
-    initialize_cloud: bool,
-    expected_cache_generation: u64,
-    context: *mut c_void,
-    visitor: Option<StudioPayloadVisitor>,
-) -> PluginStudioDeliveryResult {
-    let Some(session) = (unsafe { session(session_ptr) }) else {
-        return invalid_delivery(-1);
-    };
-    let Some(dev_id) = (unsafe { read_utf8(dev_id_ptr, dev_id_len) }) else {
-        return invalid_delivery(-2);
-    };
-    let (delivery, payload) = session.studio_prepare_message(
-        tunnel,
-        dev_id,
-        local_generation,
-        initialize_cloud,
-        expected_cache_generation,
-    );
-    visit_payload(payload, context, visitor);
-    delivery
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
-pub unsafe extern "C" fn pandar_plugin_studio_status_target_available(
-    session_ptr: *mut c_void,
-    tunnel: i32,
-    dev_id_ptr: *const u8,
-    dev_id_len: usize,
-    local_generation: u64,
-) -> i32 {
-    let Some(session) = (unsafe { session(session_ptr) }) else {
-        return 0;
-    };
-    unsafe { read_utf8(dev_id_ptr, dev_id_len) }.is_some_and(|dev_id| {
-        session.studio_status_target_available(tunnel, dev_id, local_generation)
-    }) as i32
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
-pub unsafe extern "C" fn pandar_plugin_studio_connect_local(
-    session_ptr: *mut c_void,
-    dev_id_ptr: *const u8,
-    dev_id_len: usize,
-    context: *mut c_void,
-    visitor: Option<StudioPayloadVisitor>,
-) -> PluginStudioDeliveryResult {
-    let Some(session) = (unsafe { session(session_ptr) }) else {
-        return invalid_delivery(-1);
-    };
-    let Some(dev_id) = (unsafe { read_utf8(dev_id_ptr, dev_id_len) }) else {
-        return invalid_delivery(-2);
-    };
-    let (delivery, payload) = session.studio_connect_local(dev_id);
-    visit_payload(payload, context, visitor);
-    delivery
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
 pub unsafe extern "C" fn pandar_plugin_studio_disconnect_local(session_ptr: *mut c_void) -> i32 {
     let Some(session) = (unsafe { session(session_ptr) }) else {
         return -1;
@@ -317,29 +194,6 @@ pub unsafe extern "C" fn pandar_plugin_studio_local_generation(
     unsafe { read_utf8(dev_id_ptr, dev_id_len) }
         .map(|dev_id| session.studio_local_generation(dev_id))
         .unwrap_or_default()
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
-pub unsafe extern "C" fn pandar_plugin_studio_complete_delivery(
-    session_ptr: *mut c_void,
-    ticket: u64,
-    delivered: bool,
-) -> i32 {
-    unsafe { session(session_ptr) }
-        .is_some_and(|session| session.studio_complete_delivery(ticket, delivered)) as i32
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
-pub unsafe extern "C" fn pandar_plugin_studio_claim_delivery(
-    session_ptr: *mut c_void,
-    ticket: u64,
-) -> i32 {
-    unsafe { session(session_ptr) }.is_some_and(|session| session.studio_claim_delivery(ticket))
-        as i32
 }
 
 #[unsafe(no_mangle)]

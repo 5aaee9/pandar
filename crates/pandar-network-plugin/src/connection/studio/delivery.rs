@@ -68,12 +68,13 @@ impl ConnectionState {
     }
 
     fn studio_payload(&self, dev_id: &str, body: String) -> Option<StudioPayload> {
-        self.printers.get(dev_id).map(|printer| StudioPayload {
-            dev_id: dev_id.to_owned(),
-            body,
-            printer_id: printer.pandar_printer_id.clone(),
-            model: printer.model.clone().unwrap_or_default(),
-        })
+        self
+            .printers
+            .contains_key(dev_id)
+            .then(|| StudioPayload {
+                dev_id: dev_id.to_owned(),
+                body,
+            })
     }
 
     pub(super) fn prepare_connected(

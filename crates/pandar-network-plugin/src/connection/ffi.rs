@@ -232,19 +232,6 @@ pub unsafe extern "C" fn pandar_plugin_connection_take_offline(
 
 #[unsafe(no_mangle)]
 /// # Safety
-/// Handles must be live, byte inputs valid for paired lengths, outputs writable, and callback contexts valid for the call.
-pub unsafe extern "C" fn pandar_plugin_connection_claim_delivery(
-    session_ptr: *mut c_void,
-    ticket: u64,
-) -> i32 {
-    let Some(session) = (unsafe { session(session_ptr) }) else {
-        return -1;
-    };
-    i32::from(session.claim_delivery(ticket))
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
 /// `session` must be null or a uniquely owned handle returned by
 /// `pandar_plugin_printer_refresh_session_create`. It must not be borrowed or used after this call.
 pub unsafe extern "C" fn pandar_plugin_printer_refresh_session_destroy(session: *mut c_void) {
