@@ -6,11 +6,7 @@ import {
   rotateTenantToken,
 } from "./admin-actions";
 import { deleteAgent, refreshPrinters } from "./actions";
-import {
-  duplicateJob,
-  retryDispatchJob,
-  retryDispatchJobs,
-} from "./job-actions";
+import { retryDispatchJob } from "./job-actions";
 
 const redirectMock = vi.hoisted(() =>
   vi.fn((url: string) => {
@@ -81,13 +77,6 @@ describe("job action redirects", () => {
       [["agent_id", "agent-1"]],
       "refresh_queued",
     ],
-    [
-      "retryDispatchJobs",
-      retryDispatchJobs,
-      [["job_id", "job-1"]],
-      "retry_queued",
-    ],
-    ["duplicateJob", duplicateJob, [["job_id", "job-1"]], "duplicate_queued"],
   ] as const)(
     "redirects %s back to jobs when submitted from jobs",
     async (_name, action, fields, status) => {

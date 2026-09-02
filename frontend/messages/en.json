@@ -38,9 +38,7 @@
       "tenant_token_revoked": "Tenant token revoked",
       "join_link_accepted": "Join link accepted",
       "retry_queued": "Retry queued",
-      "retry_partial": "Some retries could not be queued — review the list",
       "reprint_queued": "Reprint queued",
-      "duplicate_queued": "Duplicate queued",
       "printer_control_queued": "Printer control queued",
       "agent_not_connected": "Agent is not connected to this Hub process"
     }

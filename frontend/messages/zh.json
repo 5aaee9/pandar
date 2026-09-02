@@ -38,9 +38,7 @@
       "tenant_token_revoked": "租户 API 令牌已撤销",
       "join_link_accepted": "加入链接已接受",
       "retry_queued": "重试已入队",
-      "retry_partial": "部分重试未能入队——请检查列表",
       "reprint_queued": "重新打印已入队",
-      "duplicate_queued": "复制任务已入队",
       "printer_control_queued": "打印机控制已入队",
       "agent_not_connected": "Agent 未连接到当前 Hub 进程"
     }

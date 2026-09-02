@@ -12,9 +12,7 @@ const knownPositiveActionStatuses = new Set([
   "tenant_token_revoked",
   "join_link_accepted",
   "retry_queued",
-  "retry_partial",
   "reprint_queued",
-  "duplicate_queued",
   "printer_control_queued",
 ]);
 
