@@ -725,13 +725,9 @@
     "tokenShownOnce": "此令牌仅显示一次，浏览器不会保存。",
     "joinTokenShownOnce": "此加入令牌仅显示一次，浏览器不会保存。",
     "pairingShownOnce": "此配对输出仅显示一次，浏览器不会保存。",
-    "agents": "Agent",
-    "agentsMeta": "已连接 {count} 个",
-    "noLinkedAgents": "暂无已连接 Agent。请在上方配对本地 Agent。",
     "auditEvents": "审计事件",
     "auditMeta": "近期 {count} 条",
-    "noAuditEvents": "暂无审计事件。令牌和 Agent 活动将显示在这里。",
-    "idLabel": "ID"
+    "noAuditEvents": "暂无审计事件。令牌和 Agent 活动将显示在这里。"
   },
   "usersPage": {
     "pageTitle": "用户",

@@ -39,6 +39,7 @@ Remaining acceptance work:
 
 ## Recently Completed
 
+- Deleted the test-only `TenantSecretsPanel` façade; the token-dialog tests render the production `TenantTokensTable` directly, and the four admin-namespace translation keys only the façade consumed (`agents`, `agentsMeta`, `noLinkedAgents`, `idLabel`) were removed from both message bundles.
 - Removed seven superseded per-step `pandar_plugin_*` Studio delivery FFI exports (prepare/claim/complete/status-target/local-connect probes) that the coarse-grained Rust dispatchers replaced in the thin-shim refactor, plus the now-unused payload-visitor ABI type and `StudioPayload` printer/model fields; the shipped plugin export table shrank and all dispatcher, shim-contract, and boundary tests pass unchanged.
 - Removed the unused Sidebar primitive API (Rail, Input, Separator, GroupContent, GroupAction, MenuAction, MenuSubButton, MenuBadge, MenuSkeleton, MenuSub, MenuSubItem and the whole `sidebar-menu-render` module) from the dashboard; the shadcn template exports had no production or test consumers and the rendered sidebar is unchanged.
 - Consolidated the duplicated historical Public Beta final11–final16 evidence narratives in `docs/development.md` and `docs/release-installation.md` (about 300 lines of repeated archives, hashes, run ids, and disclaimers) into short pointers; `docs/compatibility/release-artifacts.md` and the Studio plugin compatibility documents remain the single evidence owners.

@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import type { MutationActionState, SecretActionState } from "./action-state";
 import { SecretActionResult } from "./admin-panel-shared";
-import { TenantSecretsPanel } from "./tenant-secrets-panel";
+import { TenantTokensTable } from "./admin-settings-token-list";
 import type { Tenant, TenantToken } from "./dashboard-types";
 
 const actionMocks = vi.hoisted(() => ({
@@ -73,11 +73,7 @@ function TokenPanel({
   return (
     <QueryClientProvider client={queryClient}>
       <NextIntlClientProvider locale="en" messages={en}>
-        <TenantSecretsPanel
-          selectedTenant={tenant}
-          tenantTokens={tokens}
-          nowMs={nowMs}
-        />
+        <TenantTokensTable tenantId={tenant.id} tokens={tokens} nowMs={nowMs} />
       </NextIntlClientProvider>
     </QueryClientProvider>
   );

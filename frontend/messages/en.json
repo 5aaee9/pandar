@@ -725,13 +725,9 @@
     "tokenShownOnce": "This token is shown once and is not persisted by the browser.",
     "joinTokenShownOnce": "This join token is shown once and is not persisted by the browser.",
     "pairingShownOnce": "This pairing output is shown once and is not persisted by the browser.",
-    "agents": "Agents",
-    "agentsMeta": "{count} linked",
-    "noLinkedAgents": "No linked agents. Pair a local agent above to get started.",
     "auditEvents": "Audit events",
     "auditMeta": "{count} recent",
-    "noAuditEvents": "No audit events yet. Token and agent activity will appear here.",
-    "idLabel": "ID"
+    "noAuditEvents": "No audit events yet. Token and agent activity will appear here."
   },
   "usersPage": {
     "pageTitle": "Users",
