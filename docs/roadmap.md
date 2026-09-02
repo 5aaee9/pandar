@@ -39,6 +39,7 @@ Remaining acceptance work:
 
 ## Recently Completed
 
+- Removed the unused Sidebar primitive API (Rail, Input, Separator, GroupContent, GroupAction, MenuAction, MenuSubButton, MenuBadge, MenuSkeleton, MenuSub, MenuSubItem and the whole `sidebar-menu-render` module) from the dashboard; the shadcn template exports had no production or test consumers and the rendered sidebar is unchanged.
 - Consolidated the duplicated historical Public Beta final11–final16 evidence narratives in `docs/development.md` and `docs/release-installation.md` (about 300 lines of repeated archives, hashes, run ids, and disclaimers) into short pointers; `docs/compatibility/release-artifacts.md` and the Studio plugin compatibility documents remain the single evidence owners.
 - Removed the stale nested Frontend package-manager files (`frontend/package-lock.json`, `frontend/pnpm-lock.yaml`, and `frontend/pnpm-workspace.yaml`); no CI, Docker, Nix, or script consumer referenced them and they still resolved superseded dependencies, so the root npm workspace lock is the only dependency resolution source.
 
