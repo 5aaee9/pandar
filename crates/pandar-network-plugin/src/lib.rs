@@ -97,8 +97,6 @@ use http::{
     plugin_printer_operation_url, post_json, post_multipart_print,
 };
 
-pub const PLUGIN_NAME: &str = "pandar-network-plugin";
-
 const NO_AUTH_CONNECT_FAILURE_STATUS: i32 = 2;
 
 #[derive(Clone, Copy)]

@@ -1,25 +1,8 @@
-import type {
-  Command,
-  Job,
-  NozzleSystem,
-  Printer,
-  UserIdentity,
-} from "./generated/hub-api";
+import type { NozzleSystem } from "./generated/hub-api";
 
 export type * from "./generated/hub-api";
 
 export type PrinterNozzleSystem = NozzleSystem;
-
-export type Summary = {
-  tenants: number;
-  agents: number;
-  printers: number;
-  commands: number;
-};
-
-export type UserIdentityList = {
-  identities: UserIdentity[];
-};
 
 export type AuthMetadata = {
   source: "request_cookie" | "app_auth_bearer_token" | "app_api_token" | "none";
@@ -75,11 +58,6 @@ export type CommandResultData =
   | DiscoveryResultData
   | DiagnosticResultData
   | PrinterLinkResultData;
-
-export type PrinterEvent =
-  | { type: "printer_snapshot"; printer: Printer }
-  | { type: "job_progress"; job: Job }
-  | { type: "command_result"; command: Command };
 
 export type FetchResult<T> =
   | { data: T; error: null; status?: number }

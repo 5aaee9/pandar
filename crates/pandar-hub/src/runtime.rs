@@ -64,10 +64,6 @@ pub fn spawn_session_expiry(state: AppState) -> JoinHandle<()> {
     })
 }
 
-pub fn spawn_control_plane(state: AppState) -> JoinHandle<()> {
-    spawn_control_plane_inner(state, None)
-}
-
 pub fn spawn_control_plane_ready(
     state: AppState,
 ) -> (JoinHandle<()>, oneshot::Receiver<anyhow::Result<()>>) {

@@ -16,19 +16,6 @@ export type LiveState =
   | "unavailable"
   | "error";
 
-export type TextKey = {
-  namespace: string;
-  key: string;
-  values?: Record<string, string | number>;
-};
-
-export type RuntimeNotification = {
-  key: string;
-  titleKey: TextKey;
-  detailKey: TextKey;
-  timestamp: string;
-};
-
 const enAuthSource: Record<AuthMetadata["source"], string> = {
   request_cookie: "Request cookie",
   app_auth_bearer_token: "App bearer token",
