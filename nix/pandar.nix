@@ -67,10 +67,6 @@
           || lib.hasPrefix "contracts/" rel
           || rel == "crates"
           || lib.hasPrefix "crates/" rel
-          || rel == "docs"
-          || rel == "docs/superpowers"
-          || rel == "docs/superpowers/specs"
-          || lib.hasPrefix "docs/superpowers/specs/" rel
           || rel == "frontend"
           || rel == "frontend/plugin-local"
           || rel == "frontend/plugin-local/dist"
