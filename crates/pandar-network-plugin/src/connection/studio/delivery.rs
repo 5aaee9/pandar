@@ -68,13 +68,10 @@ impl ConnectionState {
     }
 
     fn studio_payload(&self, dev_id: &str, body: String) -> Option<StudioPayload> {
-        self
-            .printers
-            .contains_key(dev_id)
-            .then(|| StudioPayload {
-                dev_id: dev_id.to_owned(),
-                body,
-            })
+        self.printers.contains_key(dev_id).then(|| StudioPayload {
+            dev_id: dev_id.to_owned(),
+            body,
+        })
     }
 
     pub(super) fn prepare_connected(
