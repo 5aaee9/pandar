@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Centralized the release version in `Cargo.toml` `[workspace.package]` and a single `nix/pandar.nix` literal; workspace members inherit `version.workspace = true` and `scripts/check-release-version.sh` enforces the single source of truth.
+
+### Removed
+
+- Removed the test-only bulk `retryDispatchJobs`/`duplicateJob` server actions with their orphaned `retry_partial`/`duplicate_queued` statuses and translations; the single-job retry action and Hub recovery endpoints are unchanged.
+- Removed orphaned UI and script leaves: the unused dashboard `Separator` primitive, the unused Android `MonoText` composable, and the nested frontend `build:plugin-local` script.
+- Removed the one-shot bundle-size measurement script with its stale baseline, the superseded Phase 21 ABI symbol listing plus its vestigial Nix source filter, and the completed implementation-tracking plans; durable contracts remain with the specs, architecture, compatibility, and changelog owners.
+
 ## [0.2.0] - 2026-08-31
 
 ### Added
