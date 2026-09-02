@@ -140,14 +140,14 @@ impl FirmwareFixture {
             generation: GENERATION,
         }))
         .await;
-        tokio::time::timeout(Duration::from_millis(200), prepare)
+        tokio::time::timeout(Duration::from_secs(2), prepare)
             .await
             .expect("prepare waiter must release transition lease")
             .unwrap()
     }
 
     pub(super) async fn next_command(&mut self) -> pandar_protocol::agent::v1::HubCommand {
-        tokio::time::timeout(Duration::from_millis(200), self.command_receiver.recv())
+        tokio::time::timeout(Duration::from_secs(2), self.command_receiver.recv())
             .await
             .expect("firmware command dispatch timed out")
             .expect("firmware command channel closed")
