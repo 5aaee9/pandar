@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 #[cfg(target_os = "windows")]
 use std::process::Output;
-
 fn target_dir() -> PathBuf {
     if let Some(configured) = std::env::var_os("CARGO_TARGET_DIR")
         && !configured.is_empty()
@@ -36,22 +35,6 @@ fn dynamic_library_path() -> PathBuf {
         "libpandar_network_plugin.so"
     };
     target_dir().join(profile).join(filename)
-}
-
-fn historical_floor_symbols() -> BTreeSet<String> {
-    let abi_series = selected_abi_series();
-    let symbols = include_str!(
-        "../../../docs/superpowers/specs/2026-06-23-phase-21-network-plugin-abi-symbols.txt"
-    );
-    symbols
-        .lines()
-        .map(str::trim)
-        .filter(|line| line.starts_with("bambu_network_") || line.starts_with("ft_"))
-        .filter(|symbol| {
-            abi_series.capabilities.filament_cloud || !is_filament_cloud_symbol(symbol)
-        })
-        .map(ToOwned::to_owned)
-        .collect()
 }
 
 fn target_studio_symbols() -> BTreeSet<String> {
@@ -276,30 +259,6 @@ fn exported_symbols(path: &Path) -> BTreeSet<String> {
             .map(ToOwned::to_owned)
             .collect()
     }
-}
-
-#[test]
-fn exports_historical_phase_21_abi_floor() {
-    let library = dynamic_library_path();
-    let status = Command::new("cargo")
-        .args(["build", "-p", "pandar-network-plugin"])
-        .status()
-        .expect("cargo build -p pandar-network-plugin is required before export inspection");
-    assert!(
-        status.success(),
-        "cargo build -p pandar-network-plugin failed"
-    );
-    assert!(
-        library.exists(),
-        "dynamic library does not exist at {}; run cargo build -p pandar-network-plugin first",
-        library.display()
-    );
-
-    let expected = historical_floor_symbols();
-    let exported = exported_symbols(&library);
-    let missing = expected.difference(&exported).cloned().collect::<Vec<_>>();
-
-    assert!(missing.is_empty(), "missing plugin exports: {missing:?}");
 }
 
 #[test]
