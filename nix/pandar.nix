@@ -49,6 +49,8 @@
 
       root = ./..;
 
+      version = "0.2.0";
+
       rustSrc = lib.cleanSourceWith {
         src = root;
         filter =
@@ -127,7 +129,7 @@
 
       commonArgs = {
         src = rustSrc;
-        version = "0.2.0";
+        inherit version;
         strictDeps = true;
         SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
         NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
@@ -163,7 +165,7 @@
 
       pandar-hub = buildRustPackage "pandar-hub" "-p pandar-hub --bin pandar-hub";
       pandar-agent-unwrapped = buildRustPackage "pandar-agent-unwrapped" "-p pandar-agent --bin pandar-agent";
-      pandar-agent = pkgs.runCommand "pandar-agent-0.2.0" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
+      pandar-agent = pkgs.runCommand "pandar-agent-${version}" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
         mkdir -p "$out/bin"
         makeWrapper ${pandar-agent-unwrapped}/bin/pandar-agent "$out/bin/pandar-agent" \
           --set-default PANDAR_FFMPEG_PATH ${lib.getExe pkgs.ffmpeg} \
@@ -237,7 +239,7 @@
 
       pandar-auth = pkgs.buildNpmPackage {
         pname = "pandar-auth";
-        version = "0.2.0";
+        inherit version;
         src = frontendWorkspaceSource;
         npmWorkspace = "pandar-auth";
         npmDepsFetcherVersion = 2;
@@ -322,7 +324,7 @@
 
       pandar-web = pkgs.buildNpmPackage {
         pname = "pandar-web";
-        version = "0.2.0";
+        inherit version;
         src = frontendWorkspaceSource;
         npmDepsFetcherVersion = 2;
         npmDepsHash = "sha256-a17kef++/aIyQxHFh33E/3uylSstAUrGD5OG4NQwDZQ=";
@@ -777,7 +779,7 @@
 
         pandar-fmt = craneLib.cargoFmt {
           src = rustSrc;
-          version = "0.2.0";
+          inherit version;
           pname = "pandar-fmt";
         };
       };

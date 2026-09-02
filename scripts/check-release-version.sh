@@ -18,17 +18,29 @@ check_version() {
   fi
 }
 
+workspace_version="$(sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)"
+check_version "Cargo.toml [workspace.package]" "$workspace_version"
+
 for manifest in crates/*/Cargo.toml tools/*/Cargo.toml; do
-  version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$manifest" | head -n 1)"
+  if grep -q '^version.workspace = true$' "$manifest"; then
+    continue
+  fi
+  version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' "$manifest" | head -n 1)"
   check_version "$manifest" "$version"
 done
 
-while IFS= read -r version; do
-  check_version "nix/pandar.nix" "$version"
-done < <(sed -n 's/^[[:space:]]*version = "\([^"]*\)";/\1/p' nix/pandar.nix)
+nix_versions="$(sed -n 's/^[[:space:]]*version = "\([^"]*\)";[[:space:]]*$/\1/p' nix/pandar.nix)"
+nix_version_count="$(printf '%s' "$nix_versions" | grep -c '^.' || true)"
+if [[ "$nix_version_count" -ne 1 ]]; then
+  echo "nix/pandar.nix must hold exactly one version literal, found $nix_version_count" >&2
+  exit 1
+fi
+check_version "nix/pandar.nix" "$nix_versions"
 
-nix_agent_version="$(sed -n 's/.*runCommand "pandar-agent-\([^"]*\)".*/\1/p' nix/pandar.nix | head -n 1)"
-check_version "nix/pandar.nix pandar-agent derivation" "$nix_agent_version"
+if ! grep -Fq 'runCommand "pandar-agent-${version}"' nix/pandar.nix; then
+  echo "nix/pandar.nix pandar-agent derivation must derive its name from the shared version" >&2
+  exit 1
+fi
 
 node - "$expected" <<'JS'
 const fs = require("node:fs");
