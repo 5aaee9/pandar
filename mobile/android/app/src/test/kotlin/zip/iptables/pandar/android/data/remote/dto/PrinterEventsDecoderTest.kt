@@ -49,7 +49,7 @@ class PrinterEventsDecoderTest {
           "id":"j1","tenant_id":"t1","printer_id":"p1","agent_id":"a1","artifact_id":"art1","command_id":"c1",
           "status":"acknowledged","error":null,"created_at":"a","updated_at":"b",
           "print":{"status":"running","printer_state":null,"progress_percent":10,"remaining_time_minutes":null,"current_layer":null,"total_layers":null,"active_file":null,"last_progress_percent":null,"last_layer":null,"error":null,"started_at":null,"finished_at":null,"updated_at":null},
-          "command":{"id":"c1","kind":"print_project_file","status":"acknowledged"},
+          "command":{"id":"c1","kind":"print_project_file","status":"acknowledged","uploaded_url":null},
           "artifact":{"id":"art1","tenant_id":"t1","filename":"f.3mf","content_type":"model/3mf","size_bytes":1,"metadata":null,"created_at":"c"},
           "material":{"ams_mapping":null,"ams_mapping2":null,"ams_mapping_info":null,"filament_usage":[]}}}
         """.trimIndent()
