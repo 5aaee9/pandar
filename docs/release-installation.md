@@ -1,6 +1,6 @@
 # Release Installation
 
-Release `v0.2.1` will be published at <https://github.com/ProjectPandar/pandar/releases/tag/v0.2.1>. The tag also publishes these service artifacts:
+Release `v0.2.1` is published at <https://github.com/ProjectPandar/pandar/releases/tag/v0.2.1>. The tag also publishes these service artifacts:
 
 - `ghcr.io/projectpandar/pandar/hub:v0.2.1`
 - `ghcr.io/projectpandar/pandar/web:v0.2.1`
@@ -213,9 +213,9 @@ creation. Use the platform files from the archive matching the installed ABI ser
 
 | OS      | Network plugin                   | BambuSource companion          | Current validation                                     |
 | ------- | -------------------------------- | ------------------------------ | ------------------------------------------------------ |
-| Linux   | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    | `v0.2.0` package/ABI smoke passed; real Studio pending |
-| Windows | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      | `v0.2.0` package/ABI smoke passed; real Studio pending |
-| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | `v0.2.0` package/ABI smoke passed; real Studio pending |
+| Linux   | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    | `v0.2.1` package/ABI smoke passed; real Studio pending |
+| Windows | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      | `v0.2.1` package/ABI smoke passed; real Studio pending |
+| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | `v0.2.1` package/ABI smoke passed; real Studio pending |
 
 Install both from an unpacked release archive with the CLI:
 
@@ -299,12 +299,12 @@ values and test-run ids, in `docs/compatibility/release-artifacts.md` and
 
 | Target label    | Current operator status | Current ABI-series evidence                                                                                                                                           | Next action                                                             |
 | --------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `linux-amd64`   | `in_progress`           | Every `v0.2.0` tagged archive passed native checksum, layout, CLI, and ABI smoke; no current real Studio run exists.                                                  | Run the exact Studio checklist for each installed ABI series.           |
-| `windows-amd64` | `in_progress`           | Every `v0.2.0` tagged desktop archive passed native MSVC package/ABI smoke; hook bundles passed checksum and exact-layout verification; real Studio remains untested. | Run the exact Windows Studio checklist for each installed ABI series.   |
+| `linux-amd64`   | `in_progress`           | Every `v0.2.1` tagged archive passed native checksum, layout, CLI, and ABI smoke; no current real Studio run exists.                                                  | Run the exact Studio checklist for each installed ABI series.           |
+| `windows-amd64` | `in_progress`           | Every `v0.2.1` tagged desktop archive passed native MSVC package/ABI smoke; hook bundles passed checksum and exact-layout verification; real Studio remains untested. | Run the exact Windows Studio checklist for each installed ABI series.   |
 | `linux-arm64`   | `untested`              | No current three-file native candidate exists.                                                                                                                        | Do not publish a Studio compatibility claim.                            |
 | `windows-arm64` | `untested`              | No current three-file native candidate exists.                                                                                                                        | Do not publish a Studio compatibility claim.                            |
-| `macos-amd64`   | `in_progress`           | Every `v0.2.0` tagged archive passed package/ABI smoke under Rosetta; no matching current real Studio evidence exists.                                                | Run the exact Studio checklist under Rosetta.                           |
-| `macos-arm64`   | `in_progress`           | Every `v0.2.0` tagged archive passed native package/ABI smoke; authenticated real Studio evidence remains incomplete.                                                 | Run the authenticated checklist before claiming complete compatibility. |
+| `macos-amd64`   | `in_progress`           | Every `v0.2.1` tagged archive passed package/ABI smoke under Rosetta; no matching current real Studio evidence exists.                                                | Run the exact Studio checklist under Rosetta.                           |
+| `macos-arm64`   | `in_progress`           | Every `v0.2.1` tagged archive passed native package/ABI smoke; authenticated real Studio evidence remains incomplete.                                                 | Run the authenticated checklist before claiming complete compatibility. |
 
 ## Operations Runbook
 

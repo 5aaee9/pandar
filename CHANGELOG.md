@@ -22,11 +22,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Restored the manually selected Pandar server before Studio login evaluation: a Web URL chosen on the plugin's local sign-in page and its discovered canonical Hub identity now persist (`pandar-plugin-server-selection.json`, typed, durable replacement) and are restored on the next clean launch without URL environment variables, so a valid same-Hub login is visible through the Studio ABI without another sign-in. Explicit `PANDAR_PLUGIN_*`/`APP_*` URL configuration stays authoritative, a credential belonging to a different Hub is never restored, and a malformed selection fails closed with its diagnostic logged.
 
-### Planned distribution
+### Distribution
 
-- The release workflow will publish seven ABI-series-specific CLI, network plugin, and BambuSource archive sets with SHA-256 sidecars; Windows also publishes Studio hook bundles.
-- The tag will publish Hub and Web images at `ghcr.io/projectpandar/pandar/hub:v0.2.1` and `ghcr.io/projectpandar/pandar/web:v0.2.1`.
-- The tag will publish Helm chart `0.2.1` at `oci://ghcr.io/projectpandar/pandar/chart/pandar`.
+- The release publishes seven ABI-series-specific CLI, network plugin, and BambuSource archive sets with SHA-256 sidecars; Windows also publishes Studio hook bundles.
+- Hub and Web images are published at `ghcr.io/projectpandar/pandar/hub:v0.2.1` and `ghcr.io/projectpandar/pandar/web:v0.2.1`.
+- Helm chart `0.2.1` is published at `oci://ghcr.io/projectpandar/pandar/chart/pandar`.
 
 ### Known limitations
 

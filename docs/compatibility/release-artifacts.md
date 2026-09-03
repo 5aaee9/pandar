@@ -104,6 +104,42 @@ reached its normal home UI and mapped the exact Pandar plugin and companion from
 module-load evidence for macOS arm64 only. It is not a tagged artifact, macOS amd64 evidence,
 authenticated sign-in/session evidence, Hub/Agent/printer evidence, or a hardware-operation claim.
 
+## v0.2.1 Tagged Release Evidence
+
+Annotated tag `v0.2.1` resolves to commit `57930101c55191f4fb7c21f94ba6ab22d60d6b86`.
+Release-commit Checks run `33741766950`, release-commit Docker run `33741766929`, tagged Checks run
+`33745633247`, Release run `33745633245`, and Docker/Helm run `33745633365` all passed. The Android
+workflow failed on the release commit and on prior main commits with the same Android-side
+serialization drift; Android is not part of the tagged release distribution and is tracked as an
+unscheduled main-branch repair.
+
+The GitHub Release was published on 2026-09-03 with 70 assets: 28 desktop archives, seven Windows
+Studio hook bundles, and one SHA-256 sidecar for every archive or bundle. All 35 downloaded sidecars
+passed `sha256sum --check --strict`, every payload archive or bundle had its exact three-file layout,
+and all seven downloaded Linux CLIs executed `--help` successfully.
+
+| ABI series | Linux amd64                                                        | macOS amd64                                                        | macOS arm64                                                        | Windows amd64                                                      | Windows hook                                                       |
+| ---------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `02.06.00` | `ee84afac42006072fe2184721706751bf78b6b51a94a8663fe16ff316024a5fc` | `e710cac5b5196cfc6ac03d3e3837dc2cd2fdf0b22de23d579eb04cf9e0e2751e` | `5d87198e935a6b6c1013369cf742fff93982a41c5e69c45128fa8722dcfdb5ab` | `507511b13e0f40fbce8e41b13d31517690d5c2f6a5673736e85a7e3c5808a65d` | `ab2e6dc8e3fd2415dbae854018ddc1b02d35ab22380dcce61c5af1facf2e288d` |
+| `02.06.01` | `9d77f34650cd808fc0c65011cfe88ec3a1bb95746ffeee47451e7c915a4e5815` | `461796fbb414adec6cbdfebbbc9725dd45872574ff848150cf9291f172b194e9` | `ab5788281c181e38df35a3238c2413970f221a3da35004a56be23f6da3e70ce7` | `1394acbaaa1daaddbeb7c2efb851623aef1f88b4a377788ce0c15baa414a92d4` | `caf47aca803b8f96edee65af90a0507a4913d6d664c58ab27450c6d8058b534a` |
+| `02.07.00` | `e00504b0869ddf386dccdc45a2d47de19f864b08a3623968e012ec66a10822cb` | `3958f7d7977009d03c6ef8ea308ac59f3b6772c46253d337214d2a556c113293` | `8b405a45decc847f5b7714cd4ac60f7228a57c520e3cd20a0c71778092b80d82` | `5d4e0784cdd6ece8204e2624c6a17df0add76b2eaa2f5803b1c8a1ad6741b4b4` | `d157b8223492d404745e595a03c4c8de47a93eca72d706a4a1eee0f0aeccd7bc` |
+| `02.07.01` | `26a28a2153e6e048951689248025d3c0290e66504c380d7a2b75dafd0b6462f0` | `0cf8014d268e7fe08fcec1ff946e12627bf1792e1797944eddc5700f1fc5fb94` | `97c851ad01c1a978039ca99954c36b9fe0399e4357438f0dbb0784d639e702f5` | `22e67b55a7caf0bd242be5bb2aa8d5fe20b389a89e773533e36f41a9fa902f8a` | `8d8c9df22563dfa5ed5a4f77334f6a99939520230b77421a1925cee8eacc7278` |
+| `02.08.00` | `84f8a0a9bd86130cb3c6bdf0a83c070bbf2ef5a20adfe9c8ec5515a16cea8e5c` | `ae7982ed79a74cb1015f1b4c48268b35158e0f184cd901413b9de4900e9e6e69` | `bd4d7e0a838646ebeffa100cc4c51bd4cc20e73825d382e27b64233800330f22` | `3efdbd8e55130cbbf1998899d2e3493858cf1cc53a6b7b4761fe7ccc15f1ae44` | `3de0e6aee2c741dd905461dd52df1365c99546ddf46f1610ac50e9330c468a52` |
+| `02.08.01` | `86619cb607b8f2afea06cd3ad3a9cd1167a1b6dbcf9ea0999d3e72654246bdf2` | `7bc107a70b30a417b877638170e185228fea78f367b7a8b6ca9eb514e6922ecf` | `0bc58606551879fb768845a874f4311b286a44843df028e617fd97948a98f408` | `be8fe6593d03b3ad81a12485a529d31a966b6107d59d5a9537e81358faf0e410` | `03460bd6353bd1eed4e48b67d518845a36ac10a36709e22d03fbb9fa8d884497` |
+| `02.08.02` | `4d6f0753a9a846320971e4a0c8f916f16f4a5128dfad10e82ed5eb8240ddb534` | `8920923b4a5dd51033ae84169d38d751f1528f6f7027b0d0badceaf5d0920671` | `58951ecb68e8ead770cd6786d3ee8d7795fcb33791c3f748b0ece127a2ba35dd` | `673a0d4cdf151e89c961df4fb8164c4da1a61ec7743abd5cb6198f87222e9e8f` | `1631a836680a69cca9ae50f52da9ffb6afc8fc01448e1cf82e31088596220c95` |
+
+Every Release matrix job built on its target OS, ran the packaged CLI and ABI probe, verified the
+exact three-file archive layout, and passed its ABI-series-specific Studio export contract before
+publication. This is package evidence, not real Studio or printer-hardware evidence.
+
+The published Hub manifest digest is
+`sha256:ced0d6f5a447f24cc8dafa52eaf621627847b0c8a650e8285b3d5895502fd04c`; the Web manifest
+digest is `sha256:bc93ae8625d23fcd10fd3c5c9b745af6540e36e450b0834910b2d14403569a89`.
+Both image manifests identify release commit `57930101c55191f4fb7c21f94ba6ab22d60d6b86` and
+version `v0.2.1`. Helm chart `0.2.1` has OCI digest
+`sha256:1c35cbc891ec0a6ef1c88b90bdac2b57f5bf1066ed1614eb00b40d14262645f7` and declares
+`appVersion: v0.2.1`.
+
 ## v0.2.0 Tagged Release Evidence
 
 Annotated tag `v0.2.0` resolves to commit `94442a59ff15bbf77754d6448d5675ae07c35f28`.
