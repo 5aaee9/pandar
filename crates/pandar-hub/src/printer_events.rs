@@ -20,6 +20,7 @@ use pandar_protocol::agent::v1::AgentCapability;
 
 mod materials;
 mod projection;
+mod sweep;
 
 pub use crate::job_projection::JobProjection as PrinterEventJob;
 pub use projection::PrinterProjectionChange;

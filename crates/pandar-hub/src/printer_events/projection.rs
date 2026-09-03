@@ -82,4 +82,20 @@ impl ProjectionEventHub {
             })
             .clone()
     }
+
+    /// Drops tenant channels with no live receiver. Subscribers keep their
+    /// own channel and publication clones, and sends to an empty channel are
+    /// already dropped, so removal is unobservable; the next subscribe or
+    /// publish recreates the channel on demand.
+    pub(super) async fn sweep_idle_channels(&self) -> usize {
+        let mut channels = self.channels.lock().await;
+        let before = channels.len();
+        channels.retain(|_, channel| channel.sender.receiver_count() > 0);
+        before - channels.len()
+    }
+
+    #[cfg(test)]
+    pub(super) async fn channel_count(&self) -> usize {
+        self.channels.lock().await.len()
+    }
 }

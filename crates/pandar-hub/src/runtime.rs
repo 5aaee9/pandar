@@ -50,6 +50,8 @@ pub fn spawn_session_expiry(state: AppState) -> JoinHandle<()> {
         let mut ticker = tokio::time::interval(STALE_SESSION_SWEEP_INTERVAL);
         loop {
             ticker.tick().await;
+            state.sessions().sweep_idle_transition_leases().await;
+            state.printer_events().sweep_idle_channels().await;
             let now = pandar_core::created_at_now();
             if let Err(err) = expire_stale_sessions_once(&state, &now).await {
                 tracing::error!(error = %format!("{err:#}"), "failed to expire stale agent sessions");

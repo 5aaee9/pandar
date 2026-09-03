@@ -108,6 +108,12 @@ impl SessionRegistry {
         self.transitions.lease(agent_id).await
     }
 
+    /// Drops agent transition leases that no task holds or waits on so agent
+    /// churn does not accumulate mutex entries for the hub's lifetime.
+    pub async fn sweep_idle_transition_leases(&self) -> usize {
+        self.transitions.sweep_idle_leases().await
+    }
+
     pub(crate) async fn transition_lease_for_session(
         &self,
         agent_id: AgentId,

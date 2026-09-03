@@ -22,6 +22,24 @@ impl AgentTransitions {
             .clone()
     }
 
+    /// Drops lease entries no task holds or waits on so agent churn does not
+    /// accumulate mutex entries for the hub's lifetime. Lease `Arc`s are only
+    /// cloned while holding the outer lock, so an entry with a single owner
+    /// is exclusively held by this map and removing it is unobservable: the
+    /// next lease creates a fresh mutex with identical serialization
+    /// semantics.
+    pub(super) async fn sweep_idle_leases(&self) -> usize {
+        let mut leases = self.leases.lock().await;
+        let before = leases.len();
+        leases.retain(|_, mutex| Arc::strong_count(mutex) > 1);
+        before - leases.len()
+    }
+
+    #[cfg(test)]
+    pub(super) async fn lease_count(&self) -> usize {
+        self.leases.lock().await.len()
+    }
+
     #[cfg(test)]
     pub(super) async fn lease_observed(
         &self,
@@ -175,5 +193,40 @@ pub(crate) mod pause {
         static PAUSES: OnceLock<Mutex<HashMap<(SessionToken, Phase), PausePoint>>> =
             OnceLock::new();
         PAUSES.get_or_init(|| Mutex::new(HashMap::new()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::SessionToken;
+    use super::*;
+
+    #[tokio::test]
+    async fn sweep_keeps_held_and_waited_leases_and_releases_idle_ones() {
+        let transitions = AgentTransitions::default();
+        let agent = AgentId::new();
+
+        let held = transitions.lease(agent).await;
+        transitions.sweep_idle_leases().await;
+        assert_eq!(transitions.lease_count().await, 1);
+
+        let token = SessionToken::new();
+        let mut waiting = pause::observe_waiting(token);
+        let waiter = {
+            let transitions = transitions.clone();
+            tokio::spawn(async move { transitions.lease_observed(agent, token).await })
+        };
+        waiting.wait_until_reached().await;
+        transitions.sweep_idle_leases().await;
+        assert_eq!(transitions.lease_count().await, 1);
+
+        drop(held);
+        waiter.await.unwrap();
+        transitions.sweep_idle_leases().await;
+        assert_eq!(transitions.lease_count().await, 0);
+
+        let lease = transitions.lease(agent).await;
+        assert_eq!(transitions.lease_count().await, 1);
+        drop(lease);
     }
 }
