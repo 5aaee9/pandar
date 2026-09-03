@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-03
+
 ### Changed
 
 - Centralized the release version in `Cargo.toml` `[workspace.package]` and a single `nix/pandar.nix` literal; workspace members inherit `version.workspace = true` and `scripts/check-release-version.sh` enforces the single source of truth.
@@ -15,6 +17,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Removed the test-only bulk `retryDispatchJobs`/`duplicateJob` server actions with their orphaned `retry_partial`/`duplicate_queued` statuses and translations; the single-job retry action and Hub recovery endpoints are unchanged.
 - Removed orphaned UI and script leaves: the unused dashboard `Separator` primitive, the unused Android `MonoText` composable, and the nested frontend `build:plugin-local` script.
 - Removed the one-shot bundle-size measurement script with its stale baseline, the superseded Phase 21 ABI symbol listing plus its vestigial Nix source filter, and the completed implementation-tracking plans; durable contracts remain with the specs, architecture, compatibility, and changelog owners.
+
+### Fixed
+
+- Restored the manually selected Pandar server before Studio login evaluation: a Web URL chosen on the plugin's local sign-in page and its discovered canonical Hub identity now persist (`pandar-plugin-server-selection.json`, typed, durable replacement) and are restored on the next clean launch without URL environment variables, so a valid same-Hub login is visible through the Studio ABI without another sign-in. Explicit `PANDAR_PLUGIN_*`/`APP_*` URL configuration stays authoritative, a credential belonging to a different Hub is never restored, and a malformed selection fails closed with its diagnostic logged.
+
+### Planned distribution
+
+- The release workflow will publish seven ABI-series-specific CLI, network plugin, and BambuSource archive sets with SHA-256 sidecars; Windows also publishes Studio hook bundles.
+- The tag will publish Hub and Web images at `ghcr.io/projectpandar/pandar/hub:v0.2.1` and `ghcr.io/projectpandar/pandar/web:v0.2.1`.
+- The tag will publish Helm chart `0.2.1` at `oci://ghcr.io/projectpandar/pandar/chart/pandar`.
+
+### Known limitations
+
+- Desktop archives remain unsigned. Verify the supplied SHA-256 sidecar; Windows SmartScreen and macOS Gatekeeper may warn.
+- Real-host installation and real Bambu Studio replacement evidence is not complete for every target and ABI series.
+- The container images target Linux amd64 only.
+- Native firmware and recovery ownership still requires one active Hub; the firmware package catalog is intentionally empty.
+- The Android client is built separately and is not attached to the GitHub Release.
 
 ## [0.2.0] - 2026-08-31
 

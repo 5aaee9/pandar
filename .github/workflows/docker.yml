@@ -151,7 +151,7 @@ jobs:
           chart_dir="docs/deployment/kubernetes"
           base_version="$(sed -n 's/^[[:space:]]*version:[[:space:]]*//p' "$chart_dir/Chart.yaml" | head -n1 | tr -d "\"'[:space:]")"
           if [ -z "$base_version" ]; then
-            base_version="0.2.0"
+            base_version="0.2.1"
           fi
 
           if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" == v* ]]; then
