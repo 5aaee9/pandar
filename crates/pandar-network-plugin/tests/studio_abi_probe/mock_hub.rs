@@ -113,6 +113,7 @@ pub(super) enum MockMode {
     NoAuthRecovery,
     OfficialNoAuthRecovery,
     OfficialNoAuthLogoutRecovery,
+    ServerSelectionRestore,
     Failure,
     NativePrintError,
     AxisFeatures,

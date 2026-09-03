@@ -9,9 +9,10 @@ mod direct;
 mod durable;
 mod process_lock;
 
-pub(super) use durable::MutationDurability;
 #[cfg(test)]
 pub(super) use durable::{FaultPoint, fail_next};
+pub(in crate::account) use durable::{MutationDurability, write_replace as durable_write_replace};
+pub(in crate::account) use process_lock::acquire as acquire_process_lock;
 
 pub(super) enum PersistedRevocation {
     Direct(PendingRevocation),

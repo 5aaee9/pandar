@@ -40,6 +40,7 @@ pub(super) struct ConfigBody<'a> {
     pub(super) using_default_server: bool,
     pub(super) using_default_web_server: bool,
     pub(super) using_default_hub_server: bool,
+    pub(super) user_selected: bool,
 }
 
 #[derive(Serialize)]

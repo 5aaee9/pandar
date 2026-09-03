@@ -114,6 +114,9 @@ pub(super) fn spawn(mode: MockMode, artifact: Vec<u8>, race_directory: &Path) ->
             MockMode::NoAuthRecovery => unreachable!(),
             MockMode::OfficialNoAuthRecovery => unreachable!(),
             MockMode::OfficialNoAuthLogoutRecovery => unreachable!(),
+            MockMode::ServerSelectionRestore => {
+                serve_server_selection_restore(&listener, &thread_stop, deadline)
+            }
             MockMode::Failure => serve_failure(&listener, &thread_stop, deadline),
             MockMode::NativePrintError => native::serve(&listener, &thread_stop, deadline),
             MockMode::AxisFeatures => serve_axis_features(&listener, &thread_stop, deadline),
@@ -333,6 +336,42 @@ fn respond_to_operation(
         "HTTP/1.1 202 Accepted",
         &format!(r#"{{"command_id":"{command_id}","status":"queued"}}"#),
     );
+}
+
+/// Serves the server-selection restore probe: the initial no-auth attempt is refused
+/// (the user must sign in), and every ticket exchange succeeds with the probe token.
+fn serve_server_selection_restore(
+    listener: &TcpListener,
+    stop: &AtomicBool,
+    deadline: std::time::Instant,
+) {
+    loop {
+        match super::next_incoming(listener, stop, deadline) {
+            Incoming::Stream(upgrade) => {
+                assert_printer_events_upgrade(&upgrade.request);
+                let frames = upgrade.serve();
+                for frame in snapshot_frames(&filament_switch_printers_response()) {
+                    frames.send(frame).expect("serve server-selection snapshot");
+                }
+            }
+            Incoming::Http(mut stream, request) => {
+                let line = request.lines().next().unwrap_or_default();
+                match line {
+                    "POST /api/v1/plugin/no-auth-session HTTP/1.1" => write_response(
+                        &mut stream,
+                        "HTTP/1.1 403 Forbidden",
+                        r#"{"error":"no_auth_required"}"#,
+                    ),
+                    "POST /api/v1/plugin/login-tickets/exchange HTTP/1.1" => write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
+                    ),
+                    _ => panic!("unexpected server-selection restore request: {line}"),
+                }
+            }
+        }
+    }
 }
 
 fn serve_failure(listener: &TcpListener, stop: &AtomicBool, deadline: std::time::Instant) {

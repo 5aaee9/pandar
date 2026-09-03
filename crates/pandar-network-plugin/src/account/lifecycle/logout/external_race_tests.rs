@@ -63,6 +63,7 @@ unsafe extern "C" fn race_account(
     let view = PluginAccountView {
         config_dir: PluginAccountBytes::from_str(&account.config_dir),
         hub_url: PluginAccountBytes::from_str(&hub_url),
+        frontend_url: empty,
         token: PluginAccountBytes::from_str(&token),
         user_id: empty,
         user_name: empty,
@@ -77,6 +78,7 @@ unsafe extern "C" fn race_account(
         action: 0,
         notification: PluginAccountNotification::Silent,
         hub_url: empty,
+        frontend_url: empty,
         token: empty,
         user_id: empty,
         user_name: empty,

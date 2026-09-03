@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cstdlib>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -18,10 +19,13 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #else
+#include <cerrno>
 #include <dlfcn.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <netdb.h>
+extern char** environ;
 #endif
 
 namespace BBL {

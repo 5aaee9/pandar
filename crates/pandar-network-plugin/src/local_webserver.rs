@@ -195,6 +195,7 @@ fn config_body(config: &LocalWebserverConfig) -> String {
         using_default_server,
         using_default_web_server: config.using_default_web_server,
         using_default_hub_server: config.using_default_hub_server,
+        user_selected: config.user_selected,
     })
 }
 

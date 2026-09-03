@@ -268,6 +268,7 @@ mod tests {
         AccountView {
             config_dir: "config".to_owned(),
             hub_url: "http://127.0.0.1:18080".to_owned(),
+            frontend_url: "http://localhost:13000".to_owned(),
             token: "token".to_owned(),
             user_id: "user".to_owned(),
             user_name: "User".to_owned(),

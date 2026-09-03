@@ -238,5 +238,7 @@ pub(super) struct LocalServerBaseUrl {
 
 #[derive(Debug, Deserialize)]
 pub(super) struct LocalServerConfig {
+    pub(super) web_url: String,
     pub(super) hub_url: String,
+    pub(super) user_selected: bool,
 }

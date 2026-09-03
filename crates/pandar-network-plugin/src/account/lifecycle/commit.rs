@@ -266,6 +266,7 @@ mod tests {
         let view = PluginAccountView {
             config_dir: PluginAccountBytes::from_str(&account.config_dir),
             hub_url: PluginAccountBytes::from_str(&account.hub_url),
+            frontend_url: empty,
             token: PluginAccountBytes::from_str(&account.token),
             user_id: empty,
             user_name: empty,
@@ -280,6 +281,7 @@ mod tests {
             action: 0,
             notification: PluginAccountNotification::Silent,
             hub_url: empty,
+            frontend_url: empty,
             token: empty,
             user_id: empty,
             user_name: empty,

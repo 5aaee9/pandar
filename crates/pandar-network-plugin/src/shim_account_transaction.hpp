@@ -55,6 +55,10 @@ extern "C" void shim_account_set_hub_url(void* opaque, PluginAccountBytes hub_ur
     static_cast<Agent*>(opaque)->hub_url = account_string(hub_url);
 }
 
+extern "C" void shim_account_set_frontend_url(void* opaque, PluginAccountBytes frontend_url) {
+    static_cast<Agent*>(opaque)->frontend_url = account_string(frontend_url);
+}
+
 extern "C" void shim_account_invoke_user_login(
     void* opaque,
     std::int32_t status,
@@ -94,6 +98,7 @@ const PluginAccountSessionBridge kAccountSessionBridge{
     shim_account_replace,
     shim_account_clear,
     shim_account_set_hub_url,
+    shim_account_set_frontend_url,
     shim_account_invoke_user_login,
     shim_account_invoke_http_error,
     shim_account_reset_personal_presets,
@@ -133,6 +138,7 @@ extern "C" std::int32_t with_current_account(
         const PluginAccountView current{
             account_bytes(config_dir),
             account_bytes(agent->hub_url),
+            account_bytes(agent->frontend_url),
             account_bytes(agent->token),
             account_bytes(agent->user_id),
             account_bytes(agent->user_name),

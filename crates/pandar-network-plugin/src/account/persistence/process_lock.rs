@@ -9,12 +9,12 @@ use anyhow::Context;
 static PROCESS_LOCK: Mutex<()> = Mutex::new(());
 const LOCK_FILE: &str = ".pandar-plugin-account.lock";
 
-pub(super) struct AccountFileLock {
+pub(in crate::account) struct AccountFileLock {
     file: File,
     _process: MutexGuard<'static, ()>,
 }
 
-pub(super) fn acquire(config_dir: &str) -> anyhow::Result<Option<AccountFileLock>> {
+pub(in crate::account) fn acquire(config_dir: &str) -> anyhow::Result<Option<AccountFileLock>> {
     if config_dir.is_empty() {
         return Ok(None);
     }

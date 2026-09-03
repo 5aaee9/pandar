@@ -1,6 +1,7 @@
 #include "studio_abi_probe/part_01.inc"
 #include "studio_abi_probe/part_02.inc"
 #include "studio_abi_probe/part_03.inc"
+#include "studio_abi_probe/server_selection_restore.inc"
 #include "studio_abi_probe/stream_lifecycle.inc"
 #include "studio_abi_probe/no_auth_recovery.inc"
 #include "studio_abi_probe/request_admission.inc"

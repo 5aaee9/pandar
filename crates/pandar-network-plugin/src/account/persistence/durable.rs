@@ -52,7 +52,7 @@ impl MutationDurability {
         }
     }
 
-    pub(super) fn reconfirm(self, directory: &Path, operation: &'static str) -> Self {
+    pub(in crate::account) fn reconfirm(self, directory: &Path, operation: &'static str) -> Self {
         match self {
             Self::Confirmed => Self::Confirmed,
             Self::ChangedUnconfirmed(error) => match confirm(directory) {
@@ -65,7 +65,7 @@ impl MutationDurability {
     }
 }
 
-pub(super) fn write_replace(
+pub(in crate::account) fn write_replace(
     directory: &Path,
     target: &Path,
     body: &[u8],

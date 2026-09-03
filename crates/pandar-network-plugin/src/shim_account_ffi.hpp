@@ -16,6 +16,7 @@ struct PluginAccountBytes {
 struct PluginAccountView {
     PluginAccountBytes config_dir;
     PluginAccountBytes hub_url;
+    PluginAccountBytes frontend_url;
     PluginAccountBytes token;
     PluginAccountBytes user_id;
     PluginAccountBytes user_name;
@@ -31,6 +32,7 @@ struct PluginAccountMutation {
     std::int32_t action;
     std::int32_t notification;
     PluginAccountBytes hub_url;
+    PluginAccountBytes frontend_url;
     PluginAccountBytes token;
     PluginAccountBytes user_id;
     PluginAccountBytes user_name;
@@ -58,6 +60,7 @@ struct PluginAccountSessionBridge {
     );
     void (*clear)(void*);
     void (*set_hub_url)(void*, PluginAccountBytes);
+    void (*set_frontend_url)(void*, PluginAccountBytes);
     void (*invoke_user_login)(void*, std::int32_t, bool);
     void (*invoke_http_error)(void*, std::uint32_t, PluginAccountBytes);
     void (*reset_personal_presets)(void*);

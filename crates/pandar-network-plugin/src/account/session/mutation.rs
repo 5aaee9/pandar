@@ -28,6 +28,7 @@ pub(super) const MUTATION_LOGIN: i32 = 4;
 pub(super) const MUTATION_RUNTIME_HUB: i32 = 6;
 pub(super) const MUTATION_FIRMWARE_FENCE: i32 = 7;
 pub(super) const MUTATION_RESTORE_FAILURE: i32 = 8;
+pub(super) const MUTATION_RUNTIME_SERVERS: i32 = 9;
 
 pub(super) unsafe fn apply_mutation(
     session: &AccountLifecycleSession,
@@ -100,6 +101,26 @@ pub(super) unsafe fn apply_mutation(
                 )?;
                 (bridge.clear)(agent);
                 (bridge.set_hub_url)(agent, PluginAccountBytes::from_str(&hub_url));
+                sync_empty_sessions(connection_ptr, firmware_ptr, &hub_url)?;
+                session.enqueue(AccountCallback::Transition(TransitionCallback {
+                    account_epoch: epoch,
+                    notification: None,
+                    expected: None,
+                    error: None,
+                }));
+            }
+            MUTATION_RUNTIME_SERVERS => {
+                let hub_url = mutation.hub_url.read("runtime Hub URL")?;
+                let frontend_url = mutation.frontend_url.read("runtime frontend URL")?;
+                let epoch = begin_transition(
+                    connection_ptr,
+                    firmware_ptr,
+                    &current.hub_url,
+                    &current.token,
+                )?;
+                (bridge.clear)(agent);
+                (bridge.set_hub_url)(agent, PluginAccountBytes::from_str(&hub_url));
+                (bridge.set_frontend_url)(agent, PluginAccountBytes::from_str(&frontend_url));
                 sync_empty_sessions(connection_ptr, firmware_ptr, &hub_url)?;
                 session.enqueue(AccountCallback::Transition(TransitionCallback {
                     account_epoch: epoch,

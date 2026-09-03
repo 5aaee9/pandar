@@ -54,6 +54,19 @@ fn env_or_default(primary: &str, secondary: &str, fallback: &str) -> (String, bo
         .map_or_else(|| (fallback.to_owned(), false), |value| (value, true))
 }
 
+/// Whether any explicit plugin Web/Hub URL environment configuration is set; such
+/// configuration outranks a saved manual server selection.
+pub(super) fn url_environment_configured() -> bool {
+    [
+        "PANDAR_PLUGIN_HUB_URL",
+        "APP_API_URL",
+        "PANDAR_PLUGIN_FRONTEND_URL",
+        "APP_BASE_URL",
+    ]
+    .into_iter()
+    .any(|name| std::env::var(name).is_ok_and(|value| !value.trim().is_empty()))
+}
+
 pub(super) fn canonical_hub_identity(value: &str) -> String {
     normalize_hub_url(value.to_owned()).unwrap_or_else(|| value.trim().trim_end_matches('/').into())
 }

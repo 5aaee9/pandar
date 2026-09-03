@@ -14,7 +14,7 @@ use mutation::apply_mutation;
 #[cfg(test)]
 use mutation::{
     MUTATION_CLEAR, MUTATION_FIRMWARE_FENCE, MUTATION_HTTP_ERROR, MUTATION_LOGIN, MUTATION_REPLACE,
-    MUTATION_RESTORE_FAILURE, MUTATION_RUNTIME_HUB,
+    MUTATION_RESTORE_FAILURE, MUTATION_RUNTIME_HUB, MUTATION_RUNTIME_SERVERS,
 };
 
 #[repr(C)]
@@ -31,6 +31,7 @@ pub struct PluginAccountSessionBridge {
     ),
     pub clear: extern "C" fn(*mut c_void),
     pub set_hub_url: extern "C" fn(*mut c_void, PluginAccountBytes),
+    pub set_frontend_url: extern "C" fn(*mut c_void, PluginAccountBytes),
     pub invoke_user_login: extern "C" fn(*mut c_void, i32, bool),
     pub invoke_http_error: extern "C" fn(*mut c_void, u32, PluginAccountBytes),
     pub reset_personal_presets: extern "C" fn(*mut c_void),

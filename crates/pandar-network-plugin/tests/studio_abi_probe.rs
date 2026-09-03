@@ -111,6 +111,23 @@ fn probe_exercises_studio_abi_success_path() {
 }
 
 #[test]
+// The fresh-process child spawn requires POSIX execve.
+#[cfg(not(target_os = "windows"))]
+fn manual_server_selection_survives_a_full_plugin_process_restart() {
+    let ProbeOutput { stdout, stderr, .. } =
+        run_probe(MockMode::ServerSelectionRestore, "server-selection-restore");
+
+    assert!(
+        stderr.is_empty(),
+        "server-selection probe stderr was not empty: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+    assert_json_field(&stdout, "server_selection_persisted", "true");
+    assert_json_field(&stdout, "server_selection_restored", "true");
+    assert_json_field(&stdout, "server_selection_override_logged_out", "true");
+}
+
+#[test]
 fn compiled_probe_enforces_account_callbacks_and_explicit_abi_dispositions() {
     let output = disposition_probe::run_disposition_probe();
     println!("Studio disposition ABI probe compiler: {}", output.compiler);

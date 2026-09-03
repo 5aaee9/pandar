@@ -96,6 +96,9 @@ struct ProbeResult {
     bool axis_features_exact = false;
     std::string cloud_status_body;
     std::string local_status_body;
+    bool server_selection_persisted = false;
+    bool server_selection_restored = false;
+    bool server_selection_override_logged_out = false;
 };
 
 [[noreturn]] void fail(void* agent, int (*destroy_agent)(void*), const std::string& message) {
@@ -191,6 +194,9 @@ void print_json(const ProbeResult& result) {
         << ",\"axis_features_exact\":" << (result.axis_features_exact ? "true" : "false")
         << ",\"cloud_status_body\":" << escape_json(result.cloud_status_body)
         << ",\"local_status_body\":" << escape_json(result.local_status_body)
+        << ",\"server_selection_persisted\":" << (result.server_selection_persisted ? "true" : "false")
+        << ",\"server_selection_restored\":" << (result.server_selection_restored ? "true" : "false")
+        << ",\"server_selection_override_logged_out\":" << (result.server_selection_override_logged_out ? "true" : "false")
         << "}\n";
 }
 
@@ -301,6 +307,83 @@ int hub_presence_step() {
     const auto marker = body.find(R"("step":)");
     if (marker == std::string::npos) return -1;
     return std::stoi(body.substr(marker + 7));
+}
+
+constexpr const char* kSelectionUrlVariables[] = {
+    "PANDAR_PLUGIN_HUB_URL",
+    "APP_API_URL",
+    "PANDAR_PLUGIN_FRONTEND_URL",
+    "APP_BASE_URL",
+};
+
+// Re-executes this probe in a fresh process with every plugin URL environment
+// variable removed and the given overrides applied, returning the child exit code.
+int run_selection_child(
+    const std::string& program,
+    const std::string& library,
+    const std::string& artifact,
+    const std::string& config_dir,
+    const std::string& mode,
+    const std::vector<std::pair<std::string, std::string>>& env_overrides
+) {
+#if defined(_WIN32)
+    (void)library;
+    (void)artifact;
+    (void)config_dir;
+    (void)mode;
+    (void)env_overrides;
+    std::cerr << "server-selection child spawn is not supported on this platform\n";
+    std::exit(2);
+#else
+    std::vector<std::string> env_entries;
+    for (char** entry = environ; entry && *entry; ++entry) {
+        const std::string value = *entry;
+        const auto equals = value.find('=');
+        if (equals == std::string::npos) continue;
+        const std::string key = value.substr(0, equals);
+        const bool url_variable = std::any_of(
+            std::begin(kSelectionUrlVariables), std::end(kSelectionUrlVariables),
+            [&](const char* candidate) { return key == candidate; }
+        );
+        if (!url_variable) env_entries.push_back(value);
+    }
+    for (const auto& [key, value] : env_overrides) {
+        env_entries.push_back(key + "=" + value);
+    }
+    std::vector<char*> envp;
+    envp.reserve(env_entries.size() + 1);
+    for (auto& entry : env_entries) envp.push_back(entry.data());
+    envp.push_back(nullptr);
+
+    std::vector<std::string> arguments = {
+        program, library, artifact, mode, config_dir,
+    };
+    std::vector<char*> argv;
+    argv.reserve(arguments.size() + 1);
+    for (auto& argument : arguments) argv.push_back(argument.data());
+    argv.push_back(nullptr);
+
+    const pid_t child = fork();
+    if (child < 0) {
+        std::cerr << "fork for server-selection child failed\n";
+        std::exit(2);
+    }
+    if (child == 0) {
+        execve(program.c_str(), argv.data(), envp.data());
+        std::cerr << "execve for server-selection child failed\n";
+        _exit(127);
+    }
+    int status = 0;
+    while (waitpid(child, &status, 0) < 0) {
+        if (errno != EINTR) {
+            std::cerr << "waitpid for server-selection child failed\n";
+            std::exit(2);
+        }
+    }
+    if (WIFEXITED(status)) return WEXITSTATUS(status);
+    std::cerr << "server-selection child terminated abnormally\n";
+    std::exit(2);
+#endif
 }
 
 } // namespace

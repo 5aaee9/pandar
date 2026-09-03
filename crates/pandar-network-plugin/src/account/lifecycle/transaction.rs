@@ -37,6 +37,7 @@ impl PluginAccountBytes {
 pub struct PluginAccountView {
     pub config_dir: PluginAccountBytes,
     pub hub_url: PluginAccountBytes,
+    pub frontend_url: PluginAccountBytes,
     pub token: PluginAccountBytes,
     pub user_id: PluginAccountBytes,
     pub user_name: PluginAccountBytes,
@@ -60,6 +61,7 @@ pub struct PluginAccountMutation {
     pub action: i32,
     pub notification: PluginAccountNotification,
     pub hub_url: PluginAccountBytes,
+    pub frontend_url: PluginAccountBytes,
     pub token: PluginAccountBytes,
     pub user_id: PluginAccountBytes,
     pub user_name: PluginAccountBytes,
@@ -80,6 +82,7 @@ pub type PluginWithCurrentAccount =
 pub(crate) struct AccountView {
     pub(crate) config_dir: String,
     pub(crate) hub_url: String,
+    pub(crate) frontend_url: String,
     pub(crate) token: String,
     pub(crate) user_id: String,
     pub(crate) user_name: String,
@@ -97,6 +100,7 @@ impl AccountView {
         Ok(Self {
             config_dir: unsafe { view.config_dir.read("account config directory") }?,
             hub_url: unsafe { view.hub_url.read("account Hub URL") }?,
+            frontend_url: unsafe { view.frontend_url.read("account frontend URL") }?,
             token: unsafe { view.token.read("account token") }?,
             user_id: unsafe { view.user_id.read("account user id") }?,
             user_name: unsafe { view.user_name.read("account user name") }?,

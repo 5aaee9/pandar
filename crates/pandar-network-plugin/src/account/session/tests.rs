@@ -11,6 +11,7 @@ struct BridgeState {
     replacements: Vec<(String, String, i32)>,
     clears: usize,
     hub_urls: Vec<String>,
+    frontend_urls: Vec<String>,
     login_statuses: Vec<(i32, bool)>,
     errors: Vec<(u32, String)>,
     preset_resets: usize,
@@ -52,6 +53,16 @@ extern "C" fn set_hub(_: *mut c_void, hub: PluginAccountBytes) {
         .push(unsafe { hub.read("hub") }.unwrap());
 }
 
+extern "C" fn set_frontend(_: *mut c_void, frontend: PluginAccountBytes) {
+    BRIDGE_STATE
+        .lock()
+        .unwrap()
+        .as_mut()
+        .unwrap()
+        .frontend_urls
+        .push(unsafe { frontend.read("frontend") }.unwrap());
+}
+
 extern "C" fn login(_: *mut c_void, status: i32, logged_in: bool) {
     BRIDGE_STATE
         .lock()
@@ -84,6 +95,7 @@ const BRIDGE: PluginAccountSessionBridge = PluginAccountSessionBridge {
     replace,
     clear,
     set_hub_url: set_hub,
+    set_frontend_url: set_frontend,
     invoke_user_login: login,
     invoke_http_error: error,
     reset_personal_presets: reset,
@@ -132,6 +144,7 @@ impl Harness {
             action,
             notification,
             hub_url: PluginAccountBytes::from_str(hub),
+            frontend_url: PluginAccountBytes::from_str("https://web-b"),
             token: PluginAccountBytes::from_str(token),
             user_id: PluginAccountBytes::from_str("user"),
             user_name: PluginAccountBytes::from_str("User"),
@@ -144,6 +157,7 @@ impl Harness {
         let current = crate::account::lifecycle::transaction::PluginAccountView {
             config_dir: PluginAccountBytes::from_str("/tmp"),
             hub_url: PluginAccountBytes::from_str("https://hub-a"),
+            frontend_url: PluginAccountBytes::from_str("https://web-a"),
             token: PluginAccountBytes::from_str("old"),
             user_id: PluginAccountBytes::from_str("old-user"),
             user_name: PluginAccountBytes::from_str("Old"),
@@ -250,6 +264,20 @@ fn runtime_hub_mutation_clears_account_before_transition_delivery() {
     let state = state.as_ref().unwrap();
     assert_eq!(state.clears, 1);
     assert_eq!(state.hub_urls, ["https://hub-b"]);
+    assert!(state.frontend_urls.is_empty());
+    assert_eq!(harness.callbacks(), ["transition"]);
+}
+
+#[test]
+fn runtime_servers_mutation_sets_hub_and_frontend_before_transition_delivery() {
+    let mut harness = Harness::new();
+    harness.apply(MUTATION_RUNTIME_SERVERS, PluginAccountNotification::Silent);
+
+    let state = BRIDGE_STATE.lock().unwrap();
+    let state = state.as_ref().unwrap();
+    assert_eq!(state.clears, 1);
+    assert_eq!(state.hub_urls, ["https://hub-b"]);
+    assert_eq!(state.frontend_urls, ["https://web-b"]);
     assert_eq!(harness.callbacks(), ["transition"]);
 }
 
@@ -352,6 +380,7 @@ fn logout_guard_rejects_a_relogged_account() {
     let relogged = AccountView {
         config_dir: "/tmp".into(),
         hub_url: "http://hub".into(),
+        frontend_url: "http://web".into(),
         token: "new-login".into(),
         user_id: "user".into(),
         user_name: "User".into(),

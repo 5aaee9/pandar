@@ -30,6 +30,12 @@ int main(int argc, char** argv) {
         mode == "official-no-auth-logout-recovery";
     const bool official_no_auth_lifecycle_mode =
         official_no_auth_recovery_mode || official_no_auth_logout_recovery_mode;
+    const bool server_selection_restore_mode = mode == "server-selection-restore";
+    const bool server_selection_child_restore_mode = mode == "server-selection-restore-child";
+    const bool server_selection_override_mode = mode == "server-selection-restore-override";
+    const bool server_selection_mode =
+        server_selection_restore_mode || server_selection_child_restore_mode ||
+        server_selection_override_mode;
     if (!failure_mode && !stale_token_mode && !native_print_error_mode && !axis_features_mode &&
         !connection_readiness_mode && !background_timeout_mode && !stream_unavailable_mode &&
         !auth_rejected_mode &&
@@ -38,7 +44,7 @@ int main(int argc, char** argv) {
         !freshness_claim_mode && !firmware_claim_race_mode && !callback_order_mode &&
         !request_admission_mode && !camera_available_mode &&
         !camera_unavailable_mode && !no_auth_recovery_mode &&
-        !official_no_auth_lifecycle_mode &&
+        !official_no_auth_lifecycle_mode && !server_selection_mode &&
         mode != "success") {
         std::cerr << "unsupported probe mode\n";
         return 2;

@@ -44,6 +44,7 @@ unsafe extern "C" fn empty_account(
     let view = PluginAccountView {
         config_dir: PluginAccountBytes::from_str(&account.config_dir),
         hub_url: PluginAccountBytes::from_str("http://127.0.0.1:8080"),
+        frontend_url: empty,
         token: empty,
         user_id: empty,
         user_name: empty,
@@ -58,6 +59,7 @@ unsafe extern "C" fn empty_account(
         action: 0,
         notification: PluginAccountNotification::Silent,
         hub_url: empty,
+        frontend_url: empty,
         token: empty,
         user_id: empty,
         user_name: empty,

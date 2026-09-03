@@ -14,13 +14,15 @@ use super::{
     },
 };
 use crate::account::{
-    persistence,
+    persistence, runtime,
     runtime::canonical_hub_identity,
+    server_selection::{self, PersistedServerSelection},
     types::{LocalServerConfig, PersistedLogin},
 };
 
 const MUTATION_REPLACE: i32 = 1;
 const MUTATION_RUNTIME_HUB: i32 = 6;
+const MUTATION_RUNTIME_SERVERS: i32 = 9;
 
 struct LoadedAccount {
     token: String,
@@ -40,6 +42,13 @@ struct LoadContext<'a> {
 struct RuntimeContext<'a> {
     expected: &'a ExpectedAccount,
     hub_url: &'a str,
+    state: ApplyState,
+}
+
+struct RestoreServersContext<'a> {
+    expected: &'a ExpectedAccount,
+    hub_url: &'a str,
+    frontend_url: &'a str,
     state: ApplyState,
 }
 
@@ -84,6 +93,10 @@ pub unsafe extern "C" fn pandar_plugin_account_load_persisted(
     if !current.token.is_empty() {
         return lifecycle(success(204));
     }
+    let current = match restore_saved_servers(account_context, with_current, current) {
+        Ok(current) => current,
+        Err(error) => return lifecycle(diagnosed(error)),
+    };
     let expected = ExpectedAccount::from_view(&current);
     let login = match persistence::load(&current.config_dir) {
         Ok(Some(login)) => login,
@@ -115,6 +128,59 @@ pub unsafe extern "C" fn pandar_plugin_account_load_persisted(
     finish(context.state)
 }
 
+/// Restores a manually selected Web URL and its discovered canonical Hub identity before
+/// the persisted Studio login is evaluated. Explicit plugin URL environment configuration
+/// outranks the saved selection, and an unreadable or malformed selection fails closed.
+fn restore_saved_servers(
+    account_context: *mut c_void,
+    with_current: Option<PluginWithCurrentAccount>,
+    current: AccountView,
+) -> anyhow::Result<AccountView> {
+    if current.config_dir.is_empty() || runtime::url_environment_configured() {
+        return Ok(current);
+    }
+    let selection = match server_selection::load(&current.config_dir) {
+        Ok(Some(selection)) => selection,
+        Ok(None) => return Ok(current),
+        Err(error) => {
+            eprintln!("pandar saved server selection ignored: {error:#}");
+            return Ok(current);
+        }
+    };
+    let Some(selection) =
+        PersistedServerSelection::new(selection.web_url, selection.hub_url.clone())
+    else {
+        eprintln!("pandar saved server selection ignored: selection does not form canonical URLs");
+        return Ok(current);
+    };
+    let current_frontend = crate::normalize_hub_url(current.frontend_url.clone())
+        .unwrap_or_else(|| current.frontend_url.clone());
+    if selection.hub_url == canonical_hub_identity(&current.hub_url)
+        && selection.web_url == current_frontend
+    {
+        return Ok(current);
+    }
+    let expected = ExpectedAccount::from_view(&current);
+    let mut context = RestoreServersContext {
+        expected: &expected,
+        hub_url: &selection.hub_url,
+        frontend_url: &selection.web_url,
+        state: ApplyState::Pending,
+    };
+    unsafe {
+        transact(
+            account_context,
+            with_current,
+            (&mut context as *mut RestoreServersContext<'_>).cast(),
+            restore_servers_transaction,
+        )?;
+    }
+    match context.state {
+        ApplyState::Applied => unsafe { capture(account_context, with_current) },
+        _ => Ok(current),
+    }
+}
+
 #[unsafe(no_mangle)]
 /// # Safety
 /// `account_context` and `with_current` must remain valid for this call and every synchronous
@@ -139,6 +205,13 @@ pub unsafe extern "C" fn pandar_plugin_account_refresh_runtime(
         Ok(current) => current,
         Err(error) => return lifecycle(diagnosed(error)),
     };
+    if config.user_selected
+        && let Some(selection) =
+            PersistedServerSelection::new(config.web_url.clone(), hub_url.clone())
+        && let Err(error) = persist_selection(&current.config_dir, &selection)
+    {
+        return lifecycle(diagnosed(error));
+    }
     if current.hub_url == hub_url {
         return lifecycle(success(204));
     }
@@ -225,6 +298,50 @@ unsafe extern "C" fn runtime_transaction(
         Ok(())
     })();
     transaction_status(work, &mut context.state)
+}
+
+unsafe extern "C" fn restore_servers_transaction(
+    context: *mut c_void,
+    view: *const PluginAccountView,
+    mutation: *mut PluginAccountMutation,
+) -> i32 {
+    let Some(context) = (unsafe { context.cast::<RestoreServersContext<'_>>().as_mut() }) else {
+        return 1;
+    };
+    let work: anyhow::Result<()> = (|| {
+        let current = unsafe { AccountView::read(view) }?;
+        if !context.expected.matches(&current) || !current.token.is_empty() {
+            context.state = ApplyState::Stale;
+            return Ok(());
+        }
+        let mutation = unsafe { mutation.as_mut() }.context("account mutation is missing")?;
+        mutation.action = MUTATION_RUNTIME_SERVERS;
+        mutation.hub_url = PluginAccountBytes::from_str(context.hub_url);
+        mutation.frontend_url = PluginAccountBytes::from_str(context.frontend_url);
+        context.state = ApplyState::Applied;
+        Ok(())
+    })();
+    transaction_status(work, &mut context.state)
+}
+
+/// Durably records a manually selected target server. The write is skipped when the
+/// saved selection already matches, and durability must be confirmed before the
+/// runtime Hub switch proceeds.
+fn persist_selection(config_dir: &str, selection: &PersistedServerSelection) -> anyhow::Result<()> {
+    if config_dir.is_empty() {
+        return Ok(());
+    }
+    let unchanged = match server_selection::load(config_dir) {
+        Ok(Some(saved)) => &saved == selection,
+        // A missing or malformed selection is rewritten rather than trusted.
+        _ => false,
+    };
+    if unchanged {
+        return Ok(());
+    }
+    server_selection::store(config_dir, selection)?
+        .require_confirmed("durably persist selected Pandar server")
+        .context("persist selected Pandar server")
 }
 
 fn transaction_status(work: anyhow::Result<()>, state: &mut ApplyState) -> i32 {
