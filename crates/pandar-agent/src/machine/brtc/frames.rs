@@ -49,16 +49,13 @@ pub(super) fn checked_binary_frame_payload_len(
     Ok((additional, frame_len))
 }
 
-pub(super) fn append_binary_frame_payload(
-    mut body: Vec<u8>,
-    binary: &[u8],
-) -> anyhow::Result<Vec<u8>> {
+pub(super) fn append_binary_frame_payload(body: &mut Vec<u8>, binary: &[u8]) -> anyhow::Result<()> {
     let (additional, _) = checked_binary_frame_payload_len(body.len(), binary.len())?;
     body.try_reserve_exact(additional)
         .with_context(|| format!("reserve {additional} bytes for BRTC binary frame payload"))?;
     body.extend_from_slice(b"\n\n");
     body.extend_from_slice(binary);
-    Ok(body)
+    Ok(())
 }
 
 pub(super) fn padded_ascii(value: &str, width: usize) -> String {

@@ -250,11 +250,10 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
 
     async fn upload(&self, path: &str, bytes: &[u8]) -> anyhow::Result<FileUploadResult> {
         let path = path.to_string();
-        let bytes = bytes.to_vec();
         let expected = bytes.len();
 
         self.with_session(|mut stream| async move {
-            upload_in_bambu_chunks(&mut stream, &path, &bytes).await?;
+            upload_in_bambu_chunks(&mut stream, &path, bytes).await?;
             let actual = stream
                 .size(&path)
                 .await

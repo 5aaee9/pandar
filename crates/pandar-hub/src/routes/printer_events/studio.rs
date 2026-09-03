@@ -9,6 +9,7 @@ use axum::{
     response::Response,
 };
 mod send;
+use sha2::{Digest, Sha256};
 
 use crate::{
     AppState,
@@ -21,7 +22,21 @@ const STUDIO_PROJECTION_VERSION: u32 = 1;
 const STUDIO_PING_INTERVAL: Duration = Duration::from_secs(20);
 const STUDIO_PONG_GRACE: Duration = Duration::from_secs(10);
 
-type PublishedRecords = BTreeMap<String, String>;
+/// Published-record fingerprints are fixed-size digests of the serialized
+/// record so each socket's dedup set stays O(1) per printer instead of holding
+/// the full JSON payload.
+type PublishedFingerprint = [u8; 32];
+type PublishedRecords = BTreeMap<String, PublishedFingerprint>;
+
+fn studio_record_fingerprint(
+    record: &impl serde::Serialize,
+) -> anyhow::Result<PublishedFingerprint> {
+    let payload = serde_json::to_vec(record)?;
+    let digest = Sha256::digest(&payload);
+    let mut fingerprint = [0_u8; 32];
+    fingerprint.copy_from_slice(&digest);
+    Ok(fingerprint)
+}
 
 pub(super) async fn printer_events_studio(
     state: AppState,
@@ -101,7 +116,7 @@ async fn forward_studio_events(
     let mut published = PublishedRecords::new();
     for device in devices {
         let printer_id = device.pandar_printer_id().to_owned();
-        let fingerprint = match serde_json::to_string(&device) {
+        let fingerprint = match studio_record_fingerprint(&device) {
             Ok(fingerprint) => fingerprint,
             Err(err) => {
                 tracing::error!(
@@ -280,7 +295,7 @@ async fn resolve_and_send_projection_change(
     };
     match record {
         super::super::plugin::studio_devices::StudioProjectionRecord::Upsert(printer) => {
-            let fingerprint = match serde_json::to_string(&printer) {
+            let fingerprint = match studio_record_fingerprint(&printer) {
                 Ok(fingerprint) => fingerprint,
                 Err(err) => {
                     tracing::error!(

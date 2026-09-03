@@ -55,13 +55,15 @@ impl fmt::Debug for PendingFirmwareCommands {
 struct PendingFirmwareState {
     commands: HashMap<CommandId, PendingFirmwareCommand>,
     prepared_tokens: HashMap<FirmwareSecret, CommandId>,
-    retained_redaction_urls: Vec<RetainedFirmwareUrl>,
+    retained_redaction_urls: HashMap<RetainedFirmwareScope, Vec<FirmwareSecret>>,
 }
 
-struct RetainedFirmwareUrl {
+/// Retained redaction URLs are indexed per tenant and serial so every
+/// redaction only scans the URLs observed for that one printer scope.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct RetainedFirmwareScope {
     tenant_id: TenantId,
     serial: String,
-    url: FirmwareSecret,
 }
 
 struct PendingFirmwareCommand {

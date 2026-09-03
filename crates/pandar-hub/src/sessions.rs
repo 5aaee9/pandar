@@ -232,6 +232,24 @@ impl SessionRegistry {
             .collect()
     }
 
+    /// Single-agent view of `current_session_snapshots`, so a per-printer
+    /// projection change does not have to snapshot every Agent of the tenant.
+    pub(crate) async fn current_session_snapshot_for(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+    ) -> Option<CurrentAgentSessionSnapshot> {
+        self.sessions
+            .lock()
+            .await
+            .get(&agent_id)
+            .filter(|session| session.tenant_id == tenant_id)
+            .map(|session| CurrentAgentSessionSnapshot {
+                token: session.token,
+                capabilities: session.capabilities.clone(),
+            })
+    }
+
     pub async fn while_current<T, Fut>(
         &self,
         agent_id: AgentId,

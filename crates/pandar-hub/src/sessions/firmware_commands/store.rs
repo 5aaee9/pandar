@@ -135,10 +135,15 @@ pub(super) fn redact_firmware_text_for_scope(
             .then_some(command.transient_url.as_deref())
             .flatten()
     });
-    let retained_urls = state.retained_redaction_urls.iter().filter_map(|retained| {
-        (retained.tenant_id == tenant_id && retained.serial == serial)
-            .then_some(retained.url.as_str())
-    });
+    let retained_urls = state
+        .retained_redaction_urls
+        .get(&RetainedFirmwareScope {
+            tenant_id,
+            serial: serial.to_owned(),
+        })
+        .into_iter()
+        .flatten()
+        .map(FirmwareSecret::as_str);
     redact_firmware_text_with_urls(value, urls.chain(retained_urls))
 }
 
@@ -147,18 +152,17 @@ pub(super) fn reserve_firmware_redaction_url(
     identity: &FirmwareCommandIdentity,
     url: &str,
 ) -> Result<(), FirmwareServiceError> {
-    if state.retained_redaction_urls.iter().any(|retained| {
-        retained.tenant_id == identity.tenant_id
-            && retained.serial == identity.serial
-            && retained.url.as_str() == url
-    }) {
+    let urls = state
+        .retained_redaction_urls
+        .entry(RetainedFirmwareScope {
+            tenant_id: identity.tenant_id,
+            serial: identity.serial.clone(),
+        })
+        .or_default();
+    if urls.iter().any(|retained| retained.as_str() == url) {
         return Ok(());
     }
-    state.retained_redaction_urls.push(RetainedFirmwareUrl {
-        tenant_id: identity.tenant_id,
-        serial: identity.serial.clone(),
-        url: FirmwareSecret::from(url.to_owned()),
-    });
+    urls.push(FirmwareSecret::from(url.to_owned()));
     Ok(())
 }
 

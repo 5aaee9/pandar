@@ -46,10 +46,9 @@ impl BrtcMachineFileTransfer {
 
     pub async fn upload_emmc(&self, dest_name: &str, bytes: &[u8]) -> anyhow::Result<String> {
         let dest_name = dest_name.to_owned();
-        let bytes = bytes.to_vec();
         timeout(BRTC_TIMEOUT, async move {
             let mut session = BrtcSession::connect(&self.endpoint).await?;
-            session.upload_emmc(&dest_name, &bytes).await
+            session.upload_emmc(&dest_name, bytes).await
         })
         .await
         .with_context(|| {
@@ -184,6 +183,7 @@ impl BrtcSession {
 
         let digest_lower = md5_lower(bytes);
         let mut fragment = 0_u32;
+        let mut frame_body = Vec::new();
         while offset < bytes.len() {
             let end = checked_chunk_end(offset, chunk_size, bytes.len())?;
             let chunk = &bytes[offset..end];
@@ -195,7 +195,7 @@ impl BrtcSession {
                 chunk.len(),
                 last.then_some(digest_lower.as_str()),
             );
-            self.send_abi_json_with_binary(&chunk_request, chunk)
+            self.send_abi_json_with_binary(&chunk_request, chunk, &mut frame_body)
                 .await
                 .with_context(|| {
                     format!("send BRTC upload chunk {fragment} for emmc/{dest_name}")
@@ -239,10 +239,13 @@ impl BrtcSession {
         &mut self,
         value: &impl Serialize,
         binary: &[u8],
+        body: &mut Vec<u8>,
     ) -> anyhow::Result<()> {
-        let body =
-            append_binary_frame_payload(protocol::wrap_ctrl_json(value)?.into_bytes(), binary)?;
-        self.send_frame(BRTC_CTRL_CLIENT_MAGIC, &body).await
+        let json = protocol::wrap_ctrl_json(value)?;
+        body.clear();
+        body.extend_from_slice(json.as_bytes());
+        append_binary_frame_payload(body, binary)?;
+        self.send_frame(BRTC_CTRL_CLIENT_MAGIC, body).await
     }
 
     async fn send_frame(&mut self, magic: u32, payload: &[u8]) -> anyhow::Result<()> {

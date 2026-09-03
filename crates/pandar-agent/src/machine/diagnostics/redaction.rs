@@ -26,7 +26,7 @@ impl PrinterEndpointSecrets {
         let redacted = self.hosts.iter().fold(message.to_owned(), |message, host| {
             message.replace(host, "[REDACTED_PRINTER_HOST]")
         });
-        redact_known_access_codes(&redacted, self.access_codes.clone())
+        redact_known_access_codes(&redacted, self.access_codes.iter().map(String::as_str))
     }
 }
 
@@ -45,13 +45,13 @@ pub fn redact_access_code(message: &str, access_code: &str) -> String {
     message.replace(access_code, "[REDACTED_ACCESS_CODE]")
 }
 
-pub fn redact_known_access_codes(
+pub fn redact_known_access_codes<'a>(
     message: &str,
-    access_codes: impl IntoIterator<Item = String>,
+    access_codes: impl IntoIterator<Item = &'a str>,
 ) -> String {
     access_codes
         .into_iter()
         .fold(message.to_owned(), |redacted, access_code| {
-            redact_access_code(&redacted, &access_code)
+            redact_access_code(&redacted, access_code)
         })
 }

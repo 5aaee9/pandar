@@ -117,10 +117,9 @@ fn chunk_end_rejects_integer_overflow() {
 
 #[test]
 fn binary_frame_payload_uses_checked_length_and_delimiter() {
-    assert_eq!(
-        append_binary_frame_payload(b"{}".to_vec(), b"abc").unwrap(),
-        b"{}\n\nabc"
-    );
+    let mut body = b"{}".to_vec();
+    append_binary_frame_payload(&mut body, b"abc").unwrap();
+    assert_eq!(body, b"{}\n\nabc");
 
     let error = frames::checked_binary_frame_payload_len(usize::MAX, 1).unwrap_err();
     assert!(format!("{error:#}").contains("overflowed"));

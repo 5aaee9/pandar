@@ -93,6 +93,11 @@ where
         })
 }
 
+/// Number of jobs hydrated per bulk query so listing a large tenant history
+/// loads artifacts and filament usage in bounded batches instead of one
+/// all-rows pass; the returned rows and their order are unchanged.
+const HYDRATION_CHUNK_SIZE: usize = 500;
+
 pub(crate) async fn hydrate_jobs_with_artifacts<C>(
     connection: &C,
     job_models: Vec<jobs::Model>,
@@ -100,11 +105,29 @@ pub(crate) async fn hydrate_jobs_with_artifacts<C>(
 where
     C: sea_orm::ConnectionTrait,
 {
-    if job_models.is_empty() {
-        return Ok(Vec::new());
+    let mut hydrated = Vec::with_capacity(job_models.len());
+    let mut job_models = job_models.into_iter();
+    loop {
+        let chunk: Vec<_> = job_models
+            .by_ref()
+            .take(HYDRATION_CHUNK_SIZE)
+            .collect::<Vec<_>>();
+        if chunk.is_empty() {
+            return Ok(hydrated);
+        }
+        hydrate_job_chunk(connection, chunk, &mut hydrated).await?;
     }
+}
 
-    let artifact_ids = job_models
+async fn hydrate_job_chunk<C>(
+    connection: &C,
+    chunk: Vec<jobs::Model>,
+    hydrated: &mut Vec<JobWithArtifact>,
+) -> RepositoryResult<()>
+where
+    C: sea_orm::ConnectionTrait,
+{
+    let artifact_ids = chunk
         .iter()
         .map(|job| job.artifact_id.clone())
         .collect::<Vec<_>>();
@@ -119,12 +142,8 @@ where
 
     let usage_models = crate::entities::job_filament_usages::Entity::find()
         .filter(
-            crate::entities::job_filament_usages::Column::JobId.is_in(
-                job_models
-                    .iter()
-                    .map(|job| job.id.clone())
-                    .collect::<Vec<_>>(),
-            ),
+            crate::entities::job_filament_usages::Column::JobId
+                .is_in(chunk.iter().map(|job| job.id.clone()).collect::<Vec<_>>()),
         )
         .all(connection)
         .await
@@ -137,26 +156,26 @@ where
             .push(usage);
     }
 
-    job_models
-        .into_iter()
-        .map(|job| {
-            let artifact = artifacts.get(&job.artifact_id).cloned().ok_or_else(|| {
-                RepositoryError::Database(anyhow::anyhow!(
-                    "job {} references missing artifact {}",
-                    job.id,
-                    job.artifact_id
-                ))
-            })?;
-            let usage = usage_by_job
-                .remove(&job.id)
-                .unwrap_or_default()
-                .into_iter()
-                .map(super::rows::usage_from_model)
-                .collect::<RepositoryResult<Vec<_>>>()?;
+    for job in chunk {
+        let artifact = artifacts.get(&job.artifact_id).cloned().ok_or_else(|| {
+            RepositoryError::Database(anyhow::anyhow!(
+                "job {} references missing artifact {}",
+                job.id,
+                job.artifact_id
+            ))
+        })?;
+        let usage = usage_by_job
+            .remove(&job.id)
+            .unwrap_or_default()
+            .into_iter()
+            .map(super::rows::usage_from_model)
+            .collect::<RepositoryResult<Vec<_>>>()?;
+        hydrated.push(
             job_with_artifact_from_models(job, artifact).map(|mut with_artifact| {
                 with_artifact.job.filament_usage = usage;
                 with_artifact
-            })
-        })
-        .collect()
+            })?,
+        );
+    }
+    Ok(())
 }

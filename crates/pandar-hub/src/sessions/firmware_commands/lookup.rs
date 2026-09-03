@@ -89,10 +89,10 @@ impl SessionRegistry {
         self.firmware_commands
             .lock()
             .retained_redaction_urls
-            .iter()
-            .filter(|retained| {
-                retained.tenant_id == identity.tenant_id && retained.serial == identity.serial
+            .get(&RetainedFirmwareScope {
+                tenant_id: identity.tenant_id,
+                serial: identity.serial.clone(),
             })
-            .count()
+            .map_or(0, Vec::len)
     }
 }

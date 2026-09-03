@@ -74,12 +74,15 @@ async fn discover_printers_at_targets(
 
     let deadline = Instant::now() + Duration::from_secs(timeout_seconds.into());
     let mut buf = [0u8; 4096];
+    let mut deduplicator = DiscoveredPrinterDedup::default();
     let mut printers = Vec::new();
 
     while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
         match tokio::time::timeout(remaining, socket.recv_from(&mut buf)).await {
             Ok(Ok((len, source))) => {
-                if let Some(printer) = parse_ssdp_response(&buf[..len], source) {
+                if let Some(printer) = parse_ssdp_response(&buf[..len], source)
+                    && let Some(printer) = deduplicator.admit(printer)
+                {
                     printers.push(printer);
                 }
             }
@@ -88,7 +91,7 @@ async fn discover_printers_at_targets(
         }
     }
 
-    Ok(PrinterDiscoveryResult::new(deduplicate_printers(printers)))
+    Ok(PrinterDiscoveryResult::new(printers))
 }
 
 pub async fn discover_printer_at_host(
@@ -172,23 +175,35 @@ pub fn parse_ssdp_response(bytes: &[u8], source: SocketAddr) -> Option<Discovere
 }
 
 pub fn deduplicate_printers(printers: Vec<DiscoveredPrinter>) -> Vec<DiscoveredPrinter> {
-    let mut seen_serials = HashSet::new();
-    let mut seen_hosts = HashSet::new();
-    let mut deduped = Vec::new();
+    let mut deduplicator = DiscoveredPrinterDedup::default();
+    printers
+        .into_iter()
+        .filter_map(|printer| deduplicator.admit(printer))
+        .collect()
+}
 
-    for printer in printers {
+/// Deduplicates discovery responses as they arrive so repeated responses
+/// within one scan window do not accumulate in memory. The admission rules
+/// match `deduplicate_printers` exactly, so batching or streaming responses
+/// through this type yields the same result.
+#[derive(Default)]
+struct DiscoveredPrinterDedup {
+    seen_serials: HashSet<String>,
+    seen_hosts: HashSet<String>,
+}
+
+impl DiscoveredPrinterDedup {
+    fn admit(&mut self, printer: DiscoveredPrinter) -> Option<DiscoveredPrinter> {
         if let Some(serial) = &printer.serial_number {
-            if !seen_serials.insert(serial.clone()) {
-                continue;
+            if !self.seen_serials.insert(serial.clone()) {
+                return None;
             }
-        } else if !seen_hosts.insert(printer.host.clone()) {
-            continue;
+        } else if !self.seen_hosts.insert(printer.host.clone()) {
+            return None;
         }
-        seen_hosts.insert(printer.host.clone());
-        deduped.push(printer);
+        self.seen_hosts.insert(printer.host.clone());
+        Some(printer)
     }
-
-    deduped
 }
 
 fn header_value<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {

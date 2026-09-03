@@ -10,11 +10,9 @@ fn firmware_secret_storage_types_zeroize_on_drop() {
     let state = PendingFirmwareState::default();
     assert_key_type(state.prepared_tokens.keys().next());
     assert_pending_types(&firmware_command_with_secrets(firmware_identity()));
-    assert_retained_type(&RetainedFirmwareUrl {
-        tenant_id: TenantId::new(),
-        serial: "serial".to_owned(),
-        url: FirmwareSecret::from("https://firmware.invalid/retained".to_owned()),
-    });
+    assert_reference_type(&FirmwareSecret::from(
+        "https://firmware.invalid/retained".to_owned(),
+    ));
 }
 
 #[test]
@@ -35,10 +33,6 @@ fn assert_key_type<T: ZeroizeOnDrop>(_: Option<&T>) {}
 fn assert_pending_types(command: &PendingFirmwareCommand) {
     assert_optional_type(command.prepared_token.as_ref());
     assert_optional_type(command.transient_url.as_ref());
-}
-
-fn assert_retained_type(retained: &RetainedFirmwareUrl) {
-    assert_reference_type(&retained.url);
 }
 
 fn assert_optional_type<T: ZeroizeOnDrop>(_: Option<&T>) {}

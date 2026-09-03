@@ -37,6 +37,22 @@ impl AgentRepository {
             .map_err(RepositoryError::Database)
     }
 
+    /// Single-agent view of `current_session_ids_for_tenant`, so a per-printer
+    /// projection change reads one Agent row instead of the whole tenant's.
+    pub(crate) async fn current_session_id_for_agent(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+    ) -> RepositoryResult<Option<String>> {
+        let agent = agents::Entity::find_by_id(agent_id.to_string())
+            .one(&self.database.sea_orm_connection())
+            .await
+            .context("failed to load current Agent session for projection")?;
+        Ok(agent
+            .filter(|agent| agent.tenant_id == tenant_id.to_string())
+            .and_then(|agent| agent.current_session_id))
+    }
+
     pub(crate) async fn begin_current_session_fence(
         &self,
         tenant_id: TenantId,

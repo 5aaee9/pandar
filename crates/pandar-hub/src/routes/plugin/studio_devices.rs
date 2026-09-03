@@ -9,7 +9,7 @@ use serde::Serialize;
 use crate::{
     AppState,
     printer_events::PrinterEventMaterials,
-    repositories::{PrinterHms, PrinterWithLiveStatus},
+    repositories::{PrinterHms, PrinterWithLiveStatus, RepositoryError},
     routes::ApiError,
     sessions::CurrentAgentSessionSnapshot,
 };
@@ -129,13 +129,13 @@ pub(in crate::routes) async fn studio_projection_record(
     tenant_id: TenantId,
     change: &crate::printer_events::PrinterProjectionChange,
 ) -> Result<StudioProjectionRecord, ApiError> {
-    let printers = state
+    if state.tenants().get(tenant_id).await?.is_none() {
+        return Err(RepositoryError::MissingTenant.into());
+    }
+    let Some(entry) = state
         .printers()
-        .list_with_live_status_for_tenant(tenant_id)
-        .await?;
-    let Some(entry) = printers
-        .into_iter()
-        .find(|entry| entry.printer.id == change.printer_id)
+        .get_with_live_status_for_tenant(tenant_id, &change.printer_id)
+        .await?
     else {
         return Ok(StudioProjectionRecord::Removed {
             dev_id: change.serial_number.clone(),
@@ -144,16 +144,35 @@ pub(in crate::routes) async fn studio_projection_record(
     };
     let materials = state
         .materials()
-        .list_for_tenant(tenant_id)
+        .latest_for_printer(tenant_id, &change.printer_id)
         .await?
-        .into_iter()
-        .find(|snapshot| snapshot.printer_id == change.printer_id)
         .map(PrinterEventMaterials::from);
-    let sessions = current_agent_projection_snapshots(state, tenant_id).await?;
-    let session = sessions.get(&entry.printer.agent_id);
+    let session = current_agent_session_snapshot(state, tenant_id, entry.printer.agent_id).await?;
     Ok(StudioProjectionRecord::Upsert(Box::new(
-        studio_printer_record(entry, materials, session),
+        studio_printer_record(entry, materials, session.as_ref()),
     )))
+}
+
+/// Single-Agent view of `current_agent_projection_snapshots`: only the
+/// current session that both the in-memory registry and the persisted Agent
+/// row agree on projects as online.
+async fn current_agent_session_snapshot(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+) -> Result<Option<CurrentAgentSessionSnapshot>, ApiError> {
+    let Some(session) = state
+        .sessions()
+        .current_session_snapshot_for(tenant_id, agent_id)
+        .await
+    else {
+        return Ok(None);
+    };
+    let persisted = state
+        .agents()
+        .current_session_id_for_agent(tenant_id, agent_id)
+        .await?;
+    Ok((persisted.as_deref() == Some(session.persisted_id().as_str())).then_some(session))
 }
 
 #[derive(Debug)]
