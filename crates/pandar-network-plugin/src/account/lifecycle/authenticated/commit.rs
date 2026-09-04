@@ -12,13 +12,9 @@ use crate::{
 
 use super::{Candidate, ExpectedAccount, diagnosed};
 use crate::account::lifecycle::transaction::{
-    AccountView, PluginAccountBytes, PluginAccountMutation, PluginAccountView,
-    PluginWithCurrentAccount, transact,
+    AccountView, MUTATION_FIRMWARE_FENCE, MUTATION_HTTP_ERROR, MUTATION_LOGIN, PluginAccountBytes,
+    PluginAccountMutation, PluginAccountView, PluginWithCurrentAccount, transact,
 };
-
-const MUTATION_HTTP_ERROR: i32 = 3;
-const MUTATION_LOGIN: i32 = 4;
-const MUTATION_FIRMWARE_FENCE: i32 = 7;
 
 pub(super) enum CommitState {
     Pending,

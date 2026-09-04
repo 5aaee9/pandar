@@ -2,6 +2,18 @@ use std::{ffi::c_void, slice};
 
 use anyhow::{Context, ensure};
 
+/// Mutation actions carried in `PluginAccountMutation::action` across the shim
+/// ABI. Every account lifecycle producer and the session applier share these
+/// values, so the table is defined once next to the mutation type.
+pub(crate) const MUTATION_REPLACE: i32 = 1;
+pub(crate) const MUTATION_CLEAR: i32 = 2;
+pub(crate) const MUTATION_HTTP_ERROR: i32 = 3;
+pub(crate) const MUTATION_LOGIN: i32 = 4;
+pub(crate) const MUTATION_RUNTIME_HUB: i32 = 6;
+pub(crate) const MUTATION_FIRMWARE_FENCE: i32 = 7;
+pub(crate) const MUTATION_RESTORE_FAILURE: i32 = 8;
+pub(crate) const MUTATION_RUNTIME_SERVERS: i32 = 9;
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct PluginAccountBytes {

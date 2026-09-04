@@ -1,6 +1,6 @@
 use std::ffi::c_void;
 
-use anyhow::{Context, ensure};
+use anyhow::Context;
 
 use crate::{connection::no_auth_rotation::NoAuthRotationOutcome, stable_error_body};
 
@@ -8,75 +8,21 @@ use super::{
     ACCOUNT_EVENT_NONE, PluginLifecycleResult,
     authenticated::ExpectedAccount,
     into_http, take_http,
-    transaction::{
-        AccountView, PluginAccountBytes, PluginAccountMutation, PluginAccountView,
-        PluginWithCurrentAccount, capture, transact,
-    },
+    transaction::{AccountView, PluginWithCurrentAccount, capture, transact},
 };
 use crate::account::{
     persistence, runtime,
     runtime::canonical_hub_identity,
     server_selection::{self, PersistedServerSelection},
-    types::{LocalServerConfig, PersistedLogin},
+    types::{LocalServerConfig, PendingRevocation, PersistedLogin, SessionKind},
 };
 
-const MUTATION_REPLACE: i32 = 1;
-const MUTATION_RUNTIME_HUB: i32 = 6;
-const MUTATION_RUNTIME_SERVERS: i32 = 9;
+use transactions::{
+    ApplyState, LoadContext, LoadedAccount, RestoreServersContext, RuntimeContext,
+    load_transaction, restore_servers_transaction, runtime_transaction,
+};
 
-struct LoadedAccount {
-    token: String,
-    user_id: String,
-    user_name: String,
-    avatar: String,
-    profile_json: String,
-    session_kind: i32,
-}
-
-struct LoadContext<'a> {
-    expected: &'a ExpectedAccount,
-    loaded: &'a LoadedAccount,
-    state: ApplyState,
-}
-
-struct RuntimeContext<'a> {
-    expected: &'a ExpectedAccount,
-    hub_url: &'a str,
-    state: ApplyState,
-}
-
-struct RestoreServersContext<'a> {
-    expected: &'a ExpectedAccount,
-    hub_url: &'a str,
-    frontend_url: &'a str,
-    state: ApplyState,
-}
-
-enum ApplyState {
-    Pending,
-    Applied,
-    Stale,
-    Failed(NoAuthRotationOutcome),
-}
-
-impl LoadedAccount {
-    fn from_login(login: PersistedLogin) -> anyhow::Result<Self> {
-        ensure!(
-            !login.token.trim().is_empty(),
-            "persisted Studio login has no token"
-        );
-        let profile_json =
-            serde_json::to_string(&login.profile).context("encode persisted Studio profile")?;
-        Ok(Self {
-            token: login.token,
-            user_id: login.profile.user_id,
-            user_name: login.profile.user_name,
-            avatar: login.profile.avatar,
-            profile_json,
-            session_kind: login.session_kind as i32,
-        })
-    }
-}
+mod transactions;
 
 #[unsafe(no_mangle)]
 /// # Safety
@@ -106,6 +52,14 @@ pub unsafe extern "C" fn pandar_plugin_account_load_persisted(
     if canonical_hub_identity(&login.hub_url) != canonical_hub_identity(&current.hub_url) {
         return lifecycle(success(204));
     }
+    if login.session_kind == SessionKind::Authenticated && login.profile.tenant_id.trim().is_empty()
+    {
+        // A pre-upgrade write replaced the canonical profile with Studio's
+        // tenantless identity echo. Restoring it would look logged in while the
+        // tenant printer cache can never start, so retire the credential and
+        // leave Studio on the normal sign-in flow.
+        return lifecycle(clear_tenantless_login(&current.config_dir, &login));
+    }
     let loaded = match LoadedAccount::from_login(login) {
         Ok(loaded) => loaded,
         Err(error) => return lifecycle(diagnosed(error)),
@@ -126,6 +80,23 @@ pub unsafe extern "C" fn pandar_plugin_account_load_persisted(
         return lifecycle(diagnosed(error));
     }
     finish(context.state)
+}
+
+/// Removes a tenantless persisted login only while the file still holds that
+/// exact credential, so a login committed concurrently is never discarded.
+fn clear_tenantless_login(config_dir: &str, login: &PersistedLogin) -> NoAuthRotationOutcome {
+    let cleared = persistence::clear_matching(
+        config_dir,
+        &PendingRevocation {
+            hub_url: login.hub_url.clone(),
+            token: login.token.clone(),
+        },
+    )
+    .and_then(|durability| durability.require_confirmed("durably clear tenantless Studio login"));
+    match cleared {
+        Ok(()) => success(204),
+        Err(error) => diagnosed(error.context("clear tenantless persisted Studio login")),
+    }
 }
 
 /// Restores a manually selected Web URL and its discovered canonical Hub identity before
@@ -234,96 +205,6 @@ pub unsafe extern "C" fn pandar_plugin_account_refresh_runtime(
     finish(context.state)
 }
 
-unsafe extern "C" fn load_transaction(
-    context: *mut c_void,
-    view: *const PluginAccountView,
-    mutation: *mut PluginAccountMutation,
-) -> i32 {
-    let Some(context) = (unsafe { context.cast::<LoadContext<'_>>().as_mut() }) else {
-        return 1;
-    };
-    let work: anyhow::Result<()> = (|| {
-        let current = unsafe { AccountView::read(view) }?;
-        if !context.expected.matches(&current) || !current.token.is_empty() {
-            context.state = ApplyState::Stale;
-            return Ok(());
-        }
-        let mutation = unsafe { mutation.as_mut() }.context("account mutation is missing")?;
-        mutation.action = MUTATION_REPLACE;
-        mutation.token = PluginAccountBytes::from_str(&context.loaded.token);
-        mutation.user_id = PluginAccountBytes::from_str(&context.loaded.user_id);
-        mutation.user_name = PluginAccountBytes::from_str(&context.loaded.user_name);
-        mutation.avatar = PluginAccountBytes::from_str(&context.loaded.avatar);
-        mutation.profile_json = PluginAccountBytes::from_str(&context.loaded.profile_json);
-        mutation.session_kind = context.loaded.session_kind;
-        context.state = ApplyState::Applied;
-        Ok(())
-    })();
-    transaction_status(work, &mut context.state)
-}
-
-unsafe extern "C" fn runtime_transaction(
-    context: *mut c_void,
-    view: *const PluginAccountView,
-    mutation: *mut PluginAccountMutation,
-) -> i32 {
-    let Some(context) = (unsafe { context.cast::<RuntimeContext<'_>>().as_mut() }) else {
-        return 1;
-    };
-    let work: anyhow::Result<()> = (|| {
-        let current = unsafe { AccountView::read(view) }?;
-        if !context.expected.matches(&current) {
-            context.state = ApplyState::Stale;
-            return Ok(());
-        }
-        let local_failure = match persistence::clear(&current.config_dir) {
-            Ok(durability) => durability
-                .require_confirmed("durably clear Studio login after Hub change")
-                .err()
-                .map(diagnosed),
-            Err(error) => Some(diagnosed(
-                error.context("clear persisted Studio login after Hub change"),
-            )),
-        };
-        let mutation = unsafe { mutation.as_mut() }.context("account mutation is missing")?;
-        mutation.action = MUTATION_RUNTIME_HUB;
-        mutation.hub_url = PluginAccountBytes::from_str(context.hub_url);
-        if let Some(failure) = &local_failure {
-            mutation.error_body = PluginAccountBytes::from_str(&failure.body);
-        }
-        context.state = match local_failure {
-            Some(failure) => ApplyState::Failed(failure),
-            None => ApplyState::Applied,
-        };
-        Ok(())
-    })();
-    transaction_status(work, &mut context.state)
-}
-
-unsafe extern "C" fn restore_servers_transaction(
-    context: *mut c_void,
-    view: *const PluginAccountView,
-    mutation: *mut PluginAccountMutation,
-) -> i32 {
-    let Some(context) = (unsafe { context.cast::<RestoreServersContext<'_>>().as_mut() }) else {
-        return 1;
-    };
-    let work: anyhow::Result<()> = (|| {
-        let current = unsafe { AccountView::read(view) }?;
-        if !context.expected.matches(&current) || !current.token.is_empty() {
-            context.state = ApplyState::Stale;
-            return Ok(());
-        }
-        let mutation = unsafe { mutation.as_mut() }.context("account mutation is missing")?;
-        mutation.action = MUTATION_RUNTIME_SERVERS;
-        mutation.hub_url = PluginAccountBytes::from_str(context.hub_url);
-        mutation.frontend_url = PluginAccountBytes::from_str(context.frontend_url);
-        context.state = ApplyState::Applied;
-        Ok(())
-    })();
-    transaction_status(work, &mut context.state)
-}
-
 /// Durably records a manually selected target server. The write is skipped when the
 /// saved selection already matches, and durability must be confirmed before the
 /// runtime Hub switch proceeds.
@@ -342,16 +223,6 @@ fn persist_selection(config_dir: &str, selection: &PersistedServerSelection) -> 
     server_selection::store(config_dir, selection)?
         .require_confirmed("durably persist selected Pandar server")
         .context("persist selected Pandar server")
-}
-
-fn transaction_status(work: anyhow::Result<()>, state: &mut ApplyState) -> i32 {
-    match work {
-        Ok(()) => 0,
-        Err(error) => {
-            *state = ApplyState::Failed(diagnosed(error));
-            1
-        }
-    }
 }
 
 fn finish(state: ApplyState) -> PluginLifecycleResult {

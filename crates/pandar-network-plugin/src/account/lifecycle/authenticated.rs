@@ -123,6 +123,12 @@ pub unsafe extern "C" fn pandar_plugin_account_change_user(
     };
     let (token, profile) = match change {
         AccountChange::Login { token, profile } => (token, profile),
+        AccountChange::ConfirmLogin { token, user_id } => {
+            if current.token == token && current.user_id == user_id {
+                return lifecycle(success_empty());
+            }
+            return lifecycle(stable_failure("stale_account_response", 409));
+        }
         AccountChange::ConfirmCurrent(profile) => {
             if current.user_id == profile.user_id
                 && current.user_name == profile.user_name

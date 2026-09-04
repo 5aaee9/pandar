@@ -91,7 +91,18 @@ enum AccountChangeInput {
 }
 
 pub(super) enum AccountChange {
-    Login { token: String, profile: Profile },
+    Login {
+        token: String,
+        profile: Profile,
+    },
+    /// Bambu Studio's native login envelope: it only echoes the identity that
+    /// `get_my_profile` already reported for the committed login, so it can
+    /// confirm that login but never replace its canonical profile. It is
+    /// deliberately not a committable profile.
+    ConfirmLogin {
+        token: String,
+        user_id: String,
+    },
     ConfirmCurrent(Profile),
 }
 
@@ -110,12 +121,6 @@ struct StudioLoginData {
 struct StudioLoginUser {
     #[serde(default, alias = "uidStr", alias = "user_id")]
     uid: String,
-    #[serde(default, alias = "user_name")]
-    name: String,
-    #[serde(default)]
-    account: String,
-    #[serde(default)]
-    avatar: String,
 }
 
 pub(super) fn parse_account_change(value: &str) -> anyhow::Result<AccountChange> {
@@ -123,24 +128,17 @@ pub(super) fn parse_account_change(value: &str) -> anyhow::Result<AccountChange>
         .context("decode typed Studio account change")?
     {
         AccountChangeInput::Studio(input) => {
-            let token = input.data.token;
-            ensure!(!token.trim().is_empty(), "account profile has no token");
-            let user_id = input.data.user.uid;
-            ensure!(!user_id.trim().is_empty(), "account profile has no user id");
-            let user_name = first_nonempty([
-                input.data.user.name,
-                input.data.user.account,
-                user_id.clone(),
-            ]);
-            Ok(AccountChange::Login {
-                token,
-                profile: Profile {
-                    user_id,
-                    user_name,
-                    tenant_id: String::new(),
-                    tenant_name: String::new(),
-                    avatar: input.data.user.avatar,
-                },
+            ensure!(
+                !input.data.token.trim().is_empty(),
+                "account profile has no token"
+            );
+            ensure!(
+                !input.data.user.uid.trim().is_empty(),
+                "account profile has no user id"
+            );
+            Ok(AccountChange::ConfirmLogin {
+                token: input.data.token,
+                user_id: input.data.user.uid,
             })
         }
         AccountChangeInput::Profile(input) => {

@@ -21,14 +21,10 @@ use crate::{
     firmware::session_ref as firmware_session,
 };
 
-pub(super) const MUTATION_REPLACE: i32 = 1;
-pub(super) const MUTATION_CLEAR: i32 = 2;
-pub(super) const MUTATION_HTTP_ERROR: i32 = 3;
-pub(super) const MUTATION_LOGIN: i32 = 4;
-pub(super) const MUTATION_RUNTIME_HUB: i32 = 6;
-pub(super) const MUTATION_FIRMWARE_FENCE: i32 = 7;
-pub(super) const MUTATION_RESTORE_FAILURE: i32 = 8;
-pub(super) const MUTATION_RUNTIME_SERVERS: i32 = 9;
+pub(super) use crate::account::lifecycle::transaction::{
+    MUTATION_CLEAR, MUTATION_FIRMWARE_FENCE, MUTATION_HTTP_ERROR, MUTATION_LOGIN, MUTATION_REPLACE,
+    MUTATION_RESTORE_FAILURE, MUTATION_RUNTIME_HUB, MUTATION_RUNTIME_SERVERS,
+};
 
 pub(super) unsafe fn apply_mutation(
     session: &AccountLifecycleSession,
