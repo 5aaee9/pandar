@@ -6,6 +6,12 @@
       "sourceType": "github",
       "skillPath": "SKILL.md",
       "computedHash": "9719e9ebd94783d3436ed26156bf9bf2e4c7f63b3220d9d17ff90cba55c92bb8"
+    },
+    "simplify-codebase": {
+      "source": "tt-a1i/simplify-codebase",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "1b4338165f14f567cbb6f9432c8a2efdaff35ef9d4eea79d771f30eb0645ebe9"
     }
   }
 }
