@@ -207,7 +207,6 @@ async fn expire_stale_sessions_once(state: &AppState, now: &str) -> anyhow::Resu
     expire_stale_sessions_with_timeout(state, now, STALE_SESSION_TIMEOUT).await
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 async fn expire_stale_sessions_with_timeout(
     state: &AppState,
     now: &str,
@@ -237,7 +236,6 @@ async fn expire_stale_sessions_with_timeout(
     Ok(expired_count)
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 async fn mark_stalled_pending_jobs_once(state: &AppState, now: &str) -> anyhow::Result<usize> {
     let stalled = state
         .jobs()
@@ -272,7 +270,6 @@ async fn mark_stalled_pending_jobs_once(state: &AppState, now: &str) -> anyhow::
     Ok(count)
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 async fn fail_stale_live_commands_once(state: &AppState, now: &str) -> anyhow::Result<u64> {
     fail_stale_live_commands_with_timeouts(
         state,
@@ -283,7 +280,6 @@ async fn fail_stale_live_commands_once(state: &AppState, now: &str) -> anyhow::R
     .await
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 async fn fail_stale_live_commands_with_timeouts(
     state: &AppState,
     now: &str,

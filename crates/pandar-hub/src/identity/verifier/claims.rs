@@ -13,9 +13,6 @@ pub(super) struct JwtClaims {
     pub(super) exp: u64,
     pub(super) iat: u64,
     #[serde(default)]
-    #[allow(dead_code)]
-    pub(super) nbf: Option<u64>,
-    #[serde(default)]
     pub(super) aud: Option<AudienceClaim>,
     #[serde(default)]
     pub(super) azp: Option<String>,
