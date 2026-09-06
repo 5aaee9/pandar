@@ -255,7 +255,6 @@
     "targetTemperature": "Target",
     "customTemperature": "Custom",
     "setTemperature": "Set",
-    "switchNozzle": "Switch nozzle",
     "switchNozzleTo": "Switch to nozzle {nozzle}",
     "activeNozzle": "Active",
     "bedTemperature": "Bed",

@@ -255,7 +255,6 @@
     "targetTemperature": "目标",
     "customTemperature": "自定义",
     "setTemperature": "设定",
-    "switchNozzle": "切换喷嘴",
     "switchNozzleTo": "切换到喷嘴 {nozzle}",
     "activeNozzle": "当前",
     "bedTemperature": "热床",
