@@ -153,10 +153,6 @@ impl StudioAbiSeries {
         parse_version(&self.id).expect("validated Studio ABI series version")
     }
 
-    pub fn reference_version_components(&self) -> [u16; 4] {
-        parse_version(&self.reference_studio_version).expect("validated reference Studio version")
-    }
-
     pub fn total_exports(&self) -> usize {
         self.network_exports + self.file_transfer_exports
     }
